@@ -333,6 +333,13 @@ interface DesignCanvasProps {
     contentOffsetY?: number;
   };
   boardSurface?: boolean;
+  /**
+   * Optional live document replacement channel. When paired with
+   * `runtimeReplacementKey`, this lets callers update iframe DOM through the
+   * editor bridge without changing `srcDoc` and reloading the iframe.
+   */
+  runtimeReplacementContent?: string;
+  runtimeReplacementKey?: string;
   embeddedFrameBackground?: string;
   transparentBackground?: boolean;
   editorChromeScaleX?: number;
@@ -366,7 +373,9 @@ interface DesignCanvasProps {
   }) => void;
   onElementDblClickText?: (info: ElementInfo) => void;
   onIframeHotkey?: (event: IframeHotkeyPayload) => void;
+  onFigmaClipboardPaste?: (event: IframeFigmaClipboardPastePayload) => void;
   onIframeContextMenu?: (event: IframeContextMenuPayload) => void;
+  onEditorDragStateChange?: (active: boolean) => void;
   onVisualStructureChange?: (
     selector: string,
     anchorSelector: string,
@@ -376,6 +385,9 @@ interface DesignCanvasProps {
       sourceId?: string;
       anchorSourceId?: string;
       requestId?: string;
+      dropMode?: "flow-insert" | "absolute-container";
+      sourceRect?: { x: number; y: number; width: number; height: number };
+      anchorRect?: { x: number; y: number; width: number; height: number };
     },
   ) => boolean | void;
   onVisualDuplicateChange?: (
@@ -571,6 +583,26 @@ function injectEmbeddedFrameStyle(content: string, style: string): string {
   return `${style}${content}`;
 }
 
+export function getEmbeddedFrameDocumentContent(args: {
+  content: string;
+  embeddedFrameBackground?: string;
+  transparentBackground?: boolean;
+  contentOffsetX?: number;
+  contentOffsetY?: number;
+}): string {
+  const frameStyle = [
+    getEmbeddedFrameBackgroundStyle({
+      embeddedFrameBackground: args.embeddedFrameBackground,
+      transparentBackground: args.transparentBackground,
+    }),
+    embeddedContentOffsetStyle(
+      args.contentOffsetX ?? 0,
+      args.contentOffsetY ?? 0,
+    ),
+  ].join("");
+  return injectEmbeddedFrameStyle(args.content, frameStyle);
+}
+
 export interface IframeHotkeyPayload {
   key: string;
   code: string;
@@ -579,6 +611,10 @@ export interface IframeHotkeyPayload {
   shiftKey: boolean;
   altKey: boolean;
   repeat: boolean;
+}
+
+export interface IframeFigmaClipboardPastePayload {
+  content: string;
 }
 
 export interface IframeContextMenuPayload {
@@ -602,6 +638,8 @@ export function DesignCanvas({
   deviceFrame,
   embeddedFrame,
   boardSurface = false,
+  runtimeReplacementContent,
+  runtimeReplacementKey,
   embeddedFrameBackground,
   transparentBackground = false,
   editorChromeScaleX = 1,
@@ -620,7 +658,9 @@ export function DesignCanvas({
   onTextEditingStateChange,
   onElementDblClickText,
   onIframeHotkey,
+  onFigmaClipboardPaste,
   onIframeContextMenu,
+  onEditorDragStateChange,
   onVisualStructureChange,
   onVisualDuplicateChange,
   tweakValues,
@@ -652,6 +692,9 @@ export function DesignCanvas({
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const zoomRef = useRef(zoom);
   const previousContentKeyRef = useRef(contentKey);
+  const runtimeReplacementContentRef = useRef(runtimeReplacementContent);
+  const runtimeReplacementKeyRef = useRef(runtimeReplacementKey);
+  const lastRuntimeReplacementKeyRef = useRef(runtimeReplacementKey);
   const [renderedContent, setRenderedContent] = useState(content);
   const [annotationPins, setAnnotationPins] = useState<CanvasPin[]>([]);
   const [pinSubmitSignal, setPinSubmitSignal] = useState(0);
@@ -707,6 +750,8 @@ export function DesignCanvas({
   const waitingForEditableExternalSnapshot =
     requiresEditableExternalSnapshot && !activeExternalSnapshotHtml;
   zoomRef.current = zoom;
+  runtimeReplacementContentRef.current = runtimeReplacementContent;
+  runtimeReplacementKeyRef.current = runtimeReplacementKey;
 
   useEffect(() => {
     onExternalContentSnapshotRef.current = onExternalContentSnapshot;
@@ -819,6 +864,7 @@ export function DesignCanvas({
   useEffect(() => {
     if (previousContentKeyRef.current !== contentKey) {
       previousContentKeyRef.current = contentKey;
+      lastRuntimeReplacementKeyRef.current = runtimeReplacementKey;
       setRenderedContent(content);
     }
     // Same-screen visual edits are already applied optimistically inside the
@@ -826,7 +872,7 @@ export function DesignCanvas({
     // reloads the iframe, flashes unstyled content, and drops selection. Only a
     // content-key change (screen switch / explicit remount) should replace the
     // iframe document here; the bridge replays inspector state after that load.
-  }, [content, contentKey]);
+  }, [content, contentKey, runtimeReplacementKey]);
 
   usePinchZoom({
     containerRef: scrollContainerRef,
@@ -879,6 +925,20 @@ export function DesignCanvas({
       NAV_BRIDGE_SCRIPT +
       embeddedWheelBridge +
       editorChromeBridge;
+    const frameContent = getEmbeddedFrameDocumentContent({
+      content: iframeRenderContent,
+      embeddedFrameBackground,
+      transparentBackground,
+      contentOffsetX: embeddedFrame?.contentOffsetX ?? 0,
+      contentOffsetY: embeddedFrame?.contentOffsetY ?? 0,
+    });
+    if (frameContent.includes("</body>")) {
+      return frameContent.replace("</body>", bridgeToInject + "</body>"); // i18n-ignore generated iframe HTML injection
+    }
+    if (frameContent.includes("</html>")) {
+      return frameContent.replace("</html>", bridgeToInject + "</html>"); // i18n-ignore generated iframe HTML injection
+    }
+    // No body/html tags — wrap it
     const frameStyle = [
       getEmbeddedFrameBackgroundStyle({
         embeddedFrameBackground,
@@ -889,17 +949,6 @@ export function DesignCanvas({
         embeddedFrame?.contentOffsetY ?? 0,
       ),
     ].join("");
-    const frameContent = injectEmbeddedFrameStyle(
-      iframeRenderContent,
-      frameStyle,
-    );
-    if (frameContent.includes("</body>")) {
-      return frameContent.replace("</body>", bridgeToInject + "</body>"); // i18n-ignore generated iframe HTML injection
-    }
-    if (frameContent.includes("</html>")) {
-      return frameContent.replace("</html>", bridgeToInject + "</html>"); // i18n-ignore generated iframe HTML injection
-    }
-    // No body/html tags — wrap it
     return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${frameStyle}</head><body>${iframeRenderContent}${bridgeToInject}</body></html>`;
     // editorChromeScaleX/Y are intentionally NOT deps: they only seed the initial
     // baked chrome scale. Live zoom updates flow through the set-editor-chrome-scale
@@ -968,6 +1017,10 @@ export function DesignCanvas({
       if (e.data.type === "element-hover") {
         onElementHover(e.data.payload);
       }
+      if (e.data.type === "agent-native:editor-drag-state") {
+        onEditorDragStateChange?.(Boolean(e.data.active));
+        return;
+      }
       if (e.data.type === "visual-style-change") {
         const selector = String(e.data.selector || "");
         const styles =
@@ -1001,6 +1054,39 @@ export function DesignCanvas({
           typeof e.data.anchorSourceId === "string"
             ? e.data.anchorSourceId
             : undefined;
+        const dropMode =
+          e.data.dropMode === "flow-insert" ||
+          e.data.dropMode === "absolute-container"
+            ? e.data.dropMode
+            : undefined;
+        const sourceRect =
+          e.data.sourceRect &&
+          typeof e.data.sourceRect === "object" &&
+          Number.isFinite(e.data.sourceRect.x) &&
+          Number.isFinite(e.data.sourceRect.y) &&
+          Number.isFinite(e.data.sourceRect.width) &&
+          Number.isFinite(e.data.sourceRect.height)
+            ? {
+                x: Number(e.data.sourceRect.x),
+                y: Number(e.data.sourceRect.y),
+                width: Number(e.data.sourceRect.width),
+                height: Number(e.data.sourceRect.height),
+              }
+            : undefined;
+        const anchorRect =
+          e.data.anchorRect &&
+          typeof e.data.anchorRect === "object" &&
+          Number.isFinite(e.data.anchorRect.x) &&
+          Number.isFinite(e.data.anchorRect.y) &&
+          Number.isFinite(e.data.anchorRect.width) &&
+          Number.isFinite(e.data.anchorRect.height)
+            ? {
+                x: Number(e.data.anchorRect.x),
+                y: Number(e.data.anchorRect.y),
+                width: Number(e.data.anchorRect.width),
+                height: Number(e.data.anchorRect.height),
+              }
+            : undefined;
         if (
           (selector || sourceId) &&
           (anchorSelector || anchorSourceId) &&
@@ -1017,6 +1103,9 @@ export function DesignCanvas({
               requestId,
               sourceId,
               anchorSourceId,
+              dropMode,
+              sourceRect,
+              anchorRect,
             },
           );
           if (requestId) {
@@ -1083,6 +1172,12 @@ export function DesignCanvas({
           altKey: Boolean(e.data.altKey),
           repeat: Boolean(e.data.repeat),
         });
+        return;
+      }
+      if (e.data.type === "figma-clipboard-paste") {
+        const content =
+          typeof e.data.content === "string" ? e.data.content : "";
+        if (content) onFigmaClipboardPaste?.({ content });
         return;
       }
       if (e.data.type === "element-contextmenu") {
@@ -1208,7 +1303,9 @@ export function DesignCanvas({
     onTextEditingStateChange,
     onElementDblClickText,
     onIframeHotkey,
+    onFigmaClipboardPaste,
     onIframeContextMenu,
+    onEditorDragStateChange,
     onVisualStructureChange,
     onVisualDuplicateChange,
     onZoomChange,
@@ -1519,6 +1616,66 @@ export function DesignCanvas({
     [],
   );
 
+  const replaceRuntimeContentInPlace = useCallback(
+    (nextContent: string) => {
+      if (externalPreviewUrl) return false;
+      return replacePreviewContent(
+        getEmbeddedFrameDocumentContent({
+          content: nextContent,
+          embeddedFrameBackground,
+          transparentBackground,
+          contentOffsetX: embeddedFrame?.contentOffsetX ?? 0,
+          contentOffsetY: embeddedFrame?.contentOffsetY ?? 0,
+        }),
+        null,
+        [],
+        { forceFullDocument: true },
+      );
+    },
+    [
+      embeddedFrame?.contentOffsetX,
+      embeddedFrame?.contentOffsetY,
+      embeddedFrameBackground,
+      externalPreviewUrl,
+      replacePreviewContent,
+      transparentBackground,
+    ],
+  );
+
+  useEffect(() => {
+    if (
+      runtimeReplacementKey === undefined ||
+      runtimeReplacementContent === undefined ||
+      lastRuntimeReplacementKeyRef.current === runtimeReplacementKey
+    ) {
+      return;
+    }
+    if (replaceRuntimeContentInPlace(runtimeReplacementContent)) {
+      lastRuntimeReplacementKeyRef.current = runtimeReplacementKey;
+    }
+  }, [
+    replaceRuntimeContentInPlace,
+    runtimeReplacementContent,
+    runtimeReplacementKey,
+  ]);
+
+  const runtimeReplacementEnabled = runtimeReplacementKey !== undefined;
+  useEffect(() => {
+    if (!runtimeReplacementEnabled) return;
+    const iframe = iframeRef.current;
+    if (!iframe) return;
+    const replaceLatestRuntimeContent = () => {
+      const nextContent = runtimeReplacementContentRef.current;
+      if (nextContent === undefined) return;
+      if (replaceRuntimeContentInPlace(nextContent)) {
+        lastRuntimeReplacementKeyRef.current = runtimeReplacementKeyRef.current;
+      }
+    };
+    iframe.addEventListener("load", replaceLatestRuntimeContent);
+    return () =>
+      iframe.removeEventListener("load", replaceLatestRuntimeContent);
+  }, [replaceRuntimeContentInPlace, runtimeReplacementEnabled]);
+
   const deleteRuntimeElement = useCallback(
     (selector?: string | null, candidates?: string[]) => {
       const iframe = iframeRef.current;
@@ -1631,6 +1788,11 @@ export function DesignCanvas({
   // explicit viewport width (e.g. 390 / 768 / 1280 side-by-side breakpoints).
   const resolvedWidth =
     previewWidthPx != null ? `${previewWidthPx}px` : iframeWidth;
+  const focusScrollSurface = useCallback(() => {
+    const surface = scrollContainerRef.current;
+    if (!surface || document.activeElement === surface) return;
+    surface.focus({ preventScroll: true });
+  }, []);
 
   // Wrap the iframe in a positioned container so DrawOverlay /
   // CanvasCommentPins can absolutely-position themselves on top of the
@@ -1667,14 +1829,15 @@ export function DesignCanvas({
             : "allow-scripts allow-popups allow-popups-to-escape-sandbox allow-same-origin"
         }
         data-design-preview-iframe
-        data-screen-iframe-id={screenId ?? undefined}
+        data-screen-iframe-id={
+          boardSurface ? undefined : (screenId ?? undefined)
+        }
         data-design-source-type={
           sourceType ??
           (externalPreviewUrl
             ? "localhost" // inferred — content is a URL
             : "inline")
         }
-        allowTransparency={transparentBackground || undefined}
         className="block h-full w-full border-0 bg-transparent"
         style={{
           background: iframeBackgroundColor,
@@ -1756,6 +1919,9 @@ export function DesignCanvas({
       return (
         <div
           ref={scrollContainerRef}
+          tabIndex={-1}
+          onPointerEnter={focusScrollSurface}
+          onMouseEnter={focusScrollSurface}
           className="relative h-full w-full overflow-hidden"
         >
           {iframeElement}
@@ -1770,6 +1936,9 @@ export function DesignCanvas({
     return (
       <div
         ref={scrollContainerRef}
+        tabIndex={-1}
+        onPointerEnter={focusScrollSurface}
+        onMouseEnter={focusScrollSurface}
         className="relative h-full w-full overflow-hidden"
         style={{
           width: embeddedFrame.displayWidth,
@@ -1800,6 +1969,9 @@ export function DesignCanvas({
   return (
     <div
       ref={scrollContainerRef}
+      tabIndex={-1}
+      onPointerEnter={focusScrollSurface}
+      onMouseEnter={focusScrollSurface}
       className="relative flex-1 h-full overflow-auto"
     >
       {/* Canvas area. "none" mode fills the canvas (responsive preview);

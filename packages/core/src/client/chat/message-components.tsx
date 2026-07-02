@@ -784,19 +784,32 @@ function assistantMessageStatusIsTerminal(message: {
   return statusType === "complete" || statusType === "incomplete";
 }
 
+export function assistantMessageHasUnresolvedTool(content: unknown): boolean {
+  if (!Array.isArray(content)) return false;
+  return content.some((part): boolean => {
+    if (!part || typeof part !== "object") return false;
+    const record = part as { type?: unknown; result?: unknown };
+    return record.type === "tool-call" && record.result === undefined;
+  });
+}
+
 export function shouldShowAssistantMessageFooter({
   isLast,
   chatRunning,
   hasRenderableContent,
   statusIsTerminal,
+  hasUnresolvedTool,
 }: {
   isLast: boolean;
   chatRunning: boolean;
   hasRenderableContent: boolean;
   statusIsTerminal: boolean;
+  hasUnresolvedTool?: boolean;
 }): boolean {
   if (!hasRenderableContent) return false;
+  if (chatRunning) return false;
   if (!isLast) return true;
+  if (hasUnresolvedTool) return false;
   return !chatRunning && statusIsTerminal;
 }
 
@@ -813,11 +826,13 @@ export function AssistantMessage() {
     thread.messages.length > 0 &&
     thread.messages[thread.messages.length - 1].id === msg.id;
   const hasRenderableContent = assistantMessageHasRenderableContent(msg);
+  const hasUnresolvedTool = assistantMessageHasUnresolvedTool(msg.content);
   const isComplete = shouldShowAssistantMessageFooter({
     isLast,
     chatRunning,
     hasRenderableContent,
     statusIsTerminal: assistantMessageStatusIsTerminal(msg),
+    hasUnresolvedTool,
   });
   const cpCtx = React.useContext(CheckpointContext);
 
@@ -895,7 +910,7 @@ export function AssistantMessage() {
       className="group relative"
       style={{ contentVisibility: isComplete ? "auto" : "visible" }}
     >
-      <div className="max-w-[95%] text-sm leading-relaxed text-foreground">
+      <div className="w-full max-w-[95%] text-sm leading-relaxed text-foreground">
         <MessagePrimitive.Parts
           components={{
             Text: MarkdownText,
@@ -906,6 +921,9 @@ export function AssistantMessage() {
         />
         {isComplete && hasCodeAgentTools && msgContent && (
           <FilesChangedSummary parts={msgContent} />
+        )}
+        {isLast && hasUnresolvedTool && !chatRunning && (
+          <RunningActivityStatus label="Thinking" />
         )}
       </div>
       {isComplete && (

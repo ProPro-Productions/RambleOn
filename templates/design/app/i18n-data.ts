@@ -250,6 +250,7 @@ const enUS = {
       file: "File",
       agent: "Agent",
       assets: "Assets",
+      import: "Import",
       tools: "Tools",
       tokens: "Tokens",
       label: "Design workspace",
@@ -278,6 +279,46 @@ const enUS = {
       emptyHint: "Add design tokens to reuse colors, spacing, and more.",
       applying: "Applying…",
     },
+    import: {
+      title: "Import",
+      description:
+        "Bring in Figma selections, .fig exports, or standalone HTML as Design screens.",
+      figmaPasteTitle: "Paste from Figma",
+      figmaPasteDescription:
+        "Copy a frame or layer in Figma, then focus this target and paste. Figma metadata imports directly when available.",
+      figmaPasteTarget: "Paste Figma content here",
+      figUploadTitle: "Upload .fig",
+      figUploadDescription:
+        "Export only the frames you need. Large files with many embedded images may exceed the import limit.",
+      chooseFigFile: "Choose .fig file",
+      htmlTitle: "Import HTML",
+      htmlDescription:
+        "Paste or upload standalone HTML. Design stores it as a new screen without injecting it into this editor UI.",
+      htmlPlaceholder: "<main>Paste standalone HTML here...</main>",
+      importHtml: "Import HTML",
+      chooseHtmlFile: "Choose HTML file",
+      githubTitle: "GitHub",
+      githubDescription:
+        "Coming soon: import screens and components directly from a repository.",
+      localTitle: "Local app / VS Code",
+      localDescription: "Connect a running local app with visual-edit.",
+      visualEditGuidance:
+        "Start your app, run the command below from the app repo, then ask the agent to use the visual-edit skill to add URL-backed screens.",
+      useVisualEditNow: "Use visual-edit now",
+      comingSoon: "Coming soon",
+      warningsToast: "Import completed with warnings",
+      figmaSuccess: "Figma paste imported",
+      htmlSuccess: "HTML imported",
+      uploadSuccess: "File imported",
+      visualEditSent: "Sent visual-edit request to the agent",
+      lastImport: "Last import",
+      errors: {
+        notHtml: "Paste or choose valid HTML to import.",
+        importFailed: "Import failed",
+        figmaPasteFailed: "Figma paste import failed",
+        uploadFailed: "File upload failed",
+      },
+    },
     generationMayHaveStopped:
       "Generation may have stopped before creating files. Check the agent message or try again.",
     generationMayHaveStoppedToast:
@@ -291,7 +332,7 @@ const enUS = {
     clickToRename: "Click to rename",
     collaborators: "Collaborators",
     share: "Share",
-    signUpToSave: "Sign up to save",
+    signUpToSave: "Sign up free to save",
     signUpToSaveDescription:
       "Sign up for a free account to save designs, screen layouts, and generate new ones.",
     signUpToShare: "Sign up to share",
@@ -422,6 +463,23 @@ const enUS = {
         failed: "Patch failed",
         rolledBack: "Rolled back",
       },
+    },
+    pendingVisualStyles: {
+      applyAria: "Apply pending visual style edits",
+      applyButton: "Apply styles",
+      previewLabel: "Pending visual preview",
+      applyWithAgent: "Apply with Design agent",
+      copyPrompt: "Copy prompt to your agent",
+      agentMessage: "Apply the pending visual style edits to the source.",
+      sentToast: "Style edits sent to the Design agent",
+      copiedToast: "Style prompt copied",
+      leaveTitle: "Apply styles before leaving?",
+      leaveDescriptionOne:
+        "You have {{count}} pending visual style edit in the live preview. Leaving now will discard that unapplied style change.",
+      leaveDescriptionOther:
+        "You have {{count}} pending visual style edits in the live preview. Leaving now will discard those unapplied style changes.",
+      stay: "Stay here",
+      leave: "Leave without applying",
     },
     capabilities: {
       "deterministic-style-edit": "Safe style edit",
@@ -9500,6 +9558,224 @@ const designLocalSourceEditOverrides = {
   },
 } satisfies Record<Exclude<LocaleCode, "en-US">, PartialMessages>;
 
+const designPendingVisualStyleOverrides = {
+  "zh-TW": {
+    designEditor: {
+      pendingVisualStyles: {
+        applyAria: "套用待處理的視覺樣式編輯",
+        applyButton: "套用樣式",
+        previewLabel: "待處理的視覺預覽",
+        applyWithAgent: "用 Design 代理套用",
+        copyPrompt: "將提示複製給您的代理",
+        agentMessage: "將待處理的視覺樣式編輯套用到來源。",
+        sentToast: "樣式編輯已傳送給 Design 代理",
+        copiedToast: "樣式提示已複製",
+        leaveTitle: "離開前要套用樣式嗎？",
+        leaveDescriptionOne:
+          "即時預覽中有 {{count}} 個待處理的視覺樣式編輯。現在離開會捨棄該未套用的樣式變更。",
+        leaveDescriptionOther:
+          "即時預覽中有 {{count}} 個待處理的視覺樣式編輯。現在離開會捨棄這些未套用的樣式變更。",
+        stay: "留在這裡",
+        leave: "不套用並離開",
+      },
+    },
+  },
+  "zh-CN": {
+    designEditor: {
+      pendingVisualStyles: {
+        applyAria: "应用待处理的视觉样式编辑",
+        applyButton: "应用样式",
+        previewLabel: "待处理的视觉预览",
+        applyWithAgent: "用 Design 代理应用",
+        copyPrompt: "将提示复制给你的代理",
+        agentMessage: "将待处理的视觉样式编辑应用到源文件。",
+        sentToast: "样式编辑已发送给 Design 代理",
+        copiedToast: "样式提示已复制",
+        leaveTitle: "离开前应用样式？",
+        leaveDescriptionOne:
+          "实时预览中有 {{count}} 个待处理的视觉样式编辑。现在离开会丢弃这个未应用的样式更改。",
+        leaveDescriptionOther:
+          "实时预览中有 {{count}} 个待处理的视觉样式编辑。现在离开会丢弃这些未应用的样式更改。",
+        stay: "留在这里",
+        leave: "不应用并离开",
+      },
+    },
+  },
+  "es-ES": {
+    designEditor: {
+      pendingVisualStyles: {
+        applyAria: "Aplicar ediciones visuales de estilo pendientes",
+        applyButton: "Aplicar estilos",
+        previewLabel: "Vista previa visual pendiente",
+        applyWithAgent: "Aplicar con el agente de Design",
+        copyPrompt: "Copiar prompt a tu agente",
+        agentMessage:
+          "Aplica las ediciones visuales de estilo pendientes al código fuente.",
+        sentToast: "Ediciones de estilo enviadas al agente de Design",
+        copiedToast: "Prompt de estilo copiado",
+        leaveTitle: "¿Aplicar estilos antes de salir?",
+        leaveDescriptionOne:
+          "Tienes {{count}} edición visual de estilo pendiente en la vista previa en vivo. Si sales ahora, se descartará ese cambio de estilo sin aplicar.",
+        leaveDescriptionOther:
+          "Tienes {{count}} ediciones visuales de estilo pendientes en la vista previa en vivo. Si sales ahora, se descartarán esos cambios de estilo sin aplicar.",
+        stay: "Quedarse aquí",
+        leave: "Salir sin aplicar",
+      },
+    },
+  },
+  "fr-FR": {
+    designEditor: {
+      pendingVisualStyles: {
+        applyAria: "Appliquer les modifications visuelles de style en attente",
+        applyButton: "Appliquer les styles",
+        previewLabel: "Aperçu visuel en attente",
+        applyWithAgent: "Appliquer avec l’agent Design",
+        copyPrompt: "Copier le prompt vers votre agent",
+        agentMessage:
+          "Appliquez les modifications visuelles de style en attente à la source.",
+        sentToast: "Modifications de style envoyées à l’agent Design",
+        copiedToast: "Prompt de style copié",
+        leaveTitle: "Appliquer les styles avant de quitter ?",
+        leaveDescriptionOne:
+          "Vous avez {{count}} modification visuelle de style en attente dans l’aperçu en direct. Quitter maintenant supprimera cette modification non appliquée.",
+        leaveDescriptionOther:
+          "Vous avez {{count}} modifications visuelles de style en attente dans l’aperçu en direct. Quitter maintenant supprimera ces modifications non appliquées.",
+        stay: "Rester ici",
+        leave: "Quitter sans appliquer",
+      },
+    },
+  },
+  "de-DE": {
+    designEditor: {
+      pendingVisualStyles: {
+        applyAria: "Ausstehende visuelle Stiländerungen anwenden",
+        applyButton: "Stile anwenden",
+        previewLabel: "Ausstehende visuelle Vorschau",
+        applyWithAgent: "Mit Design-Agent anwenden",
+        copyPrompt: "Prompt an deinen Agent kopieren",
+        agentMessage:
+          "Wende die ausstehenden visuellen Stiländerungen auf die Quelle an.",
+        sentToast: "Stiländerungen an den Design-Agent gesendet",
+        copiedToast: "Stil-Prompt kopiert",
+        leaveTitle: "Stile vor dem Verlassen anwenden?",
+        leaveDescriptionOne:
+          "In der Live-Vorschau gibt es {{count}} ausstehende visuelle Stiländerung. Wenn du jetzt gehst, wird diese nicht angewendete Stiländerung verworfen.",
+        leaveDescriptionOther:
+          "In der Live-Vorschau gibt es {{count}} ausstehende visuelle Stiländerungen. Wenn du jetzt gehst, werden diese nicht angewendeten Stiländerungen verworfen.",
+        stay: "Hier bleiben",
+        leave: "Ohne Anwenden verlassen",
+      },
+    },
+  },
+  "ja-JP": {
+    designEditor: {
+      pendingVisualStyles: {
+        applyAria: "保留中のビジュアルスタイル編集を適用",
+        applyButton: "スタイルを適用",
+        previewLabel: "保留中のビジュアルプレビュー",
+        applyWithAgent: "Design エージェントで適用",
+        copyPrompt: "エージェントにプロンプトをコピー",
+        agentMessage:
+          "保留中のビジュアルスタイル編集をソースに適用してください。",
+        sentToast: "スタイル編集を Design エージェントに送信しました",
+        copiedToast: "スタイルプロンプトをコピーしました",
+        leaveTitle: "離れる前にスタイルを適用しますか？",
+        leaveDescriptionOne:
+          "ライブプレビューに {{count}} 件の保留中のビジュアルスタイル編集があります。今離れると、未適用のスタイル変更は破棄されます。",
+        leaveDescriptionOther:
+          "ライブプレビューに {{count}} 件の保留中のビジュアルスタイル編集があります。今離れると、未適用のスタイル変更は破棄されます。",
+        stay: "ここに留まる",
+        leave: "適用せずに離れる",
+      },
+    },
+  },
+  "ko-KR": {
+    designEditor: {
+      pendingVisualStyles: {
+        applyAria: "보류 중인 시각 스타일 편집 적용",
+        applyButton: "스타일 적용",
+        previewLabel: "보류 중인 시각 미리보기",
+        applyWithAgent: "Design 에이전트로 적용",
+        copyPrompt: "에이전트에 프롬프트 복사",
+        agentMessage: "보류 중인 시각 스타일 편집을 소스에 적용하세요.",
+        sentToast: "스타일 편집을 Design 에이전트로 보냈습니다",
+        copiedToast: "스타일 프롬프트가 복사되었습니다",
+        leaveTitle: "나가기 전에 스타일을 적용할까요?",
+        leaveDescriptionOne:
+          "라이브 미리보기에 보류 중인 시각 스타일 편집이 {{count}}개 있습니다. 지금 나가면 적용되지 않은 스타일 변경이 삭제됩니다.",
+        leaveDescriptionOther:
+          "라이브 미리보기에 보류 중인 시각 스타일 편집이 {{count}}개 있습니다. 지금 나가면 적용되지 않은 스타일 변경이 삭제됩니다.",
+        stay: "여기에 머물기",
+        leave: "적용하지 않고 나가기",
+      },
+    },
+  },
+  "pt-BR": {
+    designEditor: {
+      pendingVisualStyles: {
+        applyAria: "Aplicar edições visuais de estilo pendentes",
+        applyButton: "Aplicar estilos",
+        previewLabel: "Prévia visual pendente",
+        applyWithAgent: "Aplicar com o agente Design",
+        copyPrompt: "Copiar prompt para seu agente",
+        agentMessage:
+          "Aplique as edições visuais de estilo pendentes à origem.",
+        sentToast: "Edições de estilo enviadas ao agente Design",
+        copiedToast: "Prompt de estilo copiado",
+        leaveTitle: "Aplicar estilos antes de sair?",
+        leaveDescriptionOne:
+          "Você tem {{count}} edição visual de estilo pendente na prévia ao vivo. Sair agora descartará essa alteração de estilo não aplicada.",
+        leaveDescriptionOther:
+          "Você tem {{count}} edições visuais de estilo pendentes na prévia ao vivo. Sair agora descartará essas alterações de estilo não aplicadas.",
+        stay: "Ficar aqui",
+        leave: "Sair sem aplicar",
+      },
+    },
+  },
+  "hi-IN": {
+    designEditor: {
+      pendingVisualStyles: {
+        applyAria: "लंबित visual style edits लागू करें",
+        applyButton: "Styles लागू करें",
+        previewLabel: "लंबित visual preview",
+        applyWithAgent: "Design agent से लागू करें",
+        copyPrompt: "Prompt अपने agent को कॉपी करें",
+        agentMessage: "लंबित visual style edits को source पर लागू करें।",
+        sentToast: "Style edits Design agent को भेजे गए",
+        copiedToast: "Style prompt कॉपी हुआ",
+        leaveTitle: "छोड़ने से पहले styles लागू करें?",
+        leaveDescriptionOne:
+          "Live preview में {{count}} लंबित visual style edit है। अभी छोड़ने पर वह unapplied style change हट जाएगा।",
+        leaveDescriptionOther:
+          "Live preview में {{count}} लंबित visual style edits हैं। अभी छोड़ने पर वे unapplied style changes हट जाएंगे।",
+        stay: "यहीं रहें",
+        leave: "बिना लागू किए छोड़ें",
+      },
+    },
+  },
+  "ar-SA": {
+    designEditor: {
+      pendingVisualStyles: {
+        applyAria: "تطبيق تعديلات النمط المرئية المعلقة",
+        applyButton: "تطبيق الأنماط",
+        previewLabel: "معاينة مرئية معلقة",
+        applyWithAgent: "تطبيق عبر وكيل Design",
+        copyPrompt: "نسخ الموجه إلى وكيلك",
+        agentMessage: "طبّق تعديلات النمط المرئية المعلقة على المصدر.",
+        sentToast: "تم إرسال تعديلات النمط إلى وكيل Design",
+        copiedToast: "تم نسخ موجه النمط",
+        leaveTitle: "تطبيق الأنماط قبل المغادرة؟",
+        leaveDescriptionOne:
+          "لديك {{count}} تعديل نمط مرئي معلق في المعاينة المباشرة. ستؤدي المغادرة الآن إلى تجاهل تغيير النمط غير المطبق.",
+        leaveDescriptionOther:
+          "لديك {{count}} تعديلات نمط مرئية معلقة في المعاينة المباشرة. ستؤدي المغادرة الآن إلى تجاهل تغييرات النمط غير المطبقة.",
+        stay: "البقاء هنا",
+        leave: "المغادرة دون تطبيق",
+      },
+    },
+  },
+} satisfies Record<Exclude<LocaleCode, "en-US">, PartialMessages>;
+
 const designLeftRailOverrides = {
   "zh-TW": {
     designEditor: {
@@ -9525,6 +9801,7 @@ const designLeftRailOverrides = {
         file: "文件",
         agent: "代理",
         assets: "资源",
+        import: "导入",
         tools: "工具",
         tokens: "设计令牌",
         label: "设计工作区",
@@ -9540,6 +9817,7 @@ const designLeftRailOverrides = {
         file: "Archivo",
         agent: "Agente",
         assets: "Recursos",
+        import: "Importar",
         tools: "Herramientas",
         tokens: "Tokens de diseño",
         label: "Espacio de trabajo de diseño",
@@ -9555,6 +9833,7 @@ const designLeftRailOverrides = {
         file: "Fichier",
         agent: "Agent",
         assets: "Ressources",
+        import: "Importer",
         tools: "Outils",
         tokens: "Jetons",
         label: "Espace de travail Design",
@@ -9570,6 +9849,7 @@ const designLeftRailOverrides = {
         file: "Datei",
         agent: "Agent",
         assets: "Ressourcen",
+        import: "Import",
         tools: "Werkzeuge",
         tokens: "Design-Tokens",
         label: "Design-Arbeitsbereich",
@@ -9585,6 +9865,7 @@ const designLeftRailOverrides = {
         file: "ファイル",
         agent: "エージェント",
         assets: "アセット",
+        import: "インポート",
         tools: "ツール",
         tokens: "トークン",
         label: "デザインワークスペース",
@@ -9600,6 +9881,7 @@ const designLeftRailOverrides = {
         file: "파일",
         agent: "에이전트",
         assets: "에셋",
+        import: "가져오기",
         tools: "도구",
         tokens: "토큰",
         label: "디자인 작업공간",
@@ -9615,6 +9897,7 @@ const designLeftRailOverrides = {
         file: "Arquivo",
         agent: "Agente",
         assets: "Recursos",
+        import: "Importar",
         tools: "Ferramentas",
         tokens: "Tokens de design",
         label: "Área de trabalho de design",
@@ -9630,6 +9913,7 @@ const designLeftRailOverrides = {
         file: "फ़ाइल",
         agent: "एजेंट",
         assets: "एसेट",
+        import: "आयात",
         tools: "उपकरण",
         tokens: "टोकन",
         label: "डिज़ाइन कार्यक्षेत्र",
@@ -9645,6 +9929,7 @@ const designLeftRailOverrides = {
         file: "ملف",
         agent: "الوكيل",
         assets: "الأصول",
+        import: "استيراد",
         tools: "الأدوات",
         tokens: "الرموز",
         label: "مساحة عمل التصميم",
@@ -9806,6 +10091,446 @@ const designTokenImportOverrides = {
   },
 } satisfies Record<Exclude<LocaleCode, "en-US">, PartialMessages>;
 
+const designImportOverrides = {
+  "zh-TW": {
+    designEditor: {
+      import: {
+        title: "匯入",
+        description:
+          "將 Figma 選取內容、.fig 匯出檔或獨立 HTML 帶入為 Design 螢幕。",
+        figmaPasteTitle: "從 Figma 貼上",
+        figmaPasteDescription:
+          "在 Figma 複製畫框或圖層，然後聚焦此目標並貼上。可用時會直接匯入 Figma 中繼資料。",
+        figmaPasteTarget: "在此貼上 Figma 內容",
+        figUploadTitle: "上傳 .fig",
+        figUploadDescription:
+          "只匯出需要的畫框。含有許多嵌入圖片的大型檔案可能超過匯入限制。",
+        chooseFigFile: "選擇 .fig 檔案",
+        htmlTitle: "匯入 HTML",
+        htmlDescription:
+          "貼上或上傳獨立 HTML。Design 會將其儲存為新螢幕，不會注入到此編輯器 UI。",
+        htmlPlaceholder: "<main>在此貼上獨立 HTML...</main>",
+        importHtml: "匯入 HTML",
+        chooseHtmlFile: "選擇 HTML 檔案",
+        githubTitle: "GitHub",
+        githubDescription: "即將推出：直接從儲存庫匯入螢幕和元件。",
+        localTitle: "本機 app / VS Code",
+        localDescription: "使用 visual-edit 連接執行中的本機 app。",
+        visualEditGuidance:
+          "啟動 app，在 app repo 中執行下方命令，然後請代理使用 visual-edit skill 新增 URL 螢幕。",
+        useVisualEditNow: "立即使用 visual-edit",
+        comingSoon: "即將推出",
+        warningsToast: "匯入完成但有警告",
+        figmaSuccess: "已匯入 Figma 貼上內容",
+        htmlSuccess: "已匯入 HTML",
+        uploadSuccess: "已匯入檔案",
+        visualEditSent: "已將 visual-edit 請求傳送給代理",
+        lastImport: "上次匯入",
+        errors: {
+          notHtml: "請貼上或選擇有效的 HTML 以匯入。",
+          importFailed: "匯入失敗",
+          figmaPasteFailed: "Figma 貼上匯入失敗",
+          uploadFailed: "檔案上傳失敗",
+        },
+      },
+    },
+  },
+  "zh-CN": {
+    designEditor: {
+      import: {
+        title: "导入",
+        description: "将 Figma 选区、.fig 导出或独立 HTML 导入为 Design 屏幕。",
+        figmaPasteTitle: "从 Figma 粘贴",
+        figmaPasteDescription:
+          "在 Figma 中复制画框或图层，然后聚焦此区域并粘贴。有可用元数据时会直接导入。",
+        figmaPasteTarget: "在此粘贴 Figma 内容",
+        figUploadTitle: "上传 .fig",
+        figUploadDescription:
+          "只导出需要的画框。包含大量嵌入图片的大文件可能超过导入限制。",
+        chooseFigFile: "选择 .fig 文件",
+        htmlTitle: "导入 HTML",
+        htmlDescription:
+          "粘贴或上传独立 HTML。Design 会将其保存为新屏幕，不会注入到此编辑器界面。",
+        htmlPlaceholder: "<main>在此粘贴独立 HTML...</main>",
+        importHtml: "导入 HTML",
+        chooseHtmlFile: "选择 HTML 文件",
+        githubTitle: "GitHub",
+        githubDescription: "即将推出：直接从仓库导入屏幕和组件。",
+        localTitle: "本地 app / VS Code",
+        localDescription: "使用 visual-edit 连接正在运行的本地 app。",
+        visualEditGuidance:
+          "启动 app，在 app repo 中运行下方命令，然后让代理使用 visual-edit skill 添加 URL 屏幕。",
+        useVisualEditNow: "立即使用 visual-edit",
+        comingSoon: "即将推出",
+        warningsToast: "导入完成但有警告",
+        figmaSuccess: "已导入 Figma 粘贴内容",
+        htmlSuccess: "已导入 HTML",
+        uploadSuccess: "已导入文件",
+        visualEditSent: "已将 visual-edit 请求发送给代理",
+        lastImport: "上次导入",
+        errors: {
+          notHtml: "请粘贴或选择有效的 HTML 进行导入。",
+          importFailed: "导入失败",
+          figmaPasteFailed: "Figma 粘贴导入失败",
+          uploadFailed: "文件上传失败",
+        },
+      },
+    },
+  },
+  "es-ES": {
+    designEditor: {
+      import: {
+        title: "Importar",
+        description:
+          "Trae selecciones de Figma, exportaciones .fig o HTML independiente como pantallas de Design.",
+        figmaPasteTitle: "Pegar desde Figma",
+        figmaPasteDescription:
+          "Copia un marco o capa en Figma, enfoca este destino y pega. Los metadatos de Figma se importan directamente cuando están disponibles.",
+        figmaPasteTarget: "Pega contenido de Figma aquí",
+        figUploadTitle: "Subir .fig",
+        figUploadDescription:
+          "Exporta solo los marcos necesarios. Los archivos grandes con muchas imágenes incrustadas pueden superar el límite.",
+        chooseFigFile: "Elegir archivo .fig",
+        htmlTitle: "Importar HTML",
+        htmlDescription:
+          "Pega o sube HTML independiente. Design lo guarda como una pantalla nueva sin inyectarlo en esta interfaz.",
+        htmlPlaceholder: "<main>Pega HTML independiente aquí...</main>",
+        importHtml: "Importar HTML",
+        chooseHtmlFile: "Elegir archivo HTML",
+        githubTitle: "GitHub",
+        githubDescription:
+          "Próximamente: importar pantallas y componentes directamente desde un repositorio.",
+        localTitle: "App local / VS Code",
+        localDescription: "Conecta una app local en ejecución con visual-edit.",
+        visualEditGuidance:
+          "Inicia tu app, ejecuta el comando siguiente desde el repo de la app y luego pide al agente que use la skill visual-edit para añadir pantallas con URL.",
+        useVisualEditNow: "Usar visual-edit ahora",
+        comingSoon: "Próximamente",
+        warningsToast: "La importación terminó con advertencias",
+        figmaSuccess: "Pegado de Figma importado",
+        htmlSuccess: "HTML importado",
+        uploadSuccess: "Archivo importado",
+        visualEditSent: "Solicitud de visual-edit enviada al agente",
+        lastImport: "Última importación",
+        errors: {
+          notHtml: "Pega o elige HTML válido para importar.",
+          importFailed: "Error al importar",
+          figmaPasteFailed: "Error al importar el pegado de Figma",
+          uploadFailed: "Error al subir el archivo",
+        },
+      },
+    },
+  },
+  "fr-FR": {
+    designEditor: {
+      import: {
+        title: "Importer",
+        description:
+          "Importez des sélections Figma, des exports .fig ou du HTML autonome comme écrans Design.",
+        figmaPasteTitle: "Coller depuis Figma",
+        figmaPasteDescription:
+          "Copiez un frame ou un calque dans Figma, ciblez cette zone puis collez. Les métadonnées Figma sont importées directement si disponibles.",
+        figmaPasteTarget: "Collez le contenu Figma ici",
+        figUploadTitle: "Téléverser .fig",
+        figUploadDescription:
+          "Exportez seulement les frames nécessaires. Les gros fichiers avec beaucoup d’images intégrées peuvent dépasser la limite.",
+        chooseFigFile: "Choisir un fichier .fig",
+        htmlTitle: "Importer HTML",
+        htmlDescription:
+          "Collez ou téléversez du HTML autonome. Design l’enregistre comme nouvel écran sans l’injecter dans cette interface.",
+        htmlPlaceholder: "<main>Collez le HTML autonome ici...</main>",
+        importHtml: "Importer HTML",
+        chooseHtmlFile: "Choisir un fichier HTML",
+        githubTitle: "GitHub",
+        githubDescription:
+          "Bientôt : importer des écrans et composants directement depuis un dépôt.",
+        localTitle: "App locale / VS Code",
+        localDescription:
+          "Connectez une app locale en cours d’exécution avec visual-edit.",
+        visualEditGuidance:
+          "Lancez votre app, exécutez la commande ci-dessous depuis le dépôt de l’app, puis demandez à l’agent d’utiliser la skill visual-edit pour ajouter des écrans par URL.",
+        useVisualEditNow: "Utiliser visual-edit maintenant",
+        comingSoon: "Bientôt",
+        warningsToast: "Import terminé avec avertissements",
+        figmaSuccess: "Collage Figma importé",
+        htmlSuccess: "HTML importé",
+        uploadSuccess: "Fichier importé",
+        visualEditSent: "Demande visual-edit envoyée à l’agent",
+        lastImport: "Dernier import",
+        errors: {
+          notHtml: "Collez ou choisissez du HTML valide à importer.",
+          importFailed: "Échec de l’import",
+          figmaPasteFailed: "Échec de l’import du collage Figma",
+          uploadFailed: "Échec du téléversement",
+        },
+      },
+    },
+  },
+  "de-DE": {
+    designEditor: {
+      import: {
+        title: "Import",
+        description:
+          "Bringe Figma-Auswahlen, .fig-Exporte oder eigenständiges HTML als Design-Bildschirme hinein.",
+        figmaPasteTitle: "Aus Figma einfügen",
+        figmaPasteDescription:
+          "Kopiere einen Frame oder Layer in Figma, fokussiere dieses Ziel und füge ein. Figma-Metadaten werden direkt importiert, wenn sie verfügbar sind.",
+        figmaPasteTarget: "Figma-Inhalt hier einfügen",
+        figUploadTitle: ".fig hochladen",
+        figUploadDescription:
+          "Exportiere nur die benötigten Frames. Große Dateien mit vielen eingebetteten Bildern können das Importlimit überschreiten.",
+        chooseFigFile: ".fig-Datei wählen",
+        htmlTitle: "HTML importieren",
+        htmlDescription:
+          "Füge eigenständiges HTML ein oder lade es hoch. Design speichert es als neuen Bildschirm, ohne es in diese Editor-UI einzufügen.",
+        htmlPlaceholder: "<main>Eigenständiges HTML hier einfügen...</main>",
+        importHtml: "HTML importieren",
+        chooseHtmlFile: "HTML-Datei wählen",
+        githubTitle: "GitHub",
+        githubDescription:
+          "Demnächst: Bildschirme und Komponenten direkt aus einem Repository importieren.",
+        localTitle: "Lokale App / VS Code",
+        localDescription: "Verbinde eine laufende lokale App mit visual-edit.",
+        visualEditGuidance:
+          "Starte deine App, führe den folgenden Befehl im App-Repo aus und bitte den Agenten dann, die visual-edit-Skill zu verwenden, um URL-basierte Bildschirme hinzuzufügen.",
+        useVisualEditNow: "visual-edit jetzt verwenden",
+        comingSoon: "Demnächst",
+        warningsToast: "Import mit Warnungen abgeschlossen",
+        figmaSuccess: "Figma-Einfügung importiert",
+        htmlSuccess: "HTML importiert",
+        uploadSuccess: "Datei importiert",
+        visualEditSent: "visual-edit-Anfrage an den Agenten gesendet",
+        lastImport: "Letzter Import",
+        errors: {
+          notHtml: "Füge gültiges HTML ein oder wähle es zum Importieren aus.",
+          importFailed: "Import fehlgeschlagen",
+          figmaPasteFailed: "Figma-Einfügeimport fehlgeschlagen",
+          uploadFailed: "Dateiupload fehlgeschlagen",
+        },
+      },
+    },
+  },
+  "ja-JP": {
+    designEditor: {
+      import: {
+        title: "インポート",
+        description:
+          "Figma の選択範囲、.fig エクスポート、または単体 HTML を Design の画面として取り込みます。",
+        figmaPasteTitle: "Figma から貼り付け",
+        figmaPasteDescription:
+          "Figma でフレームまたはレイヤーをコピーし、この領域にフォーカスして貼り付けます。利用可能な場合は Figma メタデータを直接インポートします。",
+        figmaPasteTarget: "ここに Figma コンテンツを貼り付け",
+        figUploadTitle: ".fig をアップロード",
+        figUploadDescription:
+          "必要なフレームだけを書き出してください。埋め込み画像が多い大きなファイルは制限を超える場合があります。",
+        chooseFigFile: ".fig ファイルを選択",
+        htmlTitle: "HTML をインポート",
+        htmlDescription:
+          "単体 HTML を貼り付けるかアップロードします。Design はこのエディター UI に注入せず、新しい画面として保存します。",
+        htmlPlaceholder: "<main>単体 HTML をここに貼り付け...</main>",
+        importHtml: "HTML をインポート",
+        chooseHtmlFile: "HTML ファイルを選択",
+        githubTitle: "GitHub",
+        githubDescription:
+          "近日対応: リポジトリから画面とコンポーネントを直接インポートします。",
+        localTitle: "ローカル app / VS Code",
+        localDescription: "visual-edit で実行中のローカル app に接続します。",
+        visualEditGuidance:
+          "app を起動し、app repo で下のコマンドを実行してから、エージェントに visual-edit skill で URL ベースの画面を追加するよう依頼してください。",
+        useVisualEditNow: "visual-edit を今すぐ使う",
+        comingSoon: "近日対応",
+        warningsToast: "警告付きでインポートが完了しました",
+        figmaSuccess: "Figma 貼り付けをインポートしました",
+        htmlSuccess: "HTML をインポートしました",
+        uploadSuccess: "ファイルをインポートしました",
+        visualEditSent: "visual-edit リクエストをエージェントに送信しました",
+        lastImport: "前回のインポート",
+        errors: {
+          notHtml: "インポートする有効な HTML を貼り付けるか選択してください。",
+          importFailed: "インポートに失敗しました",
+          figmaPasteFailed: "Figma 貼り付けのインポートに失敗しました",
+          uploadFailed: "ファイルのアップロードに失敗しました",
+        },
+      },
+    },
+  },
+  "ko-KR": {
+    designEditor: {
+      import: {
+        title: "가져오기",
+        description:
+          "Figma 선택 영역, .fig 내보내기 또는 독립 HTML을 Design 화면으로 가져옵니다.",
+        figmaPasteTitle: "Figma에서 붙여넣기",
+        figmaPasteDescription:
+          "Figma에서 프레임이나 레이어를 복사한 뒤 이 영역에 포커스하고 붙여넣으세요. 가능한 경우 Figma 메타데이터를 바로 가져옵니다.",
+        figmaPasteTarget: "여기에 Figma 콘텐츠 붙여넣기",
+        figUploadTitle: ".fig 업로드",
+        figUploadDescription:
+          "필요한 프레임만 내보내세요. 포함된 이미지가 많은 큰 파일은 가져오기 제한을 초과할 수 있습니다.",
+        chooseFigFile: ".fig 파일 선택",
+        htmlTitle: "HTML 가져오기",
+        htmlDescription:
+          "독립 HTML을 붙여넣거나 업로드하세요. Design은 이를 새 화면으로 저장하며 이 편집기 UI에 삽입하지 않습니다.",
+        htmlPlaceholder: "<main>독립 HTML을 여기에 붙여넣기...</main>",
+        importHtml: "HTML 가져오기",
+        chooseHtmlFile: "HTML 파일 선택",
+        githubTitle: "GitHub",
+        githubDescription:
+          "곧 제공: 저장소에서 화면과 컴포넌트를 직접 가져옵니다.",
+        localTitle: "로컬 app / VS Code",
+        localDescription: "visual-edit로 실행 중인 로컬 app을 연결합니다.",
+        visualEditGuidance:
+          "app을 시작하고 app repo에서 아래 명령을 실행한 다음, 에이전트에게 visual-edit skill로 URL 기반 화면을 추가해 달라고 요청하세요.",
+        useVisualEditNow: "지금 visual-edit 사용",
+        comingSoon: "곧 제공",
+        warningsToast: "경고와 함께 가져오기가 완료되었습니다",
+        figmaSuccess: "Figma 붙여넣기를 가져왔습니다",
+        htmlSuccess: "HTML을 가져왔습니다",
+        uploadSuccess: "파일을 가져왔습니다",
+        visualEditSent: "visual-edit 요청을 에이전트에 보냈습니다",
+        lastImport: "최근 가져오기",
+        errors: {
+          notHtml: "가져올 유효한 HTML을 붙여넣거나 선택하세요.",
+          importFailed: "가져오기 실패",
+          figmaPasteFailed: "Figma 붙여넣기 가져오기 실패",
+          uploadFailed: "파일 업로드 실패",
+        },
+      },
+    },
+  },
+  "pt-BR": {
+    designEditor: {
+      import: {
+        title: "Importar",
+        description:
+          "Traga seleções do Figma, exportações .fig ou HTML independente como telas do Design.",
+        figmaPasteTitle: "Colar do Figma",
+        figmaPasteDescription:
+          "Copie um frame ou camada no Figma, foque este destino e cole. Os metadados do Figma são importados diretamente quando disponíveis.",
+        figmaPasteTarget: "Cole conteúdo do Figma aqui",
+        figUploadTitle: "Enviar .fig",
+        figUploadDescription:
+          "Exporte apenas os frames necessários. Arquivos grandes com muitas imagens incorporadas podem exceder o limite.",
+        chooseFigFile: "Escolher arquivo .fig",
+        htmlTitle: "Importar HTML",
+        htmlDescription:
+          "Cole ou envie HTML independente. O Design salva como uma nova tela sem injetar nesta interface.",
+        htmlPlaceholder: "<main>Cole HTML independente aqui...</main>",
+        importHtml: "Importar HTML",
+        chooseHtmlFile: "Escolher arquivo HTML",
+        githubTitle: "GitHub",
+        githubDescription:
+          "Em breve: importe telas e componentes diretamente de um repositório.",
+        localTitle: "App local / VS Code",
+        localDescription: "Conecte um app local em execução com visual-edit.",
+        visualEditGuidance:
+          "Inicie seu app, execute o comando abaixo no repo do app e depois peça ao agente para usar a skill visual-edit para adicionar telas por URL.",
+        useVisualEditNow: "Usar visual-edit agora",
+        comingSoon: "Em breve",
+        warningsToast: "Importação concluída com avisos",
+        figmaSuccess: "Colagem do Figma importada",
+        htmlSuccess: "HTML importado",
+        uploadSuccess: "Arquivo importado",
+        visualEditSent: "Solicitação de visual-edit enviada ao agente",
+        lastImport: "Última importação",
+        errors: {
+          notHtml: "Cole ou escolha HTML válido para importar.",
+          importFailed: "Falha ao importar",
+          figmaPasteFailed: "Falha ao importar colagem do Figma",
+          uploadFailed: "Falha no upload do arquivo",
+        },
+      },
+    },
+  },
+  "hi-IN": {
+    designEditor: {
+      import: {
+        title: "आयात",
+        description:
+          "Figma selections, .fig exports या standalone HTML को Design screens के रूप में लाएँ।",
+        figmaPasteTitle: "Figma से पेस्ट करें",
+        figmaPasteDescription:
+          "Figma में frame या layer कॉपी करें, फिर इस target को focus करके paste करें। उपलब्ध होने पर Figma metadata सीधे import होता है।",
+        figmaPasteTarget: "Figma content यहाँ paste करें",
+        figUploadTitle: ".fig अपलोड करें",
+        figUploadDescription:
+          "सिर्फ ज़रूरी frames export करें। कई embedded images वाली बड़ी files import limit से ऊपर जा सकती हैं।",
+        chooseFigFile: ".fig file चुनें",
+        htmlTitle: "HTML आयात करें",
+        htmlDescription:
+          "Standalone HTML paste या upload करें। Design इसे नए screen के रूप में save करता है, editor UI में inject नहीं करता।",
+        htmlPlaceholder: "<main>Standalone HTML यहाँ paste करें...</main>",
+        importHtml: "HTML आयात करें",
+        chooseHtmlFile: "HTML file चुनें",
+        githubTitle: "GitHub",
+        githubDescription:
+          "जल्द आ रहा है: repository से screens और components सीधे import करें।",
+        localTitle: "स्थानीय app / VS Code",
+        localDescription: "चल रहे local app को visual-edit से connect करें।",
+        visualEditGuidance:
+          "अपना app शुरू करें, app repo से नीचे वाला command चलाएँ, फिर agent से visual-edit skill इस्तेमाल करके URL-backed screens जोड़ने को कहें।",
+        useVisualEditNow: "अभी visual-edit इस्तेमाल करें",
+        comingSoon: "जल्द आ रहा है",
+        warningsToast: "Import warnings के साथ पूरा हुआ",
+        figmaSuccess: "Figma paste import हो गया",
+        htmlSuccess: "HTML import हो गया",
+        uploadSuccess: "File import हो गई",
+        visualEditSent: "visual-edit request agent को भेजी गई",
+        lastImport: "पिछला import",
+        errors: {
+          notHtml: "Import करने के लिए valid HTML paste करें या चुनें।",
+          importFailed: "आयात विफल रहा",
+          figmaPasteFailed: "Figma paste आयात विफल रहा",
+          uploadFailed: "File upload विफल रहा",
+        },
+      },
+    },
+  },
+  "ar-SA": {
+    designEditor: {
+      import: {
+        title: "استيراد",
+        description:
+          "استورد تحديدات Figma أو ملفات .fig أو HTML مستقل كشاشات Design.",
+        figmaPasteTitle: "لصق من Figma",
+        figmaPasteDescription:
+          "انسخ إطارا أو طبقة في Figma، ثم ركز هذه المنطقة والصق. يتم استيراد بيانات Figma الوصفية مباشرة عند توفرها.",
+        figmaPasteTarget: "الصق محتوى Figma هنا",
+        figUploadTitle: "رفع .fig",
+        figUploadDescription:
+          "صدّر الإطارات التي تحتاجها فقط. قد تتجاوز الملفات الكبيرة ذات الصور المضمنة الكثيرة حد الاستيراد.",
+        chooseFigFile: "اختر ملف .fig",
+        htmlTitle: "استيراد HTML",
+        htmlDescription:
+          "الصق أو ارفع HTML مستقلا. يحفظه Design كشاشة جديدة دون حقنه في واجهة المحرر.",
+        htmlPlaceholder: "<main>الصق HTML مستقلا هنا...</main>",
+        importHtml: "استيراد HTML",
+        chooseHtmlFile: "اختر ملف HTML",
+        githubTitle: "GitHub",
+        githubDescription: "قريبا: استيراد الشاشات والمكونات مباشرة من مستودع.",
+        localTitle: "تطبيق محلي / VS Code",
+        localDescription: "وصّل تطبيقا محليا قيد التشغيل باستخدام visual-edit.",
+        visualEditGuidance:
+          "شغّل التطبيق، ثم نفّذ الأمر أدناه من مستودع التطبيق، وبعدها اطلب من الوكيل استخدام مهارة visual-edit لإضافة شاشات مدعومة بروابط URL.",
+        useVisualEditNow: "استخدم visual-edit الآن",
+        comingSoon: "قريبا",
+        warningsToast: "اكتمل الاستيراد مع تحذيرات",
+        figmaSuccess: "تم استيراد لصق Figma",
+        htmlSuccess: "تم استيراد HTML",
+        uploadSuccess: "تم استيراد الملف",
+        visualEditSent: "تم إرسال طلب visual-edit إلى الوكيل",
+        lastImport: "آخر استيراد",
+        errors: {
+          notHtml: "الصق أو اختر HTML صالحا للاستيراد.",
+          importFailed: "فشل الاستيراد",
+          figmaPasteFailed: "فشل استيراد لصق Figma",
+          uploadFailed: "فشل رفع الملف",
+        },
+      },
+    },
+  },
+} satisfies Record<Exclude<LocaleCode, "en-US">, PartialMessages>;
+
 export const messagesByLocale = {
   "en-US": enUS,
   "zh-TW": mergeMessages(
@@ -9813,11 +10538,13 @@ export const messagesByLocale = {
       zhTW,
       designLeftRailOverrides["zh-TW"],
       designTokenImportOverrides["zh-TW"],
+      designImportOverrides["zh-TW"],
       designModeFeatureOverrides["zh-TW"],
       designShapeToolOverrides["zh-TW"],
       designPublicShareOverrides["zh-TW"],
       designVisualEditOverrides["zh-TW"],
       designLocalSourceEditOverrides["zh-TW"],
+      designPendingVisualStyleOverrides["zh-TW"],
     ),
   ),
   "zh-CN": mergeMessages(
@@ -9827,12 +10554,14 @@ export const messagesByLocale = {
       designExactEnglishOverrides["zh-CN"],
       designLeftRailOverrides["zh-CN"],
       designTokenImportOverrides["zh-CN"],
+      designImportOverrides["zh-CN"],
       designModeFeatureOverrides["zh-CN"],
       designCanvasFeatureOverrides["zh-CN"],
       designShapeToolOverrides["zh-CN"],
       designPublicShareOverrides["zh-CN"],
       designVisualEditOverrides["zh-CN"],
       designLocalSourceEditOverrides["zh-CN"],
+      designPendingVisualStyleOverrides["zh-CN"],
       {
         root: {
           commandActions: "操作",
@@ -9881,12 +10610,14 @@ export const messagesByLocale = {
       designExactEnglishOverrides["es-ES"],
       designLeftRailOverrides["es-ES"],
       designTokenImportOverrides["es-ES"],
+      designImportOverrides["es-ES"],
       designModeFeatureOverrides["es-ES"],
       designCanvasFeatureOverrides["es-ES"],
       designShapeToolOverrides["es-ES"],
       designPublicShareOverrides["es-ES"],
       designVisualEditOverrides["es-ES"],
       designLocalSourceEditOverrides["es-ES"],
+      designPendingVisualStyleOverrides["es-ES"],
       {
         root: {
           commandActions: "Acciones",
@@ -9935,12 +10666,14 @@ export const messagesByLocale = {
       designExactEnglishOverrides["fr-FR"],
       designLeftRailOverrides["fr-FR"],
       designTokenImportOverrides["fr-FR"],
+      designImportOverrides["fr-FR"],
       designModeFeatureOverrides["fr-FR"],
       designCanvasFeatureOverrides["fr-FR"],
       designShapeToolOverrides["fr-FR"],
       designPublicShareOverrides["fr-FR"],
       designVisualEditOverrides["fr-FR"],
       designLocalSourceEditOverrides["fr-FR"],
+      designPendingVisualStyleOverrides["fr-FR"],
       {
         root: {
           commandActions: "Actions",
@@ -9989,12 +10722,14 @@ export const messagesByLocale = {
       designExactEnglishOverrides["de-DE"],
       designLeftRailOverrides["de-DE"],
       designTokenImportOverrides["de-DE"],
+      designImportOverrides["de-DE"],
       designModeFeatureOverrides["de-DE"],
       designCanvasFeatureOverrides["de-DE"],
       designShapeToolOverrides["de-DE"],
       designPublicShareOverrides["de-DE"],
       designVisualEditOverrides["de-DE"],
       designLocalSourceEditOverrides["de-DE"],
+      designPendingVisualStyleOverrides["de-DE"],
       {
         root: {
           commandActions: "Aktionen",
@@ -10043,12 +10778,14 @@ export const messagesByLocale = {
       designExactEnglishOverrides["ja-JP"],
       designLeftRailOverrides["ja-JP"],
       designTokenImportOverrides["ja-JP"],
+      designImportOverrides["ja-JP"],
       designModeFeatureOverrides["ja-JP"],
       designCanvasFeatureOverrides["ja-JP"],
       designShapeToolOverrides["ja-JP"],
       designPublicShareOverrides["ja-JP"],
       designVisualEditOverrides["ja-JP"],
       designLocalSourceEditOverrides["ja-JP"],
+      designPendingVisualStyleOverrides["ja-JP"],
       {
         root: {
           commandActions: "操作",
@@ -10098,12 +10835,14 @@ export const messagesByLocale = {
       designExactEnglishOverrides["ko-KR"],
       designLeftRailOverrides["ko-KR"],
       designTokenImportOverrides["ko-KR"],
+      designImportOverrides["ko-KR"],
       designModeFeatureOverrides["ko-KR"],
       designCanvasFeatureOverrides["ko-KR"],
       designShapeToolOverrides["ko-KR"],
       designPublicShareOverrides["ko-KR"],
       designVisualEditOverrides["ko-KR"],
       designLocalSourceEditOverrides["ko-KR"],
+      designPendingVisualStyleOverrides["ko-KR"],
       {
         root: {
           commandActions: "작업",
@@ -10151,12 +10890,14 @@ export const messagesByLocale = {
       designExactEnglishOverrides["pt-BR"],
       designLeftRailOverrides["pt-BR"],
       designTokenImportOverrides["pt-BR"],
+      designImportOverrides["pt-BR"],
       designModeFeatureOverrides["pt-BR"],
       designCanvasFeatureOverrides["pt-BR"],
       designShapeToolOverrides["pt-BR"],
       designPublicShareOverrides["pt-BR"],
       designVisualEditOverrides["pt-BR"],
       designLocalSourceEditOverrides["pt-BR"],
+      designPendingVisualStyleOverrides["pt-BR"],
       {
         root: {
           commandActions: "Ações",
@@ -10205,12 +10946,14 @@ export const messagesByLocale = {
       designExactEnglishOverrides["hi-IN"],
       designLeftRailOverrides["hi-IN"],
       designTokenImportOverrides["hi-IN"],
+      designImportOverrides["hi-IN"],
       designModeFeatureOverrides["hi-IN"],
       designCanvasFeatureOverrides["hi-IN"],
       designShapeToolOverrides["hi-IN"],
       designPublicShareOverrides["hi-IN"],
       designVisualEditOverrides["hi-IN"],
       designLocalSourceEditOverrides["hi-IN"],
+      designPendingVisualStyleOverrides["hi-IN"],
       {
         root: {
           commandActions: "क्रियाएं",
@@ -10259,12 +11002,14 @@ export const messagesByLocale = {
       designExactEnglishOverrides["ar-SA"],
       designLeftRailOverrides["ar-SA"],
       designTokenImportOverrides["ar-SA"],
+      designImportOverrides["ar-SA"],
       designModeFeatureOverrides["ar-SA"],
       designCanvasFeatureOverrides["ar-SA"],
       designShapeToolOverrides["ar-SA"],
       designPublicShareOverrides["ar-SA"],
       designVisualEditOverrides["ar-SA"],
       designLocalSourceEditOverrides["ar-SA"],
+      designPendingVisualStyleOverrides["ar-SA"],
       {
         root: {
           commandActions: "الإجراءات",

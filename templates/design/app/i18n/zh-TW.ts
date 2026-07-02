@@ -248,6 +248,7 @@ const messages = {
       file: "檔案",
       agent: "代理",
       assets: "資源",
+      import: "匯入",
       tools: "工具",
       tokens: "權杖",
       label: "設計工作區",
@@ -271,6 +272,45 @@ const messages = {
       empty: "尚無權杖",
       emptyHint: "新增設計權杖以重複使用顏色、間距等。",
       applying: "套用中…",
+    },
+    import: {
+      title: "匯入",
+      description:
+        "將 Figma 選取內容、.fig 匯出檔或獨立 HTML 帶入為 Design 螢幕。",
+      figmaPasteTitle: "從 Figma 貼上",
+      figmaPasteDescription:
+        "在 Figma 複製畫框或圖層，然後聚焦此目標並貼上。可用時會直接匯入 Figma 中繼資料。",
+      figmaPasteTarget: "在此貼上 Figma 內容",
+      figUploadTitle: "上傳 .fig",
+      figUploadDescription:
+        "只匯出需要的畫框。含有許多嵌入圖片的大型檔案可能超過匯入限制。",
+      chooseFigFile: "選擇 .fig 檔案",
+      htmlTitle: "匯入 HTML",
+      htmlDescription:
+        "貼上或上傳獨立 HTML。Design 會將其儲存為新螢幕，不會注入到此編輯器 UI。",
+      htmlPlaceholder: "<main>在此貼上獨立 HTML...</main>",
+      importHtml: "匯入 HTML",
+      chooseHtmlFile: "選擇 HTML 檔案",
+      githubTitle: "GitHub",
+      githubDescription: "即將推出：直接從儲存庫匯入螢幕和元件。",
+      localTitle: "本機 app / VS Code",
+      localDescription: "使用 visual-edit 連接執行中的本機 app。",
+      visualEditGuidance:
+        "啟動 app，在 app repo 中執行下方命令，然後請代理使用 visual-edit skill 新增 URL 螢幕。",
+      useVisualEditNow: "立即使用 visual-edit",
+      comingSoon: "即將推出",
+      warningsToast: "匯入完成但有警告",
+      figmaSuccess: "已匯入 Figma 貼上內容",
+      htmlSuccess: "已匯入 HTML",
+      uploadSuccess: "已匯入檔案",
+      visualEditSent: "已將 visual-edit 請求傳送給代理",
+      lastImport: "上次匯入",
+      errors: {
+        notHtml: "請貼上或選擇有效的 HTML 以匯入。",
+        importFailed: "匯入失敗",
+        figmaPasteFailed: "Figma 貼上匯入失敗",
+        uploadFailed: "檔案上傳失敗",
+      },
     },
     generationMayHaveStopped:
       "生成可能在建立檔案前停止。請檢視代理訊息或重試。",
@@ -409,6 +449,23 @@ const messages = {
         failed: "補丁失敗",
         rolledBack: "已回復",
       },
+    },
+    pendingVisualStyles: {
+      applyAria: "套用待處理的視覺樣式編輯",
+      applyButton: "套用樣式",
+      previewLabel: "待處理的視覺預覽",
+      applyWithAgent: "用 Design 代理套用",
+      copyPrompt: "將提示複製給您的代理",
+      agentMessage: "將待處理的視覺樣式編輯套用到來源。",
+      sentToast: "樣式編輯已傳送給 Design 代理",
+      copiedToast: "樣式提示已複製",
+      leaveTitle: "離開前要套用樣式嗎？",
+      leaveDescriptionOne:
+        "即時預覽中有 {{count}} 個待處理的視覺樣式編輯。現在離開會捨棄該未套用的樣式變更。",
+      leaveDescriptionOther:
+        "即時預覽中有 {{count}} 個待處理的視覺樣式編輯。現在離開會捨棄這些未套用的樣式變更。",
+      stay: "留在這裡",
+      leave: "不套用並離開",
     },
     capabilities: {
       "deterministic-style-edit": "安全樣式編輯",
