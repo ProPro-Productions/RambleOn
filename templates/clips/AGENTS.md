@@ -119,14 +119,26 @@ Detailed media, meeting, dictation, editing, and sharing rules live in
   `screen_memory_recent_context`, and `screen_memory_recent_segments`; only
   inspect or export segment file paths when the user explicitly asks. Never
   describe Screen Memory as hosted, shared, exhaustive, or enabled by default.
+- Video projects are the full multi-track editor at `/video-projects/:id`
+  (vendored Remotion Editor Starter — licensed third-party source; keep it in
+  this repo only). A project composes multiple sources (recordings, b-roll,
+  captions, text) and references recordings by the `/api/video/:id` proxy URL,
+  never by copying bytes. Use `add-recording-to-video-project` to send a clip
+  into a new or existing project, `get-video-project` /
+  `update-video-project` for state, and `list-video-projects` /
+  `create-video-project` / `delete-video-project` for CRUD. Read the
+  `video-projects` skill before deeper work; rendering/export and Whisper
+  captioning are deliberately disabled there for now.
 - After mutations, rely on the app refresh/polling path; do not invent a second
   sync mechanism.
 
 ## Application State
 
 - `navigation` exposes library, recording, share, meeting, dictation, settings,
-  and transcript context. `selection` exposes selected library recording ids
-  when the user is in selection mode.
+  video-project, and transcript context. `selection` exposes selected library
+  recording ids when the user is in selection mode. `view: "video-project"`
+  includes the open `projectId`; `view-screen` returns a composition summary
+  for it.
 - `recording-setup.import` exposes Loom import UI state while the `/record`
   surface is open, without storing the pasted URL in ambient screen context.
 - `navigate` moves the UI to recording/library/meeting/share surfaces.
@@ -141,6 +153,8 @@ Read the relevant skill before deeper work:
 
 - `recording` for recording lifecycle and transcript handling.
 - `video-editing` and `ai-video-tools` for edits, cleanup, titles, and summaries.
+- `video-projects` for the full multi-track editor (compositions, imports,
+  project persistence, editor asset uploads).
 - `video-sharing` for public links, passwords, expiry, embeds, and grants.
 - `meetings` and `dictate` for calendar-sourced meetings and dictation flows.
 - `actions`, `security`, `frontend-design`, and `shadcn-ui` as needed.
