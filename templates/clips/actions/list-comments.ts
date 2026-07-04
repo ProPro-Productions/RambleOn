@@ -44,6 +44,7 @@ export default defineAction({
       authorName: c.authorName,
       content: c.content,
       videoTimestampMs: c.videoTimestampMs,
+      annotationId: c.annotationId,
       emojiReactionsJson: c.emojiReactionsJson,
       resolved: Boolean(c.resolved),
       createdAt: c.createdAt,

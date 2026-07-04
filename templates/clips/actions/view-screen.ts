@@ -124,6 +124,27 @@ async function fetchComments(recordingId: string) {
   }));
 }
 
+async function fetchAnnotations(recordingId: string) {
+  const db = getDb();
+  const rows = await db
+    .select()
+    .from(schema.recordingAnnotations)
+    .where(eq(schema.recordingAnnotations.recordingId, recordingId))
+    .orderBy(asc(schema.recordingAnnotations.startMs));
+  return rows.map((a) => ({
+    id: a.id,
+    startMs: a.startMs,
+    endMs: a.endMs,
+    kind: a.kind,
+    label: a.label,
+    body: a.body,
+    authorEmail: a.authorEmail,
+    authorKind: a.authorKind,
+    source: a.source,
+    resolved: Boolean(a.resolved),
+  }));
+}
+
 async function fetchBrowserDiagnosticsSummary(recordingId: string) {
   const db = getDb();
   const [row] = await db
@@ -575,11 +596,13 @@ export default defineAction({
             const [
               transcript,
               comments,
+              annotations,
               browserDiagnosticsSummary,
               bugReportSummary,
             ] = await Promise.all([
               fetchTranscript(nav.recordingId),
               fetchComments(nav.recordingId),
+              fetchAnnotations(nav.recordingId),
               fetchBrowserDiagnosticsSummary(nav.recordingId),
               fetchBugReportSummary(nav.recordingId),
             ]);
@@ -605,6 +628,9 @@ export default defineAction({
               };
             }
             screen.comments = comments.slice(0, 50);
+            if (annotations.length > 0) {
+              screen.annotations = annotations.slice(0, 100);
+            }
             if (browserDiagnosticsSummary) {
               screen.browserDiagnostics = {
                 summary: browserDiagnosticsSummary,
