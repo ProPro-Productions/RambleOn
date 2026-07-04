@@ -893,6 +893,17 @@ Clips의 모든 사용자 대상 변경 사항은 여기에 기록됩니다. 명
     elapsed: "경과 시간",
     cancel: "녹화 취소",
     cancelShortcut: "취소 (⌥⇧C)",
+    addMarker: "타임스탬프 마커 추가",
+    markerShortcut: "마커 (⌥⇧M) · 메모 ⌥⇧E · B롤 ⌥⇧B · 재촬영 ⌥⇧N",
+  },
+  annotationsStrip: {
+    title: "마커 ({{count}})",
+    editorNote: "편집자 메모",
+    bRoll: "B롤",
+    retake: "재촬영",
+    marker: "마커",
+    wholeVideo: "전체 영상",
+    delete: "마커 삭제",
   },
   countdownOverlay: {
     startsIn: "{{count}} 후 녹화 시작",

@@ -891,6 +891,17 @@ All notable user-facing changes to Clips are documented here. Open it any time f
     elapsed: "Elapsed time",
     cancel: "Cancel recording",
     cancelShortcut: "Cancel (⌥⇧C)",
+    addMarker: "Add timestamp marker",
+    markerShortcut: "Marker (⌥⇧M) · note ⌥⇧E · b-roll ⌥⇧B · retake ⌥⇧N",
+  },
+  annotationsStrip: {
+    title: "Markers ({{count}})",
+    editorNote: "Editor note",
+    bRoll: "B-roll",
+    retake: "Retake",
+    marker: "Marker",
+    wholeVideo: "Whole video",
+    delete: "Delete marker",
   },
   countdownOverlay: {
     startsIn: "Recording starts in {{count}}",

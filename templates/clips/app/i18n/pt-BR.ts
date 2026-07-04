@@ -909,6 +909,17 @@ Todas as mudanças visíveis para usuários do Clips são documentadas aqui. Voc
     elapsed: "Tempo decorrido",
     cancel: "Cancelar gravação",
     cancelShortcut: "Cancelar (⌥⇧C)",
+    addMarker: "Adicionar marcador de tempo",
+    markerShortcut: "Marcador (⌥⇧M) · nota ⌥⇧E · b-roll ⌥⇧B · regravação ⌥⇧N",
+  },
+  annotationsStrip: {
+    title: "Marcadores ({{count}})",
+    editorNote: "Nota para o editor",
+    bRoll: "B-roll",
+    retake: "Regravação",
+    marker: "Marcador",
+    wholeVideo: "Vídeo inteiro",
+    delete: "Excluir marcador",
   },
   countdownOverlay: {
     startsIn: "A gravação começa em {{count}}",

@@ -914,6 +914,17 @@ Tous les changements visibles par les utilisateurs de Clips sont documentés ici
     elapsed: "Temps écoulé",
     cancel: "Annuler l’enregistrement",
     cancelShortcut: "Annuler (⌥⇧C)",
+    addMarker: "Ajouter un marqueur temporel",
+    markerShortcut: "Marqueur (⌥⇧M) · note ⌥⇧E · b-roll ⌥⇧B · reprise ⌥⇧N",
+  },
+  annotationsStrip: {
+    title: "Marqueurs ({{count}})",
+    editorNote: "Note pour le monteur",
+    bRoll: "B-roll",
+    retake: "Reprise",
+    marker: "Marqueur",
+    wholeVideo: "Toute la vidéo",
+    delete: "Supprimer le marqueur",
   },
   countdownOverlay: {
     startsIn: "L’enregistrement commence dans {{count}}",

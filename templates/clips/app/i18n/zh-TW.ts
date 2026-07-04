@@ -852,6 +852,17 @@ const messages = {
     elapsed: "已用時間",
     cancel: "取消錄製",
     cancelShortcut: "取消 (⌥⇧C)",
+    addMarker: "新增時間戳記標記",
+    markerShortcut: "標記 (⌥⇧M) · 備註 ⌥⇧E · B-roll ⌥⇧B · 重錄 ⌥⇧N",
+  },
+  annotationsStrip: {
+    title: "標記（{{count}}）",
+    editorNote: "剪輯備註",
+    bRoll: "B-roll",
+    retake: "重錄",
+    marker: "標記",
+    wholeVideo: "整段影片",
+    delete: "刪除標記",
   },
   countdownOverlay: {
     startsIn: "錄製將在 {{count}} 後開始",

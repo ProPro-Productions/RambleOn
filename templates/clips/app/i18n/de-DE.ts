@@ -920,6 +920,17 @@ Alle sichtbaren Änderungen für Clips-Nutzer werden hier dokumentiert. Du kanns
     elapsed: "Verstrichene Zeit",
     cancel: "Aufnahme abbrechen",
     cancelShortcut: "Abbrechen (⌥⇧C)",
+    addMarker: "Zeitmarke setzen",
+    markerShortcut: "Marke (⌥⇧M) · Notiz ⌥⇧E · B-Roll ⌥⇧B · Retake ⌥⇧N",
+  },
+  annotationsStrip: {
+    title: "Marken ({{count}})",
+    editorNote: "Notiz für den Schnitt",
+    bRoll: "B-Roll",
+    retake: "Retake",
+    marker: "Marke",
+    wholeVideo: "Ganzes Video",
+    delete: "Marke löschen",
   },
   countdownOverlay: {
     startsIn: "Aufnahme startet in {{count}}",

@@ -55,8 +55,11 @@ Detailed media, meeting, dictation, editing, and sharing rules live in
   timeline-anchored picture. Attach a discussion thread to a marker or section
   with `add-comment --annotationId=<id>`. Inline timecodes like `12:44` in
   comment/annotation text stay plain text; UIs linkify them at render time
-  (shared parser: `app/lib/timecodes.ts`). Read the `annotations` skill before
-  deeper work.
+  (shared parser: `app/lib/timecodes.ts`). While recording, hotkeys ⌥⇧M/E/B/N
+  drop markers (generic / editor-note / b-roll / retake) that persist through
+  the UI-internal `save-recording-markers` batch action; the recording page's
+  Activity tab shows the marker review strip. Read the `annotations` skill
+  before deeper work.
 - Use `view-screen` when the active recording, transcript segment, meeting, or
   share context is unclear.
 - Calendar-sourced meeting actions are shortcuts, but do not add raw

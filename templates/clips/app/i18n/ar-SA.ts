@@ -892,6 +892,18 @@ const messages = {
     elapsed: "الوقت المنقضي",
     cancel: "إلغاء التسجيل",
     cancelShortcut: "إلغاء (⌥⇧C)",
+    addMarker: "إضافة علامة زمنية",
+    markerShortcut:
+      "علامة (⌥⇧M) · ملاحظة ⌥⇧E · لقطات إضافية ⌥⇧B · إعادة تسجيل ⌥⇧N",
+  },
+  annotationsStrip: {
+    title: "العلامات ({{count}})",
+    editorNote: "ملاحظة للمحرّر",
+    bRoll: "لقطات إضافية",
+    retake: "إعادة تسجيل",
+    marker: "علامة",
+    wholeVideo: "الفيديو كامل",
+    delete: "حذف العلامة",
   },
   countdownOverlay: {
     startsIn: "يبدأ التسجيل خلال {{count}}",

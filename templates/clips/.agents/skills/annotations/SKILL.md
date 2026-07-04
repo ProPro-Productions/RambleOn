@@ -66,6 +66,20 @@ Comments attach to annotations via `add-comment --annotationId=<id>`; the
 comment inherits the annotation's `startMs` unless `videoTimestampMs` is
 passed explicitly. This is how sections "receive comments".
 
+## Capture-time markers (recorder hotkeys)
+
+While recording in the browser recorder (`/record`), the creator drops markers
+without leaving the take: ⌥⇧M generic, ⌥⇧E editor-note, ⌥⇧B b-roll,
+⌥⇧N retake, or the bookmark button on the floating toolbar (generic). Markers
+buffer client-side with the elapsed *recording* time (pauses excluded) and are
+persisted in one batch by the UI-internal `save-recording-markers` action when
+the recording is saved (`source: "shortcut"`). Because the creator usually
+*says* what they mean as they hit the key, edit synthesis should read the
+transcript around each shortcut marker's timestamp to complete its meaning.
+The hotkeys only work while the Clips tab has focus — desktop global hotkeys
+are a later milestone. The recording page's Activity tab shows a review strip
+of all markers (seek, delete).
+
 ## Inline timecode references
 
 Text bodies (comments, annotation bodies) may contain plain timecodes like

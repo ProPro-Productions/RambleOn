@@ -40,6 +40,7 @@ import { toast } from "sonner";
 
 import { EditableRecordingTitle } from "@/components/editable-recording-title";
 import { EditorLayout } from "@/components/editor/editor-layout";
+import { AnnotationsStrip } from "@/components/player/annotations-strip";
 import { CommentsPanel } from "@/components/player/comments-panel";
 import { RecordingOptionsMenu } from "@/components/player/delete-recording-menu";
 import { InsightsPanel } from "@/components/player/insights-panel";
@@ -881,21 +882,29 @@ export default function RecordingPage() {
       </TabsContent>
       <TabsContent
         value="comments"
-        className="flex-1 min-h-0 mt-3 data-[state=inactive]:hidden"
+        className="flex-1 min-h-0 mt-3 flex flex-col data-[state=inactive]:hidden"
       >
-        <CommentsPanel
+        <AnnotationsStrip
           recordingId={recording.id}
-          comments={comments}
-          currentMs={currentMs}
+          canEdit={canEdit}
           currentUserEmail={session?.email}
-          enableComments={recording.enableComments}
           onSeek={(ms) => playerRef.current?.seek(ms)}
-          queryKey={[
-            "action",
-            "get-recording-player-data",
-            { recordingId: recordingId ?? "" },
-          ]}
         />
+        <div className="flex-1 min-h-0">
+          <CommentsPanel
+            recordingId={recording.id}
+            comments={comments}
+            currentMs={currentMs}
+            currentUserEmail={session?.email}
+            enableComments={recording.enableComments}
+            onSeek={(ms) => playerRef.current?.seek(ms)}
+            queryKey={[
+              "action",
+              "get-recording-player-data",
+              { recordingId: recordingId ?? "" },
+            ]}
+          />
+        </div>
       </TabsContent>
       <TabsContent
         value="insights"
