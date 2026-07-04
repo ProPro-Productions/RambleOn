@@ -71,6 +71,17 @@ export default defineConfig({
     copyMediapipeWasm(),
   ],
   optimizeDeps: {
-    exclude: ["@ffmpeg/ffmpeg", "@ffmpeg/util"],
+    exclude: [
+      "@ffmpeg/ffmpeg",
+      "@ffmpeg/util",
+      // Ship ESM — no pre-bundling needed (mirrors the upstream Remotion
+      // Editor Starter vite config for the vendored app/video-editor).
+      "remotion",
+      "@remotion/player",
+      "@remotion/gif",
+      "@remotion/google-fonts/from-info",
+      "@remotion/layout-utils",
+      "@remotion/shapes",
+    ],
   },
 });

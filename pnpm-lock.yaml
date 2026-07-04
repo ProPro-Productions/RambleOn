@@ -2281,9 +2281,36 @@ importers:
       '@neondatabase/serverless':
         specifier: ^1.1.0
         version: 1.1.0
+      '@remotion/captions':
+        specifier: 4.0.463
+        version: 4.0.463
+      '@remotion/gif':
+        specifier: 4.0.463
+        version: 4.0.463(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@remotion/google-fonts':
+        specifier: 4.0.463
+        version: 4.0.463(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@remotion/layout-utils':
+        specifier: 4.0.463
+        version: 4.0.463
+      '@remotion/media':
+        specifier: 4.0.463
+        version: 4.0.463(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@remotion/player':
+        specifier: 4.0.463
+        version: 4.0.463(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@remotion/rounded-text-box':
+        specifier: 4.0.463
+        version: 4.0.463
+      '@remotion/shapes':
+        specifier: 4.0.463
+        version: 4.0.463(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@tabler/icons-react':
         specifier: 'catalog:'
         version: 3.44.0(react@19.2.7)
+      '@tanstack/react-virtual':
+        specifier: ^3.13.10
+        version: 3.14.5(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(@libsql/client@0.15.15)(@neondatabase/serverless@1.1.0)(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(better-sqlite3@12.11.1)(kysely@0.28.17)(postgres@3.4.9)
@@ -2296,9 +2323,15 @@ importers:
       isbot:
         specifier: ^5
         version: 5.1.44
+      mediabunny:
+        specifier: 1.37.0
+        version: 1.37.0
       postgres:
         specifier: ^3.4.9
         version: 3.4.9
+      remotion:
+        specifier: 4.0.463
+        version: 4.0.463(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       zod:
         specifier: ^4.3.6
         version: 4.4.3
@@ -9421,11 +9454,50 @@ packages:
   '@remix-run/node-fetch-server@0.13.3':
     resolution: {integrity: sha512-UfjOXed/DQteaM5VyTfqTeGpHwyL2J5aoRGY6cydip4tt1ehNNeSwuXCC7AEGE0RWBs/7bgKxYkL/B/+UDe4AA==}
 
+  '@remotion/captions@4.0.463':
+    resolution: {integrity: sha512-o7/2KUnhOHIGn7vij3NHEZeW8qQDKFuttmudbDDWYev8TKW2s7NbnPuNAPPtx/di6H6jw+9bOZ+Tlg61jreBoQ==}
+
+  '@remotion/gif@4.0.463':
+    resolution: {integrity: sha512-SuXEZ5k7WsfPvfFQzwsKK3yH8VsrwyRgDJaLmyhtCIynpbHFifdHhmR0S3BBe475Fnn/2SB2kYQjRSB2xfm1Uw==}
+    peerDependencies:
+      react: 19.2.7
+      react-dom: 19.2.7
+
+  '@remotion/google-fonts@4.0.463':
+    resolution: {integrity: sha512-0PTU9cz5k3rZx6ICG+V07NEC4MaDkL/3osiSDjiOtYQg5MHSiVS2FnHurdNAAKUcxxtA59g0pQ5vyhBeHtSUXw==}
+
+  '@remotion/layout-utils@4.0.463':
+    resolution: {integrity: sha512-vxZKH5IQINdPLfHzFu1WWtBDjglYW8aI2uuVWseCBteDte0FpU4jgyRyRN01fTdEpGfuFlOr869ZiH/gGt5E/w==}
+
+  '@remotion/media@4.0.463':
+    resolution: {integrity: sha512-bV8fFIpd2O8LdZgMGatGcw0cUjcsnIk8qve8hM/6w74xtebXBNzSJzc3LXjfAscpwhuNIdgUOArA2Ns5E7LO/A==}
+    peerDependencies:
+      react: 19.2.7
+      react-dom: 19.2.7
+
+  '@remotion/paths@4.0.463':
+    resolution: {integrity: sha512-QgCSjFeKqcfoBRHcjDrGDpVbA+eBJ2mIY34hJRdl/ns9wtTQQv+Gygisj7r/WcPlaB2vbbEoqUMZjbEgpL02JQ==}
+
   '@remotion/paths@4.0.482':
     resolution: {integrity: sha512-ZUXYXl8UkKbfZG4ClAQjma+MWhdsnGY3s6HFbgJggyI206lmdf8DlE/aTfwanP3yul39P/vsd0cwYe/7mrYWjA==}
 
+  '@remotion/player@4.0.463':
+    resolution: {integrity: sha512-WTuoXeg19d/bGSMYSj/8lfAmZLaOs7rvrgIpaO1tZKZRUKMKiXx4utMO3waBATjchB2lx1SozCKv8/0as24kTA==}
+    peerDependencies:
+      react: 19.2.7
+      react-dom: 19.2.7
+
   '@remotion/player@4.0.482':
     resolution: {integrity: sha512-fJDTDX6uWdJg514BCaVbO2mKItRZ3ySvAiQxCNxL6mLhO/uW6S/9Pkk7bgCuez749x8+t4dDb8XXZTYMP09WfQ==}
+    peerDependencies:
+      react: 19.2.7
+      react-dom: 19.2.7
+
+  '@remotion/rounded-text-box@4.0.463':
+    resolution: {integrity: sha512-HD/iNM3Au4PyEihzchDFQve0jrtSe0gSkNABjBrqwRVriKgiEn3G2AD8R2wMcfQL5eqZwek0tgmE5SDYIVkz9Q==}
+
+  '@remotion/shapes@4.0.463':
+    resolution: {integrity: sha512-Ot4MWYsK+JzBt7LGnJQyqCC7HHt5xfoBwxBky6/6bo41bHCTq+nv4r6j57evi1UGQyyNPQwHBOMF0p9Qe44O3w==}
     peerDependencies:
       react: 19.2.7
       react-dom: 19.2.7
@@ -10214,9 +10286,18 @@ packages:
       react: 19.2.7
       react-dom: 19.2.7
 
+  '@tanstack/react-virtual@3.14.5':
+    resolution: {integrity: sha512-4EKRXh7zBLkbKbFmG3AUVkircuHd+7OdT1pocJSepxtfBd3qnrJgJ5rtPkRYyo9fmyVb2+pI2xPy5oYvMLQy6A==}
+    peerDependencies:
+      react: 19.2.7
+      react-dom: 19.2.7
+
   '@tanstack/table-core@8.21.3':
     resolution: {integrity: sha512-ldZXEhOBb8Is7xLs01fR3YEc3DERiz5silj8tnGkFZytt1abEvl/GhUmCE0PMLaMPTa3Jk4HbKmRlHmu+gCftg==}
     engines: {node: '>=12'}
+
+  '@tanstack/virtual-core@3.17.3':
+    resolution: {integrity: sha512-8Np/TFELpI0ySuJoVmjvOrQYXH/8sTX0Biv9szhFhY39xOdAAY+smrMxjxOum/ux3eM8MUJQsEJ0/R0UpvC8dw==}
 
   '@tauri-apps/api@2.11.1':
     resolution: {integrity: sha512-M2FPuYND2m+wh5hfW9ZpSdxMPdEJovPBWwoHJmwUpysTYNHaOkVFN419m/K0LIgjb/7KU2vBgsUepJWugQCvAA==}
@@ -10708,6 +10789,12 @@ packages:
 
   '@types/diff-match-patch@1.0.36':
     resolution: {integrity: sha512-xFdR6tkm0MWvBfO8xXCSsinYxHcqkQUlcHeSpMC2ukzOb6lwQAfDmW+Qt0AvlGd8HpsS28qKsB+oPeJn9I39jg==}
+
+  '@types/dom-mediacapture-transform@0.1.11':
+    resolution: {integrity: sha512-Y2p+nGf1bF2XMttBnsVPHUWzRRZzqUoJAKmiP10b5umnO6DDrWI0BrGDJy1pOHoOULVmGSfFNkQrAlC5dcj6nQ==}
+
+  '@types/dom-webcodecs@0.1.13':
+    resolution: {integrity: sha512-O5hkiFIcjjszPIYyUSyvScyvrBoV3NOEEZx/pMlsu44TKzWNkLVBBxnxJz42in5n3QIolYOcBYFCPZZ0h8SkwQ==}
 
   '@types/draco3d@1.4.10':
     resolution: {integrity: sha512-AX22jp8Y7wwaBgAixaSvkoG4M/+PlAcm3Qs4OW8yT9DM4xUpWKeFhLueTAyZF39pviAdcDdeJoACapiAceqNcw==}
@@ -14310,6 +14397,12 @@ packages:
     resolution: {integrity: sha512-aisnrDP4GNe06UcKFnV5bfMNPBUw4jsLGaWwWfnH3v02GnBuXX2MCVn5RbrWo0j3pczUilYblq7fQ7Nw2t5XKw==}
     engines: {node: '>= 0.8'}
 
+  mediabunny@1.37.0:
+    resolution: {integrity: sha512-eV7M9IJ29pr/8RNL1sYtIxNbdMfDMN1hMwMaOFfNLhwuKKGSC+eKwiJFpdVjEJ3zrMA4LGerF4Hps0SENFSAlg==}
+
+  mediabunny@1.45.0:
+    resolution: {integrity: sha512-oK3sMMYbucoF6LUX62L/2M9d+p9ve6KDQgL87kNfhsB0/XmTe9iRLUcgQgg9Gpgvi8Sb96zYfOUL6i17y0bdNg==}
+
   memoize-one@5.2.1:
     resolution: {integrity: sha512-zYiwtZUcYyXKo/np96AGZAckk+FWWsUdJ3cHGGmld7+AhvcWmQyGCYUh1hc4Q/pkOhb65dQR/pqCyK0cOaHz4Q==}
 
@@ -15662,6 +15755,12 @@ packages:
 
   remark-stringify@11.0.0:
     resolution: {integrity: sha512-1OSmLd3awB/t8qdoEOMazZkNsfVTeY4fTsgzcQFdXNq8ToTN4ZGwrMnlda4K6smTFKD+GRV6O48i6Z4iKgPPpw==}
+
+  remotion@4.0.463:
+    resolution: {integrity: sha512-zpvfv8oO7HqKPyyHWiBiv7S8j7s9Vt2Q8h/cspdkfLtsnWm3WzG6tO1CsxeCRCWolWLH4O3ZuI2Sr8b+ZHRzwQ==}
+    peerDependencies:
+      react: 19.2.7
+      react-dom: 19.2.7
 
   remotion@4.0.482:
     resolution: {integrity: sha512-FfKxdxL9fW9UnY/WS9RLitevoDCf+fa5WZaNz4/CHhrXF1nc3SV+6GBp7td+dwvN1+UnP9t5DheIGvvoxL22NQ==}
@@ -17186,6 +17285,9 @@ packages:
 
   zod@3.25.76:
     resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
+
+  zod@4.3.6:
+    resolution: {integrity: sha512-rftlrkhHZOcjDwkGlnUtZZkvaPHCsDATp4pGpuOOMDaTdDDXF91wuVDJoWoPsKX/3YPQ5fHuF3STjcYyKr+Qhg==}
 
   zod@4.4.3:
     resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
@@ -22267,13 +22369,57 @@ snapshots:
 
   '@remix-run/node-fetch-server@0.13.3': {}
 
+  '@remotion/captions@4.0.463': {}
+
+  '@remotion/gif@4.0.463(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
+    dependencies:
+      react: 19.2.7
+      react-dom: 19.2.7(react@19.2.7)
+      remotion: 4.0.463(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+
+  '@remotion/google-fonts@4.0.463(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
+    dependencies:
+      remotion: 4.0.463(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+    transitivePeerDependencies:
+      - react
+      - react-dom
+
+  '@remotion/layout-utils@4.0.463': {}
+
+  '@remotion/media@4.0.463(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
+    dependencies:
+      mediabunny: 1.45.0
+      react: 19.2.7
+      react-dom: 19.2.7(react@19.2.7)
+      remotion: 4.0.463(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      zod: 4.3.6
+
+  '@remotion/paths@4.0.463': {}
+
   '@remotion/paths@4.0.482': {}
+
+  '@remotion/player@4.0.463(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
+    dependencies:
+      react: 19.2.7
+      react-dom: 19.2.7(react@19.2.7)
+      remotion: 4.0.463(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
 
   '@remotion/player@4.0.482(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
     dependencies:
       react: 19.2.7
       react-dom: 19.2.7(react@19.2.7)
       remotion: 4.0.482(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+
+  '@remotion/rounded-text-box@4.0.463':
+    dependencies:
+      '@remotion/layout-utils': 4.0.463
+      '@remotion/paths': 4.0.463
+
+  '@remotion/shapes@4.0.463(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
+    dependencies:
+      '@remotion/paths': 4.0.463
+      react: 19.2.7
+      react-dom: 19.2.7(react@19.2.7)
 
   '@remotion/shapes@4.0.482(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
     dependencies:
@@ -22925,7 +23071,15 @@ snapshots:
       react: 19.2.7
       react-dom: 19.2.7(react@19.2.7)
 
+  '@tanstack/react-virtual@3.14.5(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
+    dependencies:
+      '@tanstack/virtual-core': 3.17.3
+      react: 19.2.7
+      react-dom: 19.2.7(react@19.2.7)
+
   '@tanstack/table-core@8.21.3': {}
+
+  '@tanstack/virtual-core@3.17.3': {}
 
   '@tauri-apps/api@2.11.1': {}
 
@@ -23447,6 +23601,12 @@ snapshots:
   '@types/deep-eql@4.0.2': {}
 
   '@types/diff-match-patch@1.0.36': {}
+
+  '@types/dom-mediacapture-transform@0.1.11':
+    dependencies:
+      '@types/dom-webcodecs': 0.1.13
+
+  '@types/dom-webcodecs@0.1.13': {}
 
   '@types/draco3d@1.4.10': {}
 
@@ -27489,6 +27649,16 @@ snapshots:
 
   media-typer@1.1.0: {}
 
+  mediabunny@1.37.0:
+    dependencies:
+      '@types/dom-mediacapture-transform': 0.1.11
+      '@types/dom-webcodecs': 0.1.13
+
+  mediabunny@1.45.0:
+    dependencies:
+      '@types/dom-mediacapture-transform': 0.1.11
+      '@types/dom-webcodecs': 0.1.13
+
   memoize-one@5.2.1: {}
 
   merge-anything@5.1.7:
@@ -29316,6 +29486,11 @@ snapshots:
       mdast-util-to-markdown: 2.1.2
       unified: 11.0.5
 
+  remotion@4.0.463(react-dom@19.2.7(react@19.2.7))(react@19.2.7):
+    dependencies:
+      react: 19.2.7
+      react-dom: 19.2.7(react@19.2.7)
+
   remotion@4.0.482(react-dom@19.2.7(react@19.2.7))(react@19.2.7):
     dependencies:
       react: 19.2.7
@@ -30931,6 +31106,8 @@ snapshots:
       zod: 4.4.3
 
   zod@3.25.76: {}
+
+  zod@4.3.6: {}
 
   zod@4.4.3: {}
 
