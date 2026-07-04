@@ -38,6 +38,7 @@ interface NavigationState {
   path?: string;
   meetingId?: string;
   dictationId?: string;
+  projectId?: string;
 }
 
 function mapRecording(r: any) {
@@ -449,6 +450,94 @@ async function fetchShare(shareId: string) {
   return row ?? null;
 }
 
+function parseJsonArray(raw: string): unknown[] {
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+async function fetchVideoProjects() {
+  const db = getDb();
+  const rows = await db
+    .select({
+      id: schema.videoProjects.id,
+      title: schema.videoProjects.title,
+      sourceRecordingIds: schema.videoProjects.sourceRecordingIds,
+      visibility: schema.videoProjects.visibility,
+      updatedAt: schema.videoProjects.updatedAt,
+    })
+    .from(schema.videoProjects)
+    .where(
+      and(
+        isNull(schema.videoProjects.trashedAt),
+        accessFilter(schema.videoProjects, schema.videoProjectShares),
+      ),
+    )
+    .orderBy(desc(schema.videoProjects.updatedAt))
+    .limit(20);
+  return rows.map((p) => ({
+    ...p,
+    sourceRecordingIds: parseJsonArray(p.sourceRecordingIds),
+  }));
+}
+
+async function fetchVideoProjectDetail(projectId: string) {
+  const db = getDb();
+  const [row] = await db
+    .select()
+    .from(schema.videoProjects)
+    .where(
+      and(
+        eq(schema.videoProjects.id, projectId),
+        accessFilter(schema.videoProjects, schema.videoProjectShares),
+      ),
+    )
+    .limit(1);
+  if (!row) return null;
+
+  // Summarise the composition instead of dumping the full state JSON — the
+  // agent can call get-video-project when it needs the whole document.
+  let summary: Record<string, unknown> | null = null;
+  try {
+    const state = row.stateJson ? JSON.parse(row.stateJson) : null;
+    if (state && typeof state === "object") {
+      const items = Object.values(
+        (state.items ?? {}) as Record<string, { type?: string }>,
+      );
+      const itemCountsByType: Record<string, number> = {};
+      for (const item of items) {
+        const type = item?.type ?? "unknown";
+        itemCountsByType[type] = (itemCountsByType[type] ?? 0) + 1;
+      }
+      summary = {
+        tracks: Array.isArray(state.tracks) ? state.tracks.length : 0,
+        items: items.length,
+        itemCountsByType,
+        assets: Object.keys(state.assets ?? {}).length,
+        fps: state.fps,
+        compositionWidth: state.compositionWidth,
+        compositionHeight: state.compositionHeight,
+      };
+    }
+  } catch {
+    summary = null;
+  }
+
+  return {
+    id: row.id,
+    title: row.title,
+    visibility: row.visibility,
+    sourceRecordingIds: parseJsonArray(row.sourceRecordingIds),
+    pendingImports: parseJsonArray(row.pendingImportsJson).length,
+    composition: summary,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
 export default defineAction({
   description:
     "See what the user is currently looking at on screen. Returns the current navigation state plus relevant context (recording + transcript + comments on a recording page, folder contents on library, space list on spaces, etc.). Prefer reading the auto-included <current-screen> block — call this only when you need a refreshed snapshot.",
@@ -588,6 +677,17 @@ export default defineAction({
           if (detail) screen.dictation = detail;
         } else {
           screen.dictations = await fetchRecentDictations();
+        }
+        break;
+      }
+      case "video-projects": {
+        screen.videoProjects = await fetchVideoProjects();
+        break;
+      }
+      case "video-project": {
+        if (nav.projectId) {
+          const detail = await fetchVideoProjectDetail(nav.projectId);
+          if (detail) screen.videoProject = detail;
         }
         break;
       }

@@ -45,3 +45,16 @@ registerShareableResource({
   titleColumn: "id",
   getDb,
 });
+
+registerShareableResource({
+  type: "video-project",
+  resourceTable: schema.videoProjects,
+  sharesTable: schema.videoProjectShares,
+  displayName: "Video project",
+  titleColumn: "title",
+  getResourcePath: (project) => `/video-projects/${project.id}`,
+  getDb,
+  // Like recordings: the owner can always reach their own projects, even when
+  // the request context lacks an active-org (CLI, headless agent runs).
+  ownerAccessIgnoresOrg: true,
+});

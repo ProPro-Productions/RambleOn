@@ -607,3 +607,39 @@ export const recordingEvents = table("recording_events", {
   payload: text("payload").notNull().default("{}"),
   createdAt: text("created_at").notNull().default(now()),
 });
+
+// -----------------------------------------------------------------------------
+// Video projects — the "full editor" (multi-track Remotion-based compositions).
+//
+// A project composes multiple sources: Clips recordings (referenced by their
+// playable URL, never copied), uploaded b-roll/images/music, text, solids, and
+// caption tracks. `state_json` holds the editor's serialized UndoableState
+// (tracks / items / assets / fps / composition dimensions) — see
+// app/video-editor/editor/state/types.ts for the canonical shape.
+//
+// `pending_imports_json` is a server→client handoff queue: the
+// `add-recording-to-video-project` action appends compact recording
+// descriptors, and the editor materialises them as timeline items on next load
+// (the client owns the item shape), then clears the queue.
+//
+// Ownable + shareable, mirroring meetings.
+// -----------------------------------------------------------------------------
+
+export const videoProjects = table("clips_video_projects", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id"),
+  title: text("title").notNull().default("Untitled project"),
+  // Serialized editor UndoableState. "" means "new empty project".
+  stateJson: text("state_json").notNull().default(""),
+  pendingImportsJson: text("pending_imports_json").notNull().default("[]"),
+  // Provenance: recording ids that have been imported into this project.
+  sourceRecordingIds: text("source_recording_ids").notNull().default("[]"),
+  createdAt: text("created_at").notNull().default(now()),
+  updatedAt: text("updated_at").notNull().default(now()),
+  trashedAt: text("trashed_at"),
+  ...ownableColumns(),
+});
+
+export const videoProjectShares = createSharesTable(
+  "clips_video_project_shares",
+);

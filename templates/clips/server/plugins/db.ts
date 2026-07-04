@@ -749,6 +749,36 @@ const migrations = runMigrations(
         `CREATE INDEX IF NOT EXISTS recording_bug_reports_project_idx ON recording_bug_reports (project_id, updated_at)`,
       ].join("; "),
     },
+    {
+      version: 45,
+      sql: [
+        `CREATE TABLE IF NOT EXISTS clips_video_projects (
+          id TEXT PRIMARY KEY,
+          organization_id TEXT,
+          title TEXT NOT NULL DEFAULT 'Untitled project',
+          state_json TEXT NOT NULL DEFAULT '',
+          pending_imports_json TEXT NOT NULL DEFAULT '[]',
+          source_recording_ids TEXT NOT NULL DEFAULT '[]',
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+          trashed_at TEXT,
+          owner_email TEXT NOT NULL DEFAULT 'local@localhost',
+          org_id TEXT,
+          visibility TEXT NOT NULL DEFAULT 'private'
+        )`,
+        `CREATE INDEX IF NOT EXISTS clips_video_projects_owner_idx ON clips_video_projects (owner_email, updated_at)`,
+        `CREATE TABLE IF NOT EXISTS clips_video_project_shares (
+          id TEXT PRIMARY KEY,
+          resource_id TEXT NOT NULL,
+          principal_type TEXT NOT NULL,
+          principal_id TEXT NOT NULL,
+          role TEXT NOT NULL DEFAULT 'viewer',
+          created_by TEXT NOT NULL,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )`,
+        `CREATE INDEX IF NOT EXISTS clips_video_project_shares_resource_idx ON clips_video_project_shares (resource_id, principal_type, principal_id)`,
+      ].join("; "),
+    },
   ],
   { table: "clips_migrations" },
 );
