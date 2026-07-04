@@ -3,9 +3,36 @@
 
 @import "tailwindcss";
 @import "@agent-native/core/styles/agent-native.css";
-@import "./video-editor/editor-theme.css";
 
 @source "./**/*.{ts,tsx}";
+/* The vendored full editor is gitignored (licensed source) and Tailwind v4
+   skips gitignored paths during source detection — register it explicitly. */
+@source "./video-editor/**/*.{ts,tsx}";
+
+/* Theme tokens and utilities for the vendored full video editor
+   (app/video-editor). Inlined here (not @imported from the gitignored
+   directory) so they reliably join the Tailwind build. */
+@theme {
+  --color-editor-starter-bg: #28282e;
+  --color-editor-starter-panel: #212126;
+  --color-editor-starter-border: #000;
+  --color-editor-starter-accent: #0b84f3;
+  --color-editor-starter-scrollbar-track: rgba(255, 255, 255, 0.04);
+  --color-editor-starter-scrollbar-thumb: rgba(255, 255, 255, 0.2);
+}
+
+@utility editor-starter-focus-ring {
+  @apply border-[1px] border-transparent outline-hidden focus-visible:border-[var(--color-editor-starter-accent)] data-[focused=true]:border-[var(--color-editor-starter-accent)];
+}
+
+@utility editor-starter-field {
+  @apply rounded-sm border-[1px] border-transparent bg-[var(--color-editor-starter-bg)] outline-hidden hover:border-neutral-700 focus:border-[var(--color-editor-starter-accent)] data-[focused=true]:border-[var(--color-editor-starter-accent)];
+}
+
+/* Prevent accidental back gesture when scrolling the editor timeline. */
+body:has([data-clips-video-editor]) {
+  overscroll-behavior-x: none;
+}
 
 :root {
   --background: 0 0% 100%;
