@@ -643,3 +643,24 @@ export const videoProjects = table("clips_video_projects", {
 export const videoProjectShares = createSharesTable(
   "clips_video_project_shares",
 );
+
+// -----------------------------------------------------------------------------
+// Editor media assets — metadata index for files uploaded through the full
+// editor (b-roll images/video, music). One row per upload pointing at the
+// canonical copy in the storage provider; the bytes are never duplicated.
+// Powers the "recent sources" picker and gives cleanup/agents something to
+// enumerate. Owner-scoped (no sharing: projects embed the storage URL, so
+// shared projects work without rows here).
+// -----------------------------------------------------------------------------
+
+export const editorMediaAssets = table("clips_editor_media_assets", {
+  id: text("id").primaryKey(),
+  ownerEmail: text("owner_email").notNull().default("local@localhost"),
+  orgId: text("org_id"),
+  filename: text("filename").notNull().default(""),
+  mimeType: text("mime_type").notNull().default("application/octet-stream"),
+  sizeBytes: integer("size_bytes").notNull().default(0),
+  url: text("url").notNull(),
+  fileKey: text("file_key").notNull().default(""),
+  createdAt: text("created_at").notNull().default(now()),
+});

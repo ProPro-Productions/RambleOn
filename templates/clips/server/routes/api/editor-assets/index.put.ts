@@ -20,6 +20,7 @@ import {
   type H3Event,
 } from "h3";
 
+import { getDb, schema } from "../../../db/index.js";
 import { getEventOwnerContext } from "../../../lib/recordings.js";
 import { requiresConfiguredVideoStorage } from "../../../lib/video-storage.js";
 import {
@@ -89,6 +90,33 @@ export default defineEventHandler(async (event: H3Event) => {
     });
 
     if (uploaded?.url) {
+      // Record metadata (never bytes) so the "recent sources" picker and the
+      // agent can enumerate previously uploaded assets. Best-effort: a failed
+      // insert must not fail the upload itself.
+      let filename = "";
+      try {
+        filename = decodeURIComponent(
+          getHeader(event, "x-clips-filename") || "",
+        ).slice(0, 300);
+      } catch {
+        filename = "";
+      }
+      try {
+        const db = getDb();
+        await db.insert(schema.editorMediaAssets).values({
+          id: randomUUID(),
+          ownerEmail,
+          orgId: orgId ?? null,
+          filename,
+          mimeType: mimeType || "application/octet-stream",
+          sizeBytes: bytes.byteLength,
+          url: uploaded.url,
+          fileKey,
+          createdAt: new Date().toISOString(),
+        });
+      } catch (err) {
+        console.error("[editor-assets] failed to record asset metadata", err);
+      }
       return { url: uploaded.url, fileKey };
     }
 

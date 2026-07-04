@@ -779,6 +779,23 @@ const migrations = runMigrations(
         `CREATE INDEX IF NOT EXISTS clips_video_project_shares_resource_idx ON clips_video_project_shares (resource_id, principal_type, principal_id)`,
       ].join("; "),
     },
+    {
+      version: 46,
+      sql: [
+        `CREATE TABLE IF NOT EXISTS clips_editor_media_assets (
+          id TEXT PRIMARY KEY,
+          owner_email TEXT NOT NULL DEFAULT 'local@localhost',
+          org_id TEXT,
+          filename TEXT NOT NULL DEFAULT '',
+          mime_type TEXT NOT NULL DEFAULT 'application/octet-stream',
+          size_bytes INTEGER NOT NULL DEFAULT 0,
+          url TEXT NOT NULL,
+          file_key TEXT NOT NULL DEFAULT '',
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )`,
+        `CREATE INDEX IF NOT EXISTS clips_editor_media_assets_owner_idx ON clips_editor_media_assets (owner_email, created_at)`,
+      ].join("; "),
+    },
   ],
   { table: "clips_migrations" },
 );

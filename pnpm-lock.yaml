@@ -2305,6 +2305,9 @@ importers:
       '@remotion/shapes':
         specifier: 4.0.463
         version: 4.0.463(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@remotion/web-renderer':
+        specifier: 4.0.463
+        version: 4.0.463(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@tabler/icons-react':
         specifier: 'catalog:'
         version: 3.44.0(react@19.2.7)
@@ -7283,6 +7286,21 @@ packages:
   '@marijn/find-cluster-break@1.0.2':
     resolution: {integrity: sha512-l0h88YhZFyKdXIFNfSWpyjStDjGHwZ/U7iobcK1cQQD8sejsONdQtTVU+1wVN1PBw40PiiHB1vA5S7VTfQiP9g==}
 
+  '@mediabunny/aac-encoder@1.45.0':
+    resolution: {integrity: sha512-vLQw8cY7Me6pvTTMkMhOiH9UCuINzfTOETCeDxbGNeNfDqc/7QlxloUH1Ylp/Zz2ek0O8kc6YdygV2vWAPakrA==}
+    peerDependencies:
+      mediabunny: ^1.0.0
+
+  '@mediabunny/flac-encoder@1.45.0':
+    resolution: {integrity: sha512-LfKbAMZVkxRS7PpEIVnWOY/l0KcHv+rjO7pYY3O0TPCZvbHWfrnQjn8JPacPIfuq6Yv7r4f8lhcl7yHSynoRkQ==}
+    peerDependencies:
+      mediabunny: ^1.0.0
+
+  '@mediabunny/mp3-encoder@1.45.0':
+    resolution: {integrity: sha512-Bobi6AaQYEc7TWmPJ8Q0/hcUtBN7pLUC2qjoC7oZR4FcGqGztby6k7A1SWlmswoMOEIhYsOrgDaemrSDAC0QVQ==}
+    peerDependencies:
+      mediabunny: ^1.0.0
+
   '@mediapipe/tasks-vision@0.10.17':
     resolution: {integrity: sha512-CZWV/q6TTe8ta61cZXjfnnHsfWIdFhms03M9T7Cnd5y2mdpylJM0rF1qRq+wsQVRMLz1OYPVEBU9ph2Bx8cxrg==}
 
@@ -9469,6 +9487,9 @@ packages:
   '@remotion/layout-utils@4.0.463':
     resolution: {integrity: sha512-vxZKH5IQINdPLfHzFu1WWtBDjglYW8aI2uuVWseCBteDte0FpU4jgyRyRN01fTdEpGfuFlOr869ZiH/gGt5E/w==}
 
+  '@remotion/licensing@4.0.463':
+    resolution: {integrity: sha512-O+Oncp5iuq6AiYpIeoHFKTzLlXty0iaMfquoNkrct5BD8Jy6+c5L5h3qq6EqwHne8+XzZXLU1x7f9WN4PxfpMw==}
+
   '@remotion/media@4.0.463':
     resolution: {integrity: sha512-bV8fFIpd2O8LdZgMGatGcw0cUjcsnIk8qve8hM/6w74xtebXBNzSJzc3LXjfAscpwhuNIdgUOArA2Ns5E7LO/A==}
     peerDependencies:
@@ -9510,6 +9531,12 @@ packages:
 
   '@remotion/transitions@4.0.482':
     resolution: {integrity: sha512-0YK19vN3fynZ1ekPW5Iz/tOR0d108uqHYD02ddsJ2MzSeM4wTePsfEKTkwsB1TGClGLluUEZbhXqOl42XeUzbg==}
+    peerDependencies:
+      react: 19.2.7
+      react-dom: 19.2.7
+
+  '@remotion/web-renderer@4.0.463':
+    resolution: {integrity: sha512-6yexnGijXMjFZDU2VTI+Eb3Hn/P1BVFp/Eoisrx52FKJ7dioevp/QnLkzhjOHNJz1iIJrRVy6HbAvT2u2OdNXg==}
     peerDependencies:
       react: 19.2.7
       react-dom: 19.2.7
@@ -20107,6 +20134,18 @@ snapshots:
 
   '@marijn/find-cluster-break@1.0.2': {}
 
+  '@mediabunny/aac-encoder@1.45.0(mediabunny@1.45.0)':
+    dependencies:
+      mediabunny: 1.45.0
+
+  '@mediabunny/flac-encoder@1.45.0(mediabunny@1.45.0)':
+    dependencies:
+      mediabunny: 1.45.0
+
+  '@mediabunny/mp3-encoder@1.45.0(mediabunny@1.45.0)':
+    dependencies:
+      mediabunny: 1.45.0
+
   '@mediapipe/tasks-vision@0.10.17': {}
 
   '@mediapipe/tasks-vision@0.10.35': {}
@@ -22386,6 +22425,8 @@ snapshots:
 
   '@remotion/layout-utils@4.0.463': {}
 
+  '@remotion/licensing@4.0.463': {}
+
   '@remotion/media@4.0.463(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
     dependencies:
       mediabunny: 1.45.0
@@ -22435,6 +22476,17 @@ snapshots:
       react: 19.2.7
       react-dom: 19.2.7(react@19.2.7)
       remotion: 4.0.482(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+
+  '@remotion/web-renderer@4.0.463(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
+    dependencies:
+      '@mediabunny/aac-encoder': 1.45.0(mediabunny@1.45.0)
+      '@mediabunny/flac-encoder': 1.45.0(mediabunny@1.45.0)
+      '@mediabunny/mp3-encoder': 1.45.0(mediabunny@1.45.0)
+      '@remotion/licensing': 4.0.463
+      mediabunny: 1.45.0
+      react: 19.2.7
+      react-dom: 19.2.7(react@19.2.7)
+      remotion: 4.0.463(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
 
   '@resvg/resvg-js-android-arm-eabi@2.6.2':
     optional: true

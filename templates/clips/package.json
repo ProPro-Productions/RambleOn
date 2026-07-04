@@ -36,6 +36,7 @@
     "@remotion/player": "4.0.463",
     "@remotion/rounded-text-box": "4.0.463",
     "@remotion/shapes": "4.0.463",
+    "@remotion/web-renderer": "4.0.463",
     "@tabler/icons-react": "catalog:",
     "@tanstack/react-virtual": "^3.13.10",
     "drizzle-orm": "^0.45.2",
