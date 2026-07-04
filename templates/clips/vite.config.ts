@@ -6,6 +6,8 @@ import { agentNative } from "@agent-native/core/vite";
 import { reactRouter } from "@react-router/dev/vite";
 import { defineConfig, type Plugin } from "vite";
 
+import { rambleOnBranding } from "./branding";
+
 const reactRouterPlugins = reactRouter as unknown as () => any[];
 const agentNativePlugins = agentNative as unknown as (
   options?: Parameters<typeof agentNative>[0],
@@ -53,7 +55,12 @@ function copyMediapipeWasm(): Plugin {
 }
 
 export default defineConfig({
+  // Clips' assigned dev port from shared-app-config/templates.ts (devPort).
+  // Keeping plain `pnpm dev` on the same port as the workspace dev runner
+  // means the desktop app's dev default URL works in both flows.
+  server: { port: 8094 },
   plugins: [
+    rambleOnBranding(),
     ...reactRouterPlugins(),
     ...agentNativePlugins({
       // shiki only runs in AssistantChat's useEffect — keep it out of the

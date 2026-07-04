@@ -3179,6 +3179,73 @@ body[data-clips-route="recording-pill"] #root {
   border-color: var(--border-strong, var(--border));
 }
 
+/* Signed-out popover: no header row (nothing to put in it before auth), so
+   the close button floats over the top-right corner and the window shrinks
+   to just the form. */
+.app-signin {
+  position: relative;
+  padding-top: 16px;
+}
+
+.signin-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 1;
+}
+
+/* Pre-auth Settings entry — a real button, not a footer link, because it's
+   where self-hosted users set the server URL before they can sign in. */
+.signin-settings {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  background: transparent;
+  color: var(--fg-muted);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.signin-settings svg {
+  width: 16px;
+  height: 16px;
+}
+
+.signin-settings:hover {
+  background: var(--surface);
+  color: var(--fg);
+  border-color: var(--border-strong, var(--border));
+}
+
+/* "New to Clips? Sign up" — opens the browser signup page. Account creation
+   stays a browser flow; the popover only links to it. */
+.signin-signup {
+  background: transparent;
+  border: none;
+  padding: 6px 0 2px;
+  font-size: 12px;
+  text-align: center;
+  color: var(--fg-subtle);
+  cursor: pointer;
+}
+
+.signin-signup-cta {
+  color: var(--fg);
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.signin-signup:hover .signin-signup-cta {
+  color: var(--brand);
+}
+
 /* --- Pending Google sign-in state ---------------------------------------- */
 .signin-pending {
   display: flex;

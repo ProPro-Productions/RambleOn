@@ -44,7 +44,13 @@ fn build_menu_with_meetings(
     )?;
     let devtools_item =
         MenuItem::with_id(app, "devtools", "Toggle DevTools", true, Some("Cmd+Alt+I"))?;
-    let quit_item = MenuItem::with_id(app, "quit", "Quit Clips", true, None::<&str>)?;
+    let quit_item = MenuItem::with_id(
+        app,
+        "quit",
+        format!("Quit {}", crate::product_name()),
+        true,
+        None::<&str>,
+    )?;
     let separator = PredefinedMenuItem::separator(app)?;
     let menu = Menu::with_items(
         app,

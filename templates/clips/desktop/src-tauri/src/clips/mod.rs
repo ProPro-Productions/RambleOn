@@ -1747,7 +1747,6 @@ fn type_text_unicode(text: &str, target_bundle_id: Option<String>) {
     });
 }
 
-
 /// Record the popover's current recording state. When active, clicking the
 /// tray icon emits a stop event instead of toggling the popover — so the
 /// user can stop a recording from anywhere with one click.

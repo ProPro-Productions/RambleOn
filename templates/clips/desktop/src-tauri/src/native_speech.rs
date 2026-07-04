@@ -276,8 +276,24 @@ pub(crate) mod macos {
             return Err("Speech recognition is restricted on this device.".into());
         }
 
-        // NotDetermined — prompt the user. Bridge the async callback into a
-        // sync wait via mpsc.
+        // NotDetermined — prompt the user. Never do this from an unbundled
+        // run: TCC attributes the request to the responsible process (the
+        // terminal that spawned `tauri dev`), whose Info.plist lacks
+        // NSSpeechRecognitionUsageDescription, and terminates us with
+        // SIGABRT ("attempted to access privacy-sensitive data without a
+        // usage description"). The embedded dev Info.plist does not help
+        // because attribution ignores it.
+        if is_unbundled_run() {
+            return Err(format!(
+                "Speech recognition permission is not granted yet, and an unbundled dev run \
+                 cannot show the macOS permission prompt (TCC would terminate the process). \
+                 Grant Speech Recognition to the installed {} app once in System Settings \
+                 > Privacy & Security, then restart this dev run.",
+                crate::product_name()
+            ));
+        }
+
+        // Bridge the async callback into a sync wait via mpsc.
         let (tx, rx) = std::sync::mpsc::sync_channel::<SFSpeechRecognizerAuthorizationStatus>(1);
         let tx = Mutex::new(Some(tx));
         // SAFETY: the handler is owned by the system until it fires once;
@@ -309,7 +325,31 @@ pub(crate) mod macos {
         }
     }
 
+    /// True when running as a bare binary (`tauri dev` / `cargo run`)
+    /// instead of from inside a bundled .app.
+    fn is_unbundled_run() -> bool {
+        std::env::current_exe()
+            .map(|p| {
+                !p.components()
+                    .any(|c| c.as_os_str().to_string_lossy().ends_with(".app"))
+            })
+            .unwrap_or(false)
+    }
+
     pub fn request_speech_permission() -> Result<bool, String> {
+        // The popover preflights this on first show. In an unbundled dev run
+        // the prompt cannot be shown (see ensure_authorized), so report
+        // "not granted" quietly instead of surfacing a startup error banner;
+        // actually starting dictation still returns the full explanation.
+        let current = unsafe { SFSpeechRecognizer::authorizationStatus() };
+        if current == SFSpeechRecognizerAuthorizationStatus::NotDetermined && is_unbundled_run() {
+            eprintln!(
+                "[clips-tray] speech permission preflight skipped — unbundled dev run cannot \
+                 prompt; grant Speech Recognition via the installed {} app",
+                crate::product_name()
+            );
+            return Ok(false);
+        }
         ensure_authorized().map(|_| true)
     }
 

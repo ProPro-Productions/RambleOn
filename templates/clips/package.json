@@ -13,6 +13,8 @@
     "tauri": "cd desktop && pnpm tauri",
     "tauri:dev": "cd desktop && pnpm tauri dev",
     "tauri:build": "cd desktop && pnpm tauri build",
+    "tauri:dev:rambleon": "cd desktop && pnpm tauri dev --config src-tauri/tauri.rambleon.conf.json",
+    "tauri:build:rambleon": "cd desktop && pnpm tauri build --config src-tauri/tauri.rambleon.conf.json",
     "chrome:dev": "cd chrome-extension && pnpm dev",
     "chrome:build": "cd chrome-extension && pnpm build",
     "chrome:package": "cd chrome-extension && pnpm package",
