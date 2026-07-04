@@ -48,6 +48,9 @@ into other repos or publish it separately). Clips-specific glue lives in
 | `update-video-project` | Rename, persist `stateJson`, clear pending imports |
 | `delete-video-project` | Soft delete (trash) |
 | `add-recording-to-video-project` | Queue a recording as a source; creates the project when `projectId` omitted |
+| `list-editor-media-assets` | GET — the user's previously uploaded b-roll/music (metadata index) |
+| `delete-editor-media-asset` | Remove an entry from that index (file/projects untouched) |
+| `save-video-project-export` | Create a ready library recording from a rendered export URL |
 
 `add-recording-to-video-project` flags: `respectEdits` (default true — imports
 the simple editor's kept ranges as sequential timeline items),
@@ -84,7 +87,7 @@ remapped to edited time).
 - `navigate` supports `{ "view": "video-projects" }` and
   `{ "view": "video-project", "projectId": "..." }`.
 
-## Asset uploads
+## Asset uploads and the recent-sources index
 
 Editor uploads (b-roll, music) go through `PUT /api/editor-assets`
 (`server/routes/api/editor-assets/`) → framework `uploadFile()` (Builder.io
@@ -92,16 +95,38 @@ Connect or S3-compatible). No storage configured + hosted mode → clear 424
 error; local dev falls back to inline data URLs for small files. Fonts are
 served from the vendored Google-Fonts DB via `GET /api/editor-fonts/:name`.
 
+Each provider upload also records a **metadata row** in
+`clips_editor_media_assets` (filename, MIME, size, URL — never bytes). That
+index powers the toolbar's "Recent sources" popover
+(`app/video-editor/clips/recent-assets-button.tsx`), which re-adds an asset
+by URL without re-uploading, and the `list-editor-media-assets` action.
+Deleting an index entry never touches the stored file or projects using it.
+
+## Export (client-side rendering)
+
+`FEATURE_RENDERING = true`, implemented with **@remotion/web-renderer**
+(WebCodecs + Mediabunny) in `rendering/render-state.ts` — upstream's Remotion
+Lambda transport was replaced; no site deploys, no AWS. Notes:
+
+- `FEATURE_NEW_MEDIA_TAGS = true` is required: the web renderer supports
+  `@remotion/media` `<Video>`/`<Audio>` but not `<OffthreadVideo>`/
+  `<Html5Audio>`.
+- Fonts are collected per-composition via `/api/editor-fonts` (never import
+  the multi-MB fonts database in the browser — it throws by design).
+- The Export button lives in the composition inspector (nothing selected).
+  Output is a local Blob: Download saves the file; **Save to library**
+  (`app/video-editor/clips/save-to-library-button.tsx`) uploads it through
+  `/_agent-native/file-upload` and calls `save-video-project-export`, which
+  creates a ready `recordings` row — sharing/embeds/comments/transcription
+  work on exports for free.
+- Rendering is single-threaded in the user's tab (keep it open; background
+  tabs throttle) and needs WebCodecs (`canRenderMediaOnWeb` gates with a
+  clear error). Remotion Lambda remains a possible hosted fast-path later.
+
 ## Deliberately disabled upstream features
 
 - `FEATURE_CAPTIONING = false` — upstream used OpenAI Whisper; Clips never
   transcribes via OpenAI. Captions come from Clips transcripts at import time.
-- `FEATURE_RENDERING = false` — upstream renders on Remotion Lambda, which
-  needs a deployed site + function. Export is the top follow-up; see
-  `docs/full-editor-integration-plan.md` for the options (Lambda, server-side
-  `@remotion/renderer`, ffmpeg.wasm flatten). When export lands it should
-  create a **new `recordings` row** (like stitching) so sharing/embeds/
-  comments/transcription work on the result.
 
 ## Rules
 

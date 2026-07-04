@@ -126,9 +126,12 @@ Detailed media, meeting, dictation, editing, and sharing rules live in
   never by copying bytes. Use `add-recording-to-video-project` to send a clip
   into a new or existing project, `get-video-project` /
   `update-video-project` for state, and `list-video-projects` /
-  `create-video-project` / `delete-video-project` for CRUD. Read the
-  `video-projects` skill before deeper work; rendering/export and Whisper
-  captioning are deliberately disabled there for now.
+  `create-video-project` / `delete-video-project` for CRUD. Export renders
+  client-side via @remotion/web-renderer; `save-video-project-export` lands
+  the result as a ready library recording. Previously uploaded b-roll/music
+  is indexed in `clips_editor_media_assets` (`list-editor-media-assets`) —
+  metadata only, bytes are never duplicated. Read the `video-projects` skill
+  before deeper work; Whisper captioning stays deliberately disabled.
 - After mutations, rely on the app refresh/polling path; do not invent a second
   sync mechanism.
 
