@@ -51,6 +51,7 @@ const messages = {
     spaces: "Spaces",
     meetings: "Meetings",
     dictate: "Dictate",
+    videoProjects: "Video projects",
     archive: "Archive",
     trash: "Trash",
     settings: "Settings",
@@ -1375,6 +1376,44 @@ All notable user-facing changes to Clips are documented here. Open it any time f
       "Upcoming calendar meetings show up here, and finished recordings land here once you take notes.",
     noMeetingsMatch: 'No meetings match "{{query}}"',
     refreshing: "Refreshing…",
+  },
+  videoProjects: {
+    listPageTitle: "Video projects · Clips",
+    editorPageTitle: "Video project · Clips",
+    title: "Video projects",
+    intro:
+      "Multi-track compositions that combine recordings, b-roll, captions, and text in the full editor.",
+    newProject: "New project",
+    emptyTitle: "No video projects yet",
+    emptyDescription:
+      'Create a project, or open any recording and choose "Video project" to use it as a source.',
+    sourceCount_one: "{{count}} clip",
+    sourceCount_other: "{{count}} clips",
+    projectOptions: "Project options",
+    moveToTrash: "Move to trash",
+    deleteTitle: "Move project to trash?",
+    deleteDescription:
+      '"{{title}}" will be moved to trash. Recordings used in it are not affected.',
+    deleteFailed: "Could not delete project",
+    createFailed: "Could not create project",
+    openInProject: "Open in video project",
+    openInProjectButton: "Video project",
+    openInProjectDescription:
+      "Add this recording as a source in a multi-track video project.",
+    respectEdits: "Apply my trims from the clip editor",
+    includeCaptions: "Add transcript as captions",
+    createAndOpen: "Create project",
+    addAndOpen: "Add to project",
+    addFailed: "Could not add to project",
+    cancel: "Cancel",
+    back: "Back",
+    backToLibrary: "Back to library",
+    saving: "Saving…",
+    saved: "Saved",
+    saveFailed: "Save failed",
+    loadFailed:
+      "This project could not be loaded. It may have been deleted or you may not have access.",
+    renameProject: "Rename project",
   },
 };
 

@@ -17,7 +17,9 @@ export type ClipsView =
   | "settings"
   | "meetings"
   | "meeting"
-  | "dictate";
+  | "dictate"
+  | "video-projects"
+  | "video-project";
 
 export interface NavigationState {
   view: ClipsView;
@@ -29,6 +31,7 @@ export interface NavigationState {
   path?: string;
   meetingId?: string;
   dictationId?: string;
+  projectId?: string;
 }
 
 interface NavigateCommand extends Partial<NavigationState> {
@@ -107,6 +110,15 @@ function stateFromLocation(pathname: string, search: string): NavigationState {
     return { view: "meetings" };
   }
 
+  // /video-projects and /video-projects/:projectId
+  const videoProjectMatch = p.match(/^\/video-projects(?:\/([^/]+))?$/);
+  if (videoProjectMatch) {
+    if (videoProjectMatch[1]) {
+      return { view: "video-project", projectId: videoProjectMatch[1] };
+    }
+    return { view: "video-projects" };
+  }
+
   // /dictate (optionally /dictate/:dictationId in the future)
   const dictateMatch = p.match(/^\/dictate(?:\/([^/]+))?$/);
   if (dictateMatch) {
@@ -181,6 +193,12 @@ function pathFromCommand(cmd: NavigateCommand): string {
       return cmd.meetingId ? `/meetings/${cmd.meetingId}` : "/meetings";
     case "dictate":
       return "/dictate";
+    case "video-projects":
+      return "/video-projects";
+    case "video-project":
+      return cmd.projectId
+        ? `/video-projects/${cmd.projectId}`
+        : "/video-projects";
     case "library":
     default:
       if (cmd.folderId) return `/library/folder/${cmd.folderId}`;

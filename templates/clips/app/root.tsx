@@ -181,6 +181,7 @@ function DbSyncSetup() {
       "spaces",
       "workspace",
       "insights",
+      "video-projects",
     ],
     ignoreSource: getBrowserTabId(),
   });

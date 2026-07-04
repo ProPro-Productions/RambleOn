@@ -18,6 +18,7 @@ import {
   IconArchive,
   IconCalendar,
   IconMicrophone2,
+  IconMovie,
   IconTrash,
   IconUsersGroup,
   IconFolderPlus,
@@ -211,6 +212,12 @@ export function LibraryLayout({ children }: LibraryLayoutProps) {
       label: t("navigation.dictate"),
       icon: IconMicrophone2,
       match: (p) => p.startsWith("/dictate"),
+    },
+    {
+      to: "/video-projects",
+      label: t("navigation.videoProjects"),
+      icon: IconMovie,
+      match: (p) => p.startsWith("/video-projects"),
     },
     {
       to: "/archive",

@@ -51,6 +51,7 @@ const messages = {
     spaces: "스페이스",
     meetings: "회의",
     dictate: "받아쓰기",
+    videoProjects: "동영상 프로젝트",
     archive: "보관함",
     trash: "휴지통",
     settings: "설정",
@@ -1387,6 +1388,44 @@ Clips의 모든 사용자 대상 변경 사항은 여기에 기록됩니다. 명
       "Upcoming calendar meetings show up here, and finished recordings land here once you take notes. (현지화됨)",
     noMeetingsMatch: 'No meetings match "{{query}}" (현지화됨)',
     refreshing: "Refreshing… (현지화됨)",
+  },
+  videoProjects: {
+    listPageTitle: "동영상 프로젝트 · Clips",
+    editorPageTitle: "동영상 프로젝트 · Clips",
+    title: "동영상 프로젝트",
+    intro:
+      "녹화, B롤, 자막, 텍스트를 전체 편집기에서 결합하는 멀티트랙 컴포지션입니다.",
+    newProject: "새 프로젝트",
+    emptyTitle: "아직 동영상 프로젝트가 없습니다",
+    emptyDescription:
+      '프로젝트를 만들거나, 아무 녹화나 열고 "동영상 프로젝트"를 선택해 소스로 사용하세요.',
+    sourceCount_one: "클립 {{count}}개",
+    sourceCount_other: "클립 {{count}}개",
+    projectOptions: "프로젝트 옵션",
+    moveToTrash: "휴지통으로 이동",
+    deleteTitle: "프로젝트를 휴지통으로 이동할까요?",
+    deleteDescription:
+      '"{{title}}"이(가) 휴지통으로 이동됩니다. 여기에 사용된 녹화는 영향을 받지 않습니다.',
+    deleteFailed: "프로젝트를 삭제할 수 없습니다",
+    createFailed: "프로젝트를 만들 수 없습니다",
+    openInProject: "동영상 프로젝트에서 열기",
+    openInProjectButton: "동영상 프로젝트",
+    openInProjectDescription:
+      "이 녹화를 멀티트랙 동영상 프로젝트의 소스로 추가합니다.",
+    respectEdits: "클립 편집기에서 자른 내용 적용",
+    includeCaptions: "전사를 자막으로 추가",
+    createAndOpen: "프로젝트 만들기",
+    addAndOpen: "프로젝트에 추가",
+    addFailed: "프로젝트에 추가할 수 없습니다",
+    cancel: "취소",
+    back: "뒤로",
+    backToLibrary: "라이브러리로 돌아가기",
+    saving: "저장 중…",
+    saved: "저장됨",
+    saveFailed: "저장 실패",
+    loadFailed:
+      "이 프로젝트를 불러올 수 없습니다. 삭제되었거나 접근 권한이 없을 수 있습니다.",
+    renameProject: "프로젝트 이름 바꾸기",
   },
 };
 

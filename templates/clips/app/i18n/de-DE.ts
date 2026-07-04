@@ -51,6 +51,7 @@ const messages = {
     spaces: "Bereiche",
     meetings: "Treffen",
     dictate: "Diktieren",
+    videoProjects: "Videoprojekte",
     archive: "Archiv",
     trash: "Papierkorb",
     settings: "Einstellungen",
@@ -1416,6 +1417,44 @@ Alle sichtbaren Änderungen für Clips-Nutzer werden hier dokumentiert. Du kanns
       "Upcoming calendar meetings show up here, and finished recordings land here once you take notes. (Lokalisiert)",
     noMeetingsMatch: 'No meetings match "{{query}}" (Lokalisiert)',
     refreshing: "Refreshing… (Lokalisiert)",
+  },
+  videoProjects: {
+    listPageTitle: "Videoprojekte · Clips",
+    editorPageTitle: "Videoprojekt · Clips",
+    title: "Videoprojekte",
+    intro:
+      "Multi-Track-Kompositionen, die Aufnahmen, B-Roll, Untertitel und Text im vollständigen Editor kombinieren.",
+    newProject: "Neues Projekt",
+    emptyTitle: "Noch keine Videoprojekte",
+    emptyDescription:
+      "Erstelle ein Projekt oder öffne eine beliebige Aufnahme und wähle „Videoprojekt“, um sie als Quelle zu verwenden.",
+    sourceCount_one: "{{count}} Clip",
+    sourceCount_other: "{{count}} Clips",
+    projectOptions: "Projektoptionen",
+    moveToTrash: "In den Papierkorb verschieben",
+    deleteTitle: "Projekt in den Papierkorb verschieben?",
+    deleteDescription:
+      "„{{title}}“ wird in den Papierkorb verschoben. Darin verwendete Aufnahmen sind nicht betroffen.",
+    deleteFailed: "Projekt konnte nicht gelöscht werden",
+    createFailed: "Projekt konnte nicht erstellt werden",
+    openInProject: "In Videoprojekt öffnen",
+    openInProjectButton: "Videoprojekt",
+    openInProjectDescription:
+      "Füge diese Aufnahme als Quelle in ein Multi-Track-Videoprojekt ein.",
+    respectEdits: "Meine Zuschnitte aus dem Clip-Editor übernehmen",
+    includeCaptions: "Transkript als Untertitel hinzufügen",
+    createAndOpen: "Projekt erstellen",
+    addAndOpen: "Zum Projekt hinzufügen",
+    addFailed: "Konnte nicht zum Projekt hinzugefügt werden",
+    cancel: "Abbrechen",
+    back: "Zurück",
+    backToLibrary: "Zurück zur Bibliothek",
+    saving: "Speichern…",
+    saved: "Gespeichert",
+    saveFailed: "Speichern fehlgeschlagen",
+    loadFailed:
+      "Dieses Projekt konnte nicht geladen werden. Es wurde möglicherweise gelöscht oder du hast keinen Zugriff.",
+    renameProject: "Projekt umbenennen",
   },
 };
 

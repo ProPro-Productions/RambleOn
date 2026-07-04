@@ -51,6 +51,7 @@ const messages = {
     spaces: "Espacios",
     meetings: "Reuniones",
     dictate: "Dictar",
+    videoProjects: "Proyectos de video",
     archive: "Archivo",
     trash: "Papelera",
     settings: "Ajustes",
@@ -1408,6 +1409,45 @@ Todos los cambios visibles para los usuarios de Clips se documentan aquí. Puede
       "Upcoming calendar meetings show up here, and finished recordings land here once you take notes. (Localizado)",
     noMeetingsMatch: 'No meetings match "{{query}}" (Localizado)',
     refreshing: "Refreshing… (Localizado)",
+  },
+  videoProjects: {
+    listPageTitle: "Proyectos de video · Clips",
+    editorPageTitle: "Proyecto de video · Clips",
+    title: "Proyectos de video",
+    intro:
+      "Composiciones multipista que combinan grabaciones, b-roll, subtítulos y texto en el editor completo.",
+    newProject: "Nuevo proyecto",
+    emptyTitle: "Aún no hay proyectos de video",
+    emptyDescription:
+      'Crea un proyecto, o abre cualquier grabación y elige "Proyecto de video" para usarla como fuente.',
+    sourceCount_one: "{{count}} clip",
+    sourceCount_many: "{{count}} clips",
+    sourceCount_other: "{{count}} clips",
+    projectOptions: "Opciones del proyecto",
+    moveToTrash: "Mover a la papelera",
+    deleteTitle: "¿Mover el proyecto a la papelera?",
+    deleteDescription:
+      '"{{title}}" se moverá a la papelera. Las grabaciones que usa no se ven afectadas.',
+    deleteFailed: "No se pudo eliminar el proyecto",
+    createFailed: "No se pudo crear el proyecto",
+    openInProject: "Abrir en un proyecto de video",
+    openInProjectButton: "Proyecto de video",
+    openInProjectDescription:
+      "Añade esta grabación como fuente en un proyecto de video multipista.",
+    respectEdits: "Aplicar mis recortes del editor de clips",
+    includeCaptions: "Añadir la transcripción como subtítulos",
+    createAndOpen: "Crear proyecto",
+    addAndOpen: "Añadir al proyecto",
+    addFailed: "No se pudo añadir al proyecto",
+    cancel: "Cancelar",
+    back: "Atrás",
+    backToLibrary: "Volver a la biblioteca",
+    saving: "Guardando…",
+    saved: "Guardado",
+    saveFailed: "Error al guardar",
+    loadFailed:
+      "No se pudo cargar este proyecto. Puede que se haya eliminado o que no tengas acceso.",
+    renameProject: "Renombrar proyecto",
   },
 };
 

@@ -14,6 +14,7 @@ import {
   IconPuzzle,
   IconDownload,
   IconLoader2,
+  IconMovie,
   IconTrash,
 } from "@tabler/icons-react";
 import { useState } from "react";
@@ -48,6 +49,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { OpenInVideoProjectDialog } from "@/components/video-projects/open-in-video-project-dialog";
 import {
   exportMp4,
   LONG_EXPORT_THRESHOLD_MS,
@@ -115,6 +117,7 @@ export function EditorToolbar({
   );
   const [longWarnOpen, setLongWarnOpen] = useState(false);
   const [clearOpen, setClearOpen] = useState(false);
+  const [videoProjectOpen, setVideoProjectOpen] = useState(false);
 
   const effectiveMs = effectiveDuration(durationMs, edits);
 
@@ -412,6 +415,10 @@ export function EditorToolbar({
             <IconPuzzle className="mr-2 h-4 w-4" />
             {t("editorToolbar.stitchClips")}
           </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setVideoProjectOpen(true)}>
+            <IconMovie className="mr-2 h-4 w-4" />
+            {t("videoProjects.openInProject")}
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuSub>
             <DropdownMenuSubTrigger>
@@ -470,6 +477,12 @@ export function EditorToolbar({
             : `${Math.round((exportProgress?.progress ?? 0) * 100)}%`
           : t("editorToolbar.exportMp4")}
       </Button>
+
+      <OpenInVideoProjectDialog
+        recordingId={recordingId}
+        open={videoProjectOpen}
+        onOpenChange={setVideoProjectOpen}
+      />
 
       <AlertDialog open={longWarnOpen} onOpenChange={setLongWarnOpen}>
         <AlertDialogContent>

@@ -51,6 +51,7 @@ const messages = {
     spaces: "Espaces",
     meetings: "Réunions",
     dictate: "Dicter",
+    videoProjects: "Projets vidéo",
     archive: "Archiver",
     trash: "Corbeille",
     settings: "Paramètres",
@@ -1410,6 +1411,45 @@ Tous les changements visibles par les utilisateurs de Clips sont documentés ici
       "Upcoming calendar meetings show up here, and finished recordings land here once you take notes. (Localisé)",
     noMeetingsMatch: 'No meetings match "{{query}}" (Localisé)',
     refreshing: "Refreshing… (Localisé)",
+  },
+  videoProjects: {
+    listPageTitle: "Projets vidéo · Clips",
+    editorPageTitle: "Projet vidéo · Clips",
+    title: "Projets vidéo",
+    intro:
+      "Des compositions multipistes qui combinent enregistrements, b-roll, sous-titres et texte dans l’éditeur complet.",
+    newProject: "Nouveau projet",
+    emptyTitle: "Aucun projet vidéo pour le moment",
+    emptyDescription:
+      "Créez un projet, ou ouvrez n’importe quel enregistrement et choisissez « Projet vidéo » pour l’utiliser comme source.",
+    sourceCount_one: "{{count}} clip",
+    sourceCount_many: "{{count}} clips",
+    sourceCount_other: "{{count}} clips",
+    projectOptions: "Options du projet",
+    moveToTrash: "Déplacer vers la corbeille",
+    deleteTitle: "Déplacer le projet vers la corbeille ?",
+    deleteDescription:
+      "« {{title}} » sera déplacé vers la corbeille. Les enregistrements qu’il utilise ne sont pas affectés.",
+    deleteFailed: "Impossible de supprimer le projet",
+    createFailed: "Impossible de créer le projet",
+    openInProject: "Ouvrir dans un projet vidéo",
+    openInProjectButton: "Projet vidéo",
+    openInProjectDescription:
+      "Ajoutez cet enregistrement comme source dans un projet vidéo multipiste.",
+    respectEdits: "Appliquer mes coupes de l’éditeur de clip",
+    includeCaptions: "Ajouter la transcription en sous-titres",
+    createAndOpen: "Créer le projet",
+    addAndOpen: "Ajouter au projet",
+    addFailed: "Impossible d’ajouter au projet",
+    cancel: "Annuler",
+    back: "Retour",
+    backToLibrary: "Retour à la bibliothèque",
+    saving: "Enregistrement…",
+    saved: "Enregistré",
+    saveFailed: "Échec de l’enregistrement",
+    loadFailed:
+      "Ce projet n’a pas pu être chargé. Il a peut-être été supprimé ou vous n’y avez pas accès.",
+    renameProject: "Renommer le projet",
   },
 };
 

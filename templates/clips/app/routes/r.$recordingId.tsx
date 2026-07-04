@@ -28,6 +28,7 @@ import {
   IconHelpCircle,
   IconClipboardCopy,
   IconFileText,
+  IconMovie,
   IconSparkles,
   IconExternalLink,
   IconMessageDots,
@@ -78,6 +79,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { OpenInVideoProjectDialog } from "@/components/video-projects/open-in-video-project-dialog";
 import { isDefaultTitle, useAutoTitleBridge } from "@/hooks/use-auto-title";
 import { usePlayerShortcuts } from "@/hooks/use-player-shortcuts";
 import { useViewTracking } from "@/hooks/use-view-tracking";
@@ -971,6 +973,18 @@ export default function RecordingPage() {
               <IconScissors className="h-4 w-4" />
               {editing ? t("recordingPage.done") : t("recordingPage.edit")}
             </Button>
+          ) : null}
+
+          {canUseNativeEditor && canEdit ? (
+            <OpenInVideoProjectDialog
+              recordingId={recording.id}
+              hasTranscript={transcriptSegments.length > 0}
+            >
+              <Button variant="outline" size="sm" className="gap-1.5">
+                <IconMovie className="h-4 w-4" />
+                {t("videoProjects.openInProjectButton")}
+              </Button>
+            </OpenInVideoProjectDialog>
           ) : null}
 
           {canEdit ? (
