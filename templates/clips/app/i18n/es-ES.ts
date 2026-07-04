@@ -916,6 +916,10 @@ Todos los cambios visibles para los usuarios de Clips se documentan aquí. Puede
     markerShortcut: "Marca (⌥⇧M) · nota ⌥⇧E · b-roll ⌥⇧B · retoma ⌥⇧N",
   },
   annotationsStrip: {
+    addMarkerAt: "Añadir marca en {{time}}",
+    jumpTo: "Ir a {{time}}",
+    resolve: "Marcar como resuelta",
+    reopen: "Reabrir",
     title: "Marcas ({{count}})",
     editorNote: "Nota para el editor",
     bRoll: "B-roll",

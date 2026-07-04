@@ -897,6 +897,10 @@ Clips의 모든 사용자 대상 변경 사항은 여기에 기록됩니다. 명
     markerShortcut: "마커 (⌥⇧M) · 메모 ⌥⇧E · B롤 ⌥⇧B · 재촬영 ⌥⇧N",
   },
   annotationsStrip: {
+    addMarkerAt: "{{time}}에 마커 추가",
+    jumpTo: "{{time}}(으)로 이동",
+    resolve: "해결됨으로 표시",
+    reopen: "다시 열기",
     title: "마커 ({{count}})",
     editorNote: "편집자 메모",
     bRoll: "B롤",

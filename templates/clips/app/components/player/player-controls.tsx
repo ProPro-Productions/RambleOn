@@ -32,7 +32,7 @@ import {
 import { PLAYBACK_SPEED_OPTIONS } from "@/lib/playback-speed";
 import { cn } from "@/lib/utils";
 
-import { Scrubber, msToClock } from "./scrubber";
+import { Scrubber, msToClock, type ScrubberAnnotation } from "./scrubber";
 
 export const SPEED_OPTIONS = PLAYBACK_SPEED_OPTIONS;
 
@@ -52,6 +52,10 @@ export interface PlayerControlsProps {
   chapters?: { startMs: number; title: string }[];
   reactions?: { id: string; emoji: string; videoTimestampMs: number }[];
   excludedRanges?: { startMs: number; endMs: number }[];
+  annotations?: ScrubberAnnotation[];
+  onAddAnnotationAt?: (ms: number) => void;
+  onToggleAnnotationResolved?: (annotation: ScrubberAnnotation) => void;
+  onDeleteAnnotation?: (annotation: ScrubberAnnotation) => void;
   onPlayPause: () => void;
   onSeek: (ms: number) => void;
   onVolumeChange: (volume: number) => void;
@@ -82,6 +86,10 @@ export function PlayerControls(props: PlayerControlsProps) {
     chapters,
     reactions,
     excludedRanges,
+    annotations,
+    onAddAnnotationAt,
+    onToggleAnnotationResolved,
+    onDeleteAnnotation,
     onPlayPause,
     onSeek,
     onVolumeChange,
@@ -113,6 +121,10 @@ export function PlayerControls(props: PlayerControlsProps) {
         chapters={chapters}
         reactions={reactions}
         excludedRanges={excludedRanges}
+        annotations={annotations}
+        onAddAnnotationAt={onAddAnnotationAt}
+        onToggleAnnotationResolved={onToggleAnnotationResolved}
+        onDeleteAnnotation={onDeleteAnnotation}
       />
 
       <div className="flex items-center gap-1.5 text-white">

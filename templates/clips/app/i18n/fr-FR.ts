@@ -918,6 +918,10 @@ Tous les changements visibles par les utilisateurs de Clips sont documentés ici
     markerShortcut: "Marqueur (⌥⇧M) · note ⌥⇧E · b-roll ⌥⇧B · reprise ⌥⇧N",
   },
   annotationsStrip: {
+    addMarkerAt: "Ajouter un marqueur à {{time}}",
+    jumpTo: "Aller à {{time}}",
+    resolve: "Marquer comme résolu",
+    reopen: "Rouvrir",
     title: "Marqueurs ({{count}})",
     editorNote: "Note pour le monteur",
     bRoll: "B-roll",

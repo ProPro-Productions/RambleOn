@@ -897,6 +897,10 @@ const messages = {
       "علامة (⌥⇧M) · ملاحظة ⌥⇧E · لقطات إضافية ⌥⇧B · إعادة تسجيل ⌥⇧N",
   },
   annotationsStrip: {
+    addMarkerAt: "إضافة علامة عند {{time}}",
+    jumpTo: "الانتقال إلى {{time}}",
+    resolve: "وضع علامة كمُنجز",
+    reopen: "إعادة فتح",
     title: "العلامات ({{count}})",
     editorNote: "ملاحظة للمحرّر",
     bRoll: "لقطات إضافية",

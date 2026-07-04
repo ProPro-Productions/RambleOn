@@ -80,6 +80,20 @@ The hotkeys only work while the Clips tab has focus — desktop global hotkeys
 are a later milestone. The recording page's Activity tab shows a review strip
 of all markers (seek, delete).
 
+## Timeline presentation (player)
+
+On the recording page the scrubber renders annotations natively: point
+annotations are needle markers (stem + selectable head, kind-colored: generic
+amber, editor-note blue, b-roll purple, retake red; resolved dims), sections
+are translucent bands. Hover shows kind + label/body, click seeks, right-click
+opens a context menu — on a marker: jump / resolve-reopen / delete (author or
+recording editor); on the empty bar: "Add marker at &lt;time&gt;" (signed-in
+users). The shared query hook is
+`app/components/player/use-recording-annotations.ts`; every player-page
+consumer must use it (same args) so React Query serves one cache entry. The
+full-editor timeline layer and the unified action registry are still to come
+in M3 — build them on these same actions and kinds.
+
 ## Inline timecode references
 
 Text bodies (comments, annotation bodies) may contain plain timecodes like

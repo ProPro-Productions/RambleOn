@@ -913,6 +913,10 @@ Todas as mudanças visíveis para usuários do Clips são documentadas aqui. Voc
     markerShortcut: "Marcador (⌥⇧M) · nota ⌥⇧E · b-roll ⌥⇧B · regravação ⌥⇧N",
   },
   annotationsStrip: {
+    addMarkerAt: "Adicionar marcador em {{time}}",
+    jumpTo: "Ir para {{time}}",
+    resolve: "Marcar como resolvido",
+    reopen: "Reabrir",
     title: "Marcadores ({{count}})",
     editorNote: "Nota para o editor",
     bRoll: "B-roll",

@@ -895,6 +895,10 @@ All notable user-facing changes to Clips are documented here. Open it any time f
     markerShortcut: "Marker (⌥⇧M) · note ⌥⇧E · b-roll ⌥⇧B · retake ⌥⇧N",
   },
   annotationsStrip: {
+    addMarkerAt: "Add marker at {{time}}",
+    jumpTo: "Jump to {{time}}",
+    resolve: "Mark resolved",
+    reopen: "Reopen",
     title: "Markers ({{count}})",
     editorNote: "Editor note",
     bRoll: "B-roll",

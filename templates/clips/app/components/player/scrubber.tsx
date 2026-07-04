@@ -1,8 +1,42 @@
+import { useT } from "@agent-native/core/client";
 import { useMemo, useRef, useState } from "react";
 
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import { cn } from "@/lib/utils";
 
 import { scrubberPositionFromClientX } from "./scrubber-position";
+
+/** Annotation shown on the timeline; `mayEdit` is resolved by the caller. */
+export interface ScrubberAnnotation {
+  id: string;
+  startMs: number;
+  endMs: number | null;
+  kind: string;
+  label: string | null;
+  body: string | null;
+  resolved: boolean;
+  mayEdit: boolean;
+}
+
+const ANNOTATION_COLORS: Record<string, string> = {
+  "editor-note": "bg-blue-400",
+  "b-roll": "bg-purple-400",
+  retake: "bg-red-400",
+};
+
+function annotationColor(kind: string): string {
+  return ANNOTATION_COLORS[kind] ?? "bg-amber-400";
+}
+
+type ScrubberMenuTarget =
+  | { type: "bar"; ms: number }
+  | { type: "annotation"; annotation: ScrubberAnnotation };
 
 export interface ScrubberProps {
   currentMs: number;
@@ -12,6 +46,10 @@ export interface ScrubberProps {
   chapters?: { startMs: number; title: string }[];
   reactions?: { id: string; emoji: string; videoTimestampMs: number }[];
   excludedRanges?: { startMs: number; endMs: number }[];
+  annotations?: ScrubberAnnotation[];
+  onAddAnnotationAt?: (ms: number) => void;
+  onToggleAnnotationResolved?: (annotation: ScrubberAnnotation) => void;
+  onDeleteAnnotation?: (annotation: ScrubberAnnotation) => void;
 }
 
 export function Scrubber(props: ScrubberProps) {
@@ -23,7 +61,12 @@ export function Scrubber(props: ScrubberProps) {
     chapters,
     reactions,
     excludedRanges,
+    annotations,
+    onAddAnnotationAt,
+    onToggleAnnotationResolved,
+    onDeleteAnnotation,
   } = props;
+  const t = useT();
   const barRef = useRef<HTMLDivElement | null>(null);
   const activePointerIdRef = useRef<number | null>(null);
   const [hoverMs, setHoverMs] = useState<number | null>(null);
@@ -32,8 +75,12 @@ export function Scrubber(props: ScrubberProps) {
   const [tooltip, setTooltip] = useState<
     | { kind: "comment"; content: string; ms: number }
     | { kind: "chapter"; title: string; ms: number }
+    | { kind: "annotation"; content: string; ms: number }
     | null
   >(null);
+  // What the last right-click landed on. Set in onContextMenu (fires before
+  // Radix opens the menu) so one ContextMenu serves the bar and every marker.
+  const [menuTarget, setMenuTarget] = useState<ScrubberMenuTarget | null>(null);
 
   const pct = durationMs > 0 ? (currentMs / durationMs) * 100 : 0;
 
@@ -113,7 +160,32 @@ export function Scrubber(props: ScrubberProps) {
     return map;
   }, [comments]);
 
-  return (
+  const menuEnabled = Boolean(
+    onAddAnnotationAt || onToggleAnnotationResolved || onDeleteAnnotation,
+  );
+
+  const annotationKindLabel = (kind: string) => {
+    switch (kind) {
+      case "editor-note":
+        return t("annotationsStrip.editorNote");
+      case "b-roll":
+        return t("annotationsStrip.bRoll");
+      case "retake":
+        return t("annotationsStrip.retake");
+      case "generic":
+        return t("annotationsStrip.marker");
+      default:
+        return kind;
+    }
+  };
+
+  const annotationTooltip = (a: ScrubberAnnotation) => {
+    const text = a.label ?? a.body ?? "";
+    const kindLabel = annotationKindLabel(a.kind);
+    return text ? `${kindLabel}: ${text.slice(0, 100)}` : kindLabel;
+  };
+
+  const body = (
     <div
       className="relative h-10 flex items-center touch-none cursor-pointer"
       data-player-ui
@@ -128,6 +200,16 @@ export function Scrubber(props: ScrubberProps) {
       }}
       onPointerLeave={() => {
         if (activePointerIdRef.current === null) setHoverMs(null);
+      }}
+      onContextMenu={(e) => {
+        if (!menuEnabled) return;
+        // Markers set their own target; the bar is the fallback.
+        const onMarker = (e.target as HTMLElement).closest(
+          "[data-annotation-marker]",
+        );
+        if (!onMarker) {
+          setMenuTarget({ type: "bar", ms: positionFromClientX(e.clientX).ms });
+        }
       }}
     >
       {/* Hover bubble */}
@@ -146,7 +228,7 @@ export function Scrubber(props: ScrubberProps) {
           className="absolute -top-10 -translate-x-1/2 max-w-[240px] rounded bg-primary px-2 py-1 text-[11px] text-primary-foreground"
           style={{ left: (tooltip.ms / Math.max(1, durationMs)) * 100 + "%" }}
         >
-          {tooltip.kind === "comment" ? tooltip.content : tooltip.title}
+          {tooltip.kind === "chapter" ? tooltip.title : tooltip.content}
         </div>
       ) : null}
 
@@ -205,6 +287,72 @@ export function Scrubber(props: ScrubberProps) {
           />
         ))}
 
+        {/* Annotation sections (range bands on the bar) */}
+        {annotations
+          ?.filter((a) => a.endMs !== null)
+          .map((a) => {
+            const startPct = (a.startMs / Math.max(1, durationMs)) * 100;
+            const endPct =
+              (Math.min(durationMs, a.endMs ?? 0) / Math.max(1, durationMs)) *
+              100;
+            return (
+              <div
+                key={`section-${a.id}`}
+                data-annotation-marker
+                className={cn(
+                  "absolute inset-y-0 rounded-sm opacity-40",
+                  annotationColor(a.kind),
+                  a.resolved && "opacity-15",
+                )}
+                style={{
+                  left: `${startPct}%`,
+                  width: `${Math.max(0.5, endPct - startPct)}%`,
+                }}
+                onContextMenu={() =>
+                  setMenuTarget({ type: "annotation", annotation: a })
+                }
+              />
+            );
+          })}
+
+        {/* Annotation needles — playhead-like: a stem with a selectable head */}
+        {annotations?.map((a) => (
+          <button
+            key={`needle-${a.id}`}
+            type="button"
+            data-annotation-marker
+            onMouseEnter={() =>
+              setTooltip({
+                kind: "annotation",
+                content: annotationTooltip(a),
+                ms: a.startMs,
+              })
+            }
+            onMouseLeave={() => setTooltip(null)}
+            onClick={(e) => {
+              e.stopPropagation();
+              onSeek(a.startMs);
+            }}
+            onContextMenu={() =>
+              setMenuTarget({ type: "annotation", annotation: a })
+            }
+            className={cn(
+              "absolute -top-2.5 -translate-x-1/2 flex flex-col items-center",
+              a.resolved && "opacity-40",
+            )}
+            style={{ left: (a.startMs / Math.max(1, durationMs)) * 100 + "%" }}
+            aria-label={annotationTooltip(a)}
+          >
+            <span
+              className={cn(
+                "h-2 w-2 rounded-full border border-black/40 transition-transform hover:scale-125",
+                annotationColor(a.kind),
+              )}
+            />
+            <span className={cn("h-2.5 w-0.5", annotationColor(a.kind))} />
+          </button>
+        ))}
+
         {/* Comment dots */}
         {Array.from(commentsByMs.entries()).map(([ms, list]) => (
           <button
@@ -251,6 +399,59 @@ export function Scrubber(props: ScrubberProps) {
         />
       </div>
     </div>
+  );
+
+  if (!menuEnabled) return body;
+
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>{body}</ContextMenuTrigger>
+      <ContextMenuContent>
+        {menuTarget?.type === "bar" && onAddAnnotationAt ? (
+          <ContextMenuItem
+            onSelect={() => onAddAnnotationAt(Math.round(menuTarget.ms))}
+          >
+            {t("annotationsStrip.addMarkerAt", {
+              time: msToClock(menuTarget.ms),
+            })}
+          </ContextMenuItem>
+        ) : null}
+        {menuTarget?.type === "annotation" ? (
+          <>
+            <ContextMenuItem
+              onSelect={() => onSeek(menuTarget.annotation.startMs)}
+            >
+              {t("annotationsStrip.jumpTo", {
+                time: msToClock(menuTarget.annotation.startMs),
+              })}
+            </ContextMenuItem>
+            {menuTarget.annotation.mayEdit &&
+            (onToggleAnnotationResolved || onDeleteAnnotation) ? (
+              <ContextMenuSeparator />
+            ) : null}
+            {menuTarget.annotation.mayEdit && onToggleAnnotationResolved ? (
+              <ContextMenuItem
+                onSelect={() =>
+                  onToggleAnnotationResolved(menuTarget.annotation)
+                }
+              >
+                {menuTarget.annotation.resolved
+                  ? t("annotationsStrip.reopen")
+                  : t("annotationsStrip.resolve")}
+              </ContextMenuItem>
+            ) : null}
+            {menuTarget.annotation.mayEdit && onDeleteAnnotation ? (
+              <ContextMenuItem
+                className="text-destructive focus:text-destructive"
+                onSelect={() => onDeleteAnnotation(menuTarget.annotation)}
+              >
+                {t("annotationsStrip.delete")}
+              </ContextMenuItem>
+            ) : null}
+          </>
+        ) : null}
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
 

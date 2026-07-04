@@ -856,6 +856,10 @@ const messages = {
     markerShortcut: "標記 (⌥⇧M) · 備註 ⌥⇧E · B-roll ⌥⇧B · 重錄 ⌥⇧N",
   },
   annotationsStrip: {
+    addMarkerAt: "在 {{time}} 新增標記",
+    jumpTo: "跳至 {{time}}",
+    resolve: "標記為已解決",
+    reopen: "重新開啟",
     title: "標記（{{count}}）",
     editorNote: "剪輯備註",
     bRoll: "B-roll",

@@ -924,6 +924,10 @@ Alle sichtbaren Änderungen für Clips-Nutzer werden hier dokumentiert. Du kanns
     markerShortcut: "Marke (⌥⇧M) · Notiz ⌥⇧E · B-Roll ⌥⇧B · Retake ⌥⇧N",
   },
   annotationsStrip: {
+    addMarkerAt: "Marke bei {{time}} setzen",
+    jumpTo: "Zu {{time}} springen",
+    resolve: "Als erledigt markieren",
+    reopen: "Wieder öffnen",
     title: "Marken ({{count}})",
     editorNote: "Notiz für den Schnitt",
     bRoll: "B-Roll",

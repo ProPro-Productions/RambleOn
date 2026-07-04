@@ -52,6 +52,7 @@ import {
   TimestampedCommentBar,
 } from "@/components/player/timestamped-comment-button";
 import { TranscriptPanel } from "@/components/player/transcript-panel";
+import { useRecordingAnnotations } from "@/components/player/use-recording-annotations";
 import {
   VideoPlayer,
   type VideoPlayerHandle,
@@ -314,6 +315,37 @@ export default function RecordingPage() {
   const transcriptCleanup = playerDataQ.data?.transcript?.cleanup ?? null;
   const ctas = playerDataQ.data?.ctas ?? [];
   const canEdit = role === "owner" || role === "admin" || role === "editor";
+
+  // Timeline annotations (markers/sections) for the scrubber. Same query as
+  // the AnnotationsStrip so React Query serves both from one cache entry.
+  const recordingAnnotationsResult = useRecordingAnnotations(recordingId ?? "");
+  const addAnnotationMutation = useActionMutation("add-annotation" as any);
+  const updateAnnotationMutation = useActionMutation(
+    "update-annotation" as any,
+  );
+  const deleteAnnotationMutation = useActionMutation(
+    "delete-annotation" as any,
+  );
+  const scrubberAnnotations = useMemo(
+    () =>
+      recordingAnnotationsResult.annotations
+        .filter((a) => a.startMs !== null)
+        .map((a) => ({
+          id: a.id,
+          startMs: a.startMs ?? 0,
+          endMs: a.endMs,
+          kind: a.kind,
+          label: a.label,
+          body: a.body,
+          resolved: a.resolved,
+          mayEdit:
+            canEdit ||
+            (!!session?.email &&
+              !!a.authorEmail &&
+              session.email.toLowerCase() === a.authorEmail.toLowerCase()),
+        })),
+    [recordingAnnotationsResult.annotations, canEdit, session?.email],
+  );
   const builderCredits =
     (playerDataQ.data?.builderCredits as BuilderCreditsStatus | null) ?? null;
   const titleGenerationPaused = Boolean(
@@ -1176,6 +1208,39 @@ export default function RecordingPage() {
                   comments={comments}
                   chapters={chapters}
                   reactions={reactions}
+                  annotations={scrubberAnnotations}
+                  onAddAnnotationAt={
+                    session?.email
+                      ? (ms) =>
+                          addAnnotationMutation.mutate(
+                            {
+                              recordingId: recording.id,
+                              startMs: Math.round(ms),
+                              kind: "generic",
+                            } as any,
+                            {
+                              onSettled: () =>
+                                recordingAnnotationsResult.refetch(),
+                            } as any,
+                          )
+                      : undefined
+                  }
+                  onToggleAnnotationResolved={(a) =>
+                    updateAnnotationMutation.mutate(
+                      { id: a.id, resolved: !a.resolved } as any,
+                      {
+                        onSettled: () => recordingAnnotationsResult.refetch(),
+                      } as any,
+                    )
+                  }
+                  onDeleteAnnotation={(a) =>
+                    deleteAnnotationMutation.mutate(
+                      { id: a.id } as any,
+                      {
+                        onSettled: () => recordingAnnotationsResult.refetch(),
+                      } as any,
+                    )
+                  }
                   transcriptSegments={transcriptSegments}
                   theaterMode={theaterMode}
                   onTheaterToggle={() => setTheaterMode((v) => !v)}

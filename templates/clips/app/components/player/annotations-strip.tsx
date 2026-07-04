@@ -1,24 +1,9 @@
-import {
-  useActionMutation,
-  useActionQuery,
-  useT,
-} from "@agent-native/core/client";
+import { useActionMutation, useT } from "@agent-native/core/client";
 import { IconBookmark, IconX } from "@tabler/icons-react";
 
 import { formatTimecode } from "@/lib/timecodes";
 
-interface AnnotationRow {
-  entity: "annotation" | "comment";
-  id: string;
-  anchorType: "video" | "point" | "range";
-  startMs: number | null;
-  endMs: number | null;
-  kind: string;
-  label: string | null;
-  body: string | null;
-  authorEmail: string | null;
-  resolved: boolean;
-}
+import { useRecordingAnnotations } from "./use-recording-annotations";
 
 const KIND_STYLES: Record<string, string> = {
   "editor-note": "bg-blue-500/15 text-blue-600 dark:text-blue-400",
@@ -44,16 +29,9 @@ export function AnnotationsStrip({
   onSeek: (ms: number) => void;
 }) {
   const t = useT();
-  const annotationsQ = useActionQuery(
-    "list-annotations" as any,
-    {
-      recordingId,
-      includeComments: false,
-    } as any,
-  ) as { data?: { annotations?: AnnotationRow[] }; refetch: () => void };
+  const { annotations, refetch } = useRecordingAnnotations(recordingId);
   const deleteAnnotation = useActionMutation("delete-annotation" as any);
 
-  const annotations = annotationsQ.data?.annotations ?? [];
   if (annotations.length === 0) return null;
 
   const kindLabel = (kind: string) => {
@@ -121,7 +99,7 @@ export function AnnotationsStrip({
                     deleteAnnotation.mutate(
                       { id: a.id } as any,
                       {
-                        onSettled: () => annotationsQ.refetch(),
+                        onSettled: () => refetch(),
                       } as any,
                     )
                   }
