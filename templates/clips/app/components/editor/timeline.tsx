@@ -2,15 +2,12 @@ import { useT } from "@agent-native/core/client";
 import { useMemo, useState } from "react";
 
 import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuSub,
-  ContextMenuSubContent,
-  ContextMenuSubTrigger,
-  ContextMenuTrigger,
-} from "@/components/ui/context-menu";
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Tooltip,
   TooltipContent,
@@ -24,6 +21,7 @@ import {
 import { formatMs } from "@/lib/timestamp-mapping";
 import { cn } from "@/lib/utils";
 
+import { CoordinateMenu } from "./coordinate-menu";
 import type { TimelineActionItem } from "./timeline-actions";
 
 export interface TimelineChapter {
@@ -103,6 +101,7 @@ export function Timeline({
 }: TimelineProps) {
   const t = useT();
   const [menuTarget, setMenuTarget] = useState<TimelineMenuTarget | null>(null);
+  const [menuPos, setMenuPos] = useState({ x: 0, y: 0 });
   const menuEnabled = Boolean(
     onAddAnnotationAt ||
     onToggleAnnotationResolved ||
@@ -147,16 +146,18 @@ export function Timeline({
         onClick={handleSeek}
         onContextMenu={(e) => {
           if (!menuEnabled) return;
-          // Needles set their own target; the empty ruler is the fallback.
-          if ((e.target as HTMLElement).closest("[data-annotation-marker]")) {
-            return;
-          }
+          e.preventDefault();
+          // Needles set their own target (and stop propagation); the empty
+          // ruler is the fallback. A right-click while the menu is open just
+          // moves it: the controlled CoordinateMenu re-anchors to the new
+          // coordinates instead of only dismissing.
           const rect = e.currentTarget.getBoundingClientRect();
           const x = e.clientX - rect.left + scrollLeft;
           const ms = Math.max(
             0,
             Math.min(durationMs, (x / width) * durationMs),
           );
+          setMenuPos({ x: e.clientX, y: e.clientY });
           setMenuTarget({ type: "ruler", ms });
         }}
       >
@@ -243,9 +244,13 @@ export function Timeline({
                     e.stopPropagation();
                     onClickAnnotation?.(a);
                   }}
-                  onContextMenu={() =>
-                    setMenuTarget({ type: "annotation", annotation: a })
-                  }
+                  onContextMenu={(e) => {
+                    if (!menuEnabled) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setMenuPos({ x: e.clientX, y: e.clientY });
+                    setMenuTarget({ type: "annotation", annotation: a });
+                  }}
                   className={cn(
                     "absolute -top-1 flex -translate-x-1/2 flex-col items-center",
                     a.resolved && "opacity-40",
@@ -318,17 +323,22 @@ export function Timeline({
   if (!menuEnabled) return body;
 
   return (
-    // modal=false keeps outside pointer events alive while the menu is open,
-    // so right-clicking another marker re-anchors instead of only dismissing.
-    <ContextMenu modal={false}>
-      <ContextMenuTrigger asChild>{body}</ContextMenuTrigger>
-      <ContextMenuContent>
+    <>
+      {body}
+      <CoordinateMenu
+        open={menuTarget !== null}
+        x={menuPos.x}
+        y={menuPos.y}
+        onOpenChange={(open) => {
+          if (!open) setMenuTarget(null);
+        }}
+      >
         {menuTarget?.type === "ruler" && getEditActions ? (
           <>
             {getEditActions(Math.round(menuTarget.ms))
               .filter((action) => !action.markerKind)
               .map((action) => (
-                <ContextMenuItem
+                <DropdownMenuItem
                   key={action.id}
                   disabled={action.disabled}
                   onSelect={() => action.run()}
@@ -339,14 +349,14 @@ export function Timeline({
                   }
                 >
                   {action.label}
-                </ContextMenuItem>
+                </DropdownMenuItem>
               ))}
-            {onAddAnnotationAt ? <ContextMenuSeparator /> : null}
+            {onAddAnnotationAt ? <DropdownMenuSeparator /> : null}
           </>
         ) : null}
         {menuTarget?.type === "ruler" && onAddAnnotationAt
           ? ANNOTATION_KIND_ORDER.map((kind) => (
-              <ContextMenuItem
+              <DropdownMenuItem
                 key={kind}
                 onSelect={() =>
                   onAddAnnotationAt(Math.round(menuTarget.ms), kind)
@@ -362,26 +372,26 @@ export function Timeline({
                   kind: annotationKindLabel(kind, t),
                   time: formatMs(menuTarget.ms),
                 })}
-              </ContextMenuItem>
+              </DropdownMenuItem>
             ))
           : null}
         {menuTarget?.type === "annotation" ? (
           <>
-            <ContextMenuItem
+            <DropdownMenuItem
               onSelect={() => onSeek?.(menuTarget.annotation.startMs)}
             >
               {t("annotationsStrip.jumpTo", {
                 time: formatMs(menuTarget.annotation.startMs),
               })}
-            </ContextMenuItem>
+            </DropdownMenuItem>
             {onChangeAnnotationKind ? (
-              <ContextMenuSub>
-                <ContextMenuSubTrigger>
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>
                   {t("annotationsStrip.changeType")}
-                </ContextMenuSubTrigger>
-                <ContextMenuSubContent>
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
                   {ANNOTATION_KIND_ORDER.map((kind) => (
-                    <ContextMenuItem
+                    <DropdownMenuItem
                       key={kind}
                       disabled={kind === menuTarget.annotation.kind}
                       onSelect={() =>
@@ -395,16 +405,16 @@ export function Timeline({
                         )}
                       />
                       {annotationKindLabel(kind, t)}
-                    </ContextMenuItem>
+                    </DropdownMenuItem>
                   ))}
-                </ContextMenuSubContent>
-              </ContextMenuSub>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
             ) : null}
             {onToggleAnnotationResolved || onDeleteAnnotation ? (
-              <ContextMenuSeparator />
+              <DropdownMenuSeparator />
             ) : null}
             {onToggleAnnotationResolved ? (
-              <ContextMenuItem
+              <DropdownMenuItem
                 onSelect={() =>
                   onToggleAnnotationResolved(menuTarget.annotation)
                 }
@@ -412,19 +422,19 @@ export function Timeline({
                 {menuTarget.annotation.resolved
                   ? t("annotationsStrip.reopen")
                   : t("annotationsStrip.resolve")}
-              </ContextMenuItem>
+              </DropdownMenuItem>
             ) : null}
             {onDeleteAnnotation ? (
-              <ContextMenuItem
+              <DropdownMenuItem
                 className="text-destructive focus:text-destructive"
                 onSelect={() => onDeleteAnnotation(menuTarget.annotation)}
               >
                 {t("annotationsStrip.delete")}
-              </ContextMenuItem>
+              </DropdownMenuItem>
             ) : null}
           </>
         ) : null}
-      </ContextMenuContent>
-    </ContextMenu>
+      </CoordinateMenu>
+    </>
   );
 }

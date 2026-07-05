@@ -1,16 +1,14 @@
 import { useT } from "@agent-native/core/client";
 import { useMemo, useRef, useState } from "react";
 
+import { CoordinateMenu } from "@/components/editor/coordinate-menu";
 import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuSub,
-  ContextMenuSubContent,
-  ContextMenuSubTrigger,
-  ContextMenuTrigger,
-} from "@/components/ui/context-menu";
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   ANNOTATION_KIND_ORDER,
   annotationColorClass,
@@ -84,6 +82,7 @@ export function Scrubber(props: ScrubberProps) {
   // What the last right-click landed on. Set in onContextMenu (fires before
   // Radix opens the menu) so one ContextMenu serves the bar and every marker.
   const [menuTarget, setMenuTarget] = useState<ScrubberMenuTarget | null>(null);
+  const [menuPos, setMenuPos] = useState({ x: 0, y: 0 });
 
   const pct = durationMs > 0 ? (currentMs / durationMs) * 100 : 0;
 
@@ -194,13 +193,12 @@ export function Scrubber(props: ScrubberProps) {
       }}
       onContextMenu={(e) => {
         if (!menuEnabled) return;
-        // Markers set their own target; the bar is the fallback.
-        const onMarker = (e.target as HTMLElement).closest(
-          "[data-annotation-marker]",
-        );
-        if (!onMarker) {
-          setMenuTarget({ type: "bar", ms: positionFromClientX(e.clientX).ms });
-        }
+        e.preventDefault();
+        // Markers set their own target (and stop propagation); the bar is
+        // the fallback. The controlled CoordinateMenu re-anchors on every
+        // right-click, so an open menu moves instead of only dismissing.
+        setMenuPos({ x: e.clientX, y: e.clientY });
+        setMenuTarget({ type: "bar", ms: positionFromClientX(e.clientX).ms });
       }}
     >
       {/* Hover bubble */}
@@ -299,9 +297,13 @@ export function Scrubber(props: ScrubberProps) {
                   left: `${startPct}%`,
                   width: `${Math.max(0.5, endPct - startPct)}%`,
                 }}
-                onContextMenu={() =>
-                  setMenuTarget({ type: "annotation", annotation: a })
-                }
+                onContextMenu={(e) => {
+                  if (!menuEnabled) return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setMenuPos({ x: e.clientX, y: e.clientY });
+                  setMenuTarget({ type: "annotation", annotation: a });
+                }}
               />
             );
           })}
@@ -324,9 +326,13 @@ export function Scrubber(props: ScrubberProps) {
               e.stopPropagation();
               onSeek(a.startMs);
             }}
-            onContextMenu={() =>
-              setMenuTarget({ type: "annotation", annotation: a })
-            }
+            onContextMenu={(e) => {
+              if (!menuEnabled) return;
+              e.preventDefault();
+              e.stopPropagation();
+              setMenuPos({ x: e.clientX, y: e.clientY });
+              setMenuTarget({ type: "annotation", annotation: a });
+            }}
             className={cn(
               "absolute -top-2.5 -translate-x-1/2 flex flex-col items-center",
               a.resolved && "opacity-40",
@@ -395,14 +401,19 @@ export function Scrubber(props: ScrubberProps) {
   if (!menuEnabled) return body;
 
   return (
-    // modal=false keeps outside pointer events alive while the menu is open,
-    // so right-clicking another marker re-anchors instead of only dismissing.
-    <ContextMenu modal={false}>
-      <ContextMenuTrigger asChild>{body}</ContextMenuTrigger>
-      <ContextMenuContent>
+    <>
+      {body}
+      <CoordinateMenu
+        open={menuTarget !== null}
+        x={menuPos.x}
+        y={menuPos.y}
+        onOpenChange={(open) => {
+          if (!open) setMenuTarget(null);
+        }}
+      >
         {menuTarget?.type === "bar" && onAddAnnotationAt
           ? ANNOTATION_KIND_ORDER.map((kind) => (
-              <ContextMenuItem
+              <DropdownMenuItem
                 key={kind}
                 onSelect={() =>
                   onAddAnnotationAt(Math.round(menuTarget.ms), kind)
@@ -418,26 +429,26 @@ export function Scrubber(props: ScrubberProps) {
                   kind: annotationKindLabel(kind, t),
                   time: msToClock(menuTarget.ms),
                 })}
-              </ContextMenuItem>
+              </DropdownMenuItem>
             ))
           : null}
         {menuTarget?.type === "annotation" ? (
           <>
-            <ContextMenuItem
+            <DropdownMenuItem
               onSelect={() => onSeek(menuTarget.annotation.startMs)}
             >
               {t("annotationsStrip.jumpTo", {
                 time: msToClock(menuTarget.annotation.startMs),
               })}
-            </ContextMenuItem>
+            </DropdownMenuItem>
             {menuTarget.annotation.mayEdit && onChangeAnnotationKind ? (
-              <ContextMenuSub>
-                <ContextMenuSubTrigger>
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>
                   {t("annotationsStrip.changeType")}
-                </ContextMenuSubTrigger>
-                <ContextMenuSubContent>
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
                   {ANNOTATION_KIND_ORDER.map((kind) => (
-                    <ContextMenuItem
+                    <DropdownMenuItem
                       key={kind}
                       disabled={kind === menuTarget.annotation.kind}
                       onSelect={() =>
@@ -451,17 +462,17 @@ export function Scrubber(props: ScrubberProps) {
                         )}
                       />
                       {annotationKindLabel(kind, t)}
-                    </ContextMenuItem>
+                    </DropdownMenuItem>
                   ))}
-                </ContextMenuSubContent>
-              </ContextMenuSub>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
             ) : null}
             {menuTarget.annotation.mayEdit &&
             (onToggleAnnotationResolved || onDeleteAnnotation) ? (
-              <ContextMenuSeparator />
+              <DropdownMenuSeparator />
             ) : null}
             {menuTarget.annotation.mayEdit && onToggleAnnotationResolved ? (
-              <ContextMenuItem
+              <DropdownMenuItem
                 onSelect={() =>
                   onToggleAnnotationResolved(menuTarget.annotation)
                 }
@@ -469,20 +480,20 @@ export function Scrubber(props: ScrubberProps) {
                 {menuTarget.annotation.resolved
                   ? t("annotationsStrip.reopen")
                   : t("annotationsStrip.resolve")}
-              </ContextMenuItem>
+              </DropdownMenuItem>
             ) : null}
             {menuTarget.annotation.mayEdit && onDeleteAnnotation ? (
-              <ContextMenuItem
+              <DropdownMenuItem
                 className="text-destructive focus:text-destructive"
                 onSelect={() => onDeleteAnnotation(menuTarget.annotation)}
               >
                 {t("annotationsStrip.delete")}
-              </ContextMenuItem>
+              </DropdownMenuItem>
             ) : null}
           </>
         ) : null}
-      </ContextMenuContent>
-    </ContextMenu>
+      </CoordinateMenu>
+    </>
   );
 }
 
