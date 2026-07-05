@@ -68,17 +68,27 @@ passed explicitly. This is how sections "receive comments".
 
 ## Capture-time markers (recorder hotkeys)
 
-While recording in the browser recorder (`/record`), the creator drops markers
-without leaving the take: ⌥⇧M generic, ⌥⇧E editor-note, ⌥⇧B b-roll,
-⌥⇧N retake, or the bookmark button on the floating toolbar (generic). Markers
-buffer client-side with the elapsed *recording* time (pauses excluded) and are
-persisted in one batch by the UI-internal `save-recording-markers` action when
-the recording is saved (`source: "shortcut"`). Because the creator usually
-*says* what they mean as they hit the key, edit synthesis should read the
-transcript around each shortcut marker's timestamp to complete its meaning.
-The hotkeys only work while the Clips tab has focus — desktop global hotkeys
-are a later milestone. The recording page's Activity tab shows a review strip
-of all markers (seek, delete).
+While recording, the creator drops markers without leaving the take:
+⌥⇧M generic, ⌥⇧E editor-note, ⌥⇧B b-roll, ⌥⇧N retake, or the bookmark button
+on the recording toolbar (generic). Markers buffer client-side with the
+elapsed *recording* time (pauses excluded) and are persisted in one batch by
+the UI-internal `save-recording-markers` action when the recording is saved
+(`source: "shortcut"`). Because the creator usually *says* what they mean as
+they hit the key, edit synthesis should read the transcript around each
+shortcut marker's timestamp to complete its meaning.
+
+Two capture paths, same keys and persistence:
+- **Browser recorder** (`/record`): hotkeys fire only while the Clips tab has
+  focus (browser limitation).
+- **Desktop app**: the Tauri tray recorder registers the hotkeys globally
+  while a recording is live (`shortcuts.rs` → `clips:marker` events →
+  `desktop/src/lib/recording-markers.ts`), so they work from inside whatever
+  app is being recorded. The floating recording pill shows a marker button
+  with a live count.
+
+The recording page's Activity tab shows a review strip of all markers (seek,
+delete), and both the player scrubber and the clips editor timeline render
+them as needles/bands.
 
 ## Timeline presentation (player)
 
