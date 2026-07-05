@@ -720,6 +720,11 @@ export default function RecordingPage() {
         <p className="text-sm text-muted-foreground mb-4 max-w-md text-center">
           {failureReason}
         </p>
+        {nativeSaveFailed ? (
+          <p className="text-sm text-muted-foreground mb-4 max-w-md text-center">
+            {t("recordingPage.savedLocallyHint")}
+          </p>
+        ) : null}
         {isFailure &&
         !storageSetupFailure &&
         detail &&

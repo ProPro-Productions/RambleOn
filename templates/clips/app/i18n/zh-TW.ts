@@ -161,6 +161,8 @@ const messages = {
     connectStorageImportLoom: "連線儲存以匯入這個 Loom。",
     connectStorageFinishClip: "連線儲存以完成此剪輯的儲存。",
     uploadPausedSaved: "上傳已暫停；剪輯儲存在本機。",
+    savedLocallyHint:
+      "本機檔案保存在選單列的 Clips 應用程式中：點擊工具列圖示，使用已儲存剪輯上的資料夾按鈕開啟，或按重試重新上傳。",
     savingWentWrong: "儲存此剪輯時出現問題。",
     finishingClip: "正在完成您的剪輯...",
     loomSourcePreserved:
@@ -1241,7 +1243,8 @@ const messages = {
     savedLocally: "已儲存到本機",
     uploadFailed: "上傳失敗",
     connectStorageToFinish: "開啟以連線儲存並完成儲存。",
-    retryFromClipsMenu: "從 Clips 選單重試；不需要重新錄製。",
+    retryFromClipsMenu:
+      "從選單列的 Clips 圖示重試——已儲存剪輯的卡片上還有可開啟本機檔案的資料夾按鈕。",
     removeFailedClip: "移除此失敗剪輯。",
     remove: "移除",
     viewsCount: "{{count}} 次觀看",

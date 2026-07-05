@@ -1940,6 +1940,24 @@ async function startNativeFullscreenRecording(
         let uploadResult: NativeFullscreenUploadResult | null = null;
         const viewUrl = `/r/${id}`;
 
+        // Open the recording page NOW, not after the upload: a native
+        // recording uploads its whole file at stop time, which can take many
+        // minutes on a slow uplink, and the user would otherwise stare at an
+        // empty desktop. The recording row was created at recording start and
+        // the page live-updates through uploading → processing → ready (and
+        // shows the failure state if the upload dies), so one early tab
+        // covers every outcome. The later open calls are skipped when this
+        // succeeded.
+        let pageOpenedEarly = false;
+        try {
+          await openExternal(
+            `${params.serverUrl.replace(/\/+$/, "")}${viewUrl}`,
+          );
+          pageOpenedEarly = true;
+        } catch (err) {
+          console.error("[clips-recorder] early openExternal failed:", err);
+        }
+
         // A native recording runs two ScreenCaptureKit streams: the screen
         // recorder and the whisper system-audio recognizer (system_audio.rs
         // opens its own SCStream with captures_audio). Tearing the transcription
@@ -2039,12 +2057,17 @@ async function startNativeFullscreenRecording(
                 authToken: params.authToken,
               })
             ) {
-              try {
-                await openExternal(
-                  `${params.serverUrl.replace(/\/+$/, "")}${viewUrl}`,
-                );
-              } catch (openErr) {
-                console.error("[clips-recorder] openExternal failed:", openErr);
+              if (!pageOpenedEarly) {
+                try {
+                  await openExternal(
+                    `${params.serverUrl.replace(/\/+$/, "")}${viewUrl}`,
+                  );
+                } catch (openErr) {
+                  console.error(
+                    "[clips-recorder] openExternal failed:",
+                    openErr,
+                  );
+                }
               }
               return { recordingId: id, viewUrl };
             }
@@ -2053,29 +2076,34 @@ async function startNativeFullscreenRecording(
               id,
               err instanceof Error ? err.message : String(err),
             );
-            // Still take the user to the clip status page. If the server
-            // marked the upload failed, that page shows the failure state; if
-            // the abort request could not land, it keeps polling instead of
-            // leaving the user on an empty desktop.
-            try {
-              await openExternal(
-                `${params.serverUrl.replace(
-                  /\/+$/,
-                  "",
-                )}${viewUrl}?saveFailed=1`,
-              );
-            } catch (openErr) {
-              console.error("[clips-recorder] openExternal failed:", openErr);
+            // Still take the user to the clip status page (unless the early
+            // tab is already there — it polls into the failure state on its
+            // own). If the server marked the upload failed, that page shows
+            // the failure state; if the abort request could not land, it
+            // keeps polling instead of leaving the user on an empty desktop.
+            if (!pageOpenedEarly) {
+              try {
+                await openExternal(
+                  `${params.serverUrl.replace(
+                    /\/+$/,
+                    "",
+                  )}${viewUrl}?saveFailed=1`,
+                );
+              } catch (openErr) {
+                console.error("[clips-recorder] openExternal failed:", openErr);
+              }
             }
             throw err;
           }
 
-          try {
-            await openExternal(
-              `${params.serverUrl.replace(/\/+$/, "")}${viewUrl}`,
-            );
-          } catch (err) {
-            console.error("[clips-recorder] openExternal failed:", err);
+          if (!pageOpenedEarly) {
+            try {
+              await openExternal(
+                `${params.serverUrl.replace(/\/+$/, "")}${viewUrl}`,
+              );
+            } catch (err) {
+              console.error("[clips-recorder] openExternal failed:", err);
+            }
           }
           return {
             recordingId: uploadResult.recordingId,

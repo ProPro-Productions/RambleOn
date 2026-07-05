@@ -170,6 +170,8 @@ const messages = {
       "Connectez le stockage pour terminer l’enregistrement de ce clip.",
     uploadPausedSaved:
       "Téléchargement interrompu ; clip enregistré localement.",
+    savedLocallyHint:
+      "Le fichier local se trouve dans l'app Clips de la barre de menus : cliquez sur l'icône, puis utilisez le bouton dossier du clip enregistré pour l'ouvrir, ou Réessayer pour relancer l'envoi.",
     savingWentWrong:
       "Une erreur s'est produite lors de l'enregistrement de ce clip.",
     finishingClip: "Je termine votre clip…",
@@ -1325,7 +1327,7 @@ Tous les changements visibles par les utilisateurs de Clips sont documentés ici
     connectStorageToFinish:
       "Ouvrez pour connecter le stockage et terminer l’enregistrement.",
     retryFromClipsMenu:
-      "Réessayez depuis le menu Clips ; inutile de réenregistrer.",
+      "Réessayez depuis l'icône Clips de la barre de menus — la carte du clip enregistré propose aussi un bouton dossier ouvrant le fichier local.",
     removeFailedClip: "Supprimer ce clip en échec.",
     remove: "Supprimer",
     viewsCount: "{{count}} vues",

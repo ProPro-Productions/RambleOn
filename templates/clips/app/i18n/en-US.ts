@@ -167,6 +167,8 @@ const messages = {
     connectStorageImportLoom: "Connect storage to import this Loom.",
     connectStorageFinishClip: "Connect storage to finish saving this clip.",
     uploadPausedSaved: "Upload paused; clip saved locally.",
+    savedLocallyHint:
+      "The local file lives in the Clips menu-bar app: click the tray icon and use the folder button on the saved clip to open it, or Retry to upload again.",
     savingWentWrong: "Something went wrong while saving this clip.",
     finishingClip: "Finishing up your clip…",
     loomSourcePreserved:
@@ -1292,7 +1294,8 @@ All notable user-facing changes to Clips are documented here. Open it any time f
     savedLocally: "Saved locally",
     uploadFailed: "Upload failed",
     connectStorageToFinish: "Open to connect storage and finish saving.",
-    retryFromClipsMenu: "Retry from the Clips menu; no need to re-record.",
+    retryFromClipsMenu:
+      "Retry from the Clips menu-bar icon — the saved clip card there also has a folder button that opens the local file.",
     removeFailedClip: "Remove this failed clip.",
     remove: "Remove",
     viewsCount: "{{count}} views",

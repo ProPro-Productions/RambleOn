@@ -171,8 +171,10 @@ const messages = {
     connectStorageFinishClip:
       "Schließen Sie den Speicher an, um das Speichern dieses Clips abzuschließen.",
     uploadPausedSaved: "Hochladen angehalten; Clip lokal gespeichert.",
+    savedLocallyHint:
+      "Die lokale Datei liegt in der Clips-Menüleisten-App: Klicken Sie auf das Tray-Symbol und öffnen Sie sie über den Ordner-Button am gespeicherten Clip — oder laden Sie sie mit „Erneut versuchen“ hoch.",
     savingWentWrong: "Beim Speichern dieses Clips ist ein Fehler aufgetreten.",
-    finishingClip: "Ich beende deinen Clip …",
+    finishingClip: "Dein Clip wird fertiggestellt …",
     loomSourcePreserved:
       "Der Loom-Quelllink bleibt erhalten. Schließen Sie den Speicher Builder.io oder S3 an und Clips versucht erneut, seine eigene Kopie zu speichern.",
     clipDataPreserved:
@@ -183,7 +185,7 @@ const messages = {
     storageConnectedSavingLoom:
       "Speicher ist angeschlossen. Clips speichert jetzt seine eigene Kopie.",
     storageConnectedFinishing:
-      "Speicher ist angeschlossen. Clips beendet den Upload jetzt.",
+      "Speicher ist angeschlossen. Clips schließt den Upload jetzt ab.",
     connectStorageImportLoomTitle:
       "Verbinden Sie den Speicher, um Loom zu importieren",
     connectStorageFinishSaving:
@@ -261,7 +263,7 @@ const messages = {
     loomPreservedManage:
       "Der Loom-Quelllink bleibt erhalten. Verbinden Sie den Builder.io- oder S3-Speicher und versuchen Sie dann den Import erneut.",
     videoPreservedManage:
-      "Das Video bleibt erhalten. Schließen Sie den Speicher Builder.io oder S3 an und Clips beendet den Upload.",
+      "Das Video bleibt erhalten. Schließen Sie den Speicher Builder.io oder S3 an und Clips schließt den Upload ab.",
     creatorNeedsStorage:
       "Der Ersteller muss den Builder.io- oder S3-Speicher verbinden, bevor dieser Clip fertiggestellt werden kann.",
     signInStorage:
@@ -1330,7 +1332,7 @@ Alle sichtbaren Änderungen für Clips-Nutzer werden hier dokumentiert. Du kanns
     connectStorageToFinish:
       "Öffnen, um Speicher zu verbinden und das Speichern abzuschließen.",
     retryFromClipsMenu:
-      "Über das Clips-Menü erneut versuchen; keine neue Aufnahme nötig.",
+      "Über das Clips-Tray-Symbol erneut versuchen — die Karte des gespeicherten Clips hat dort auch einen Ordner-Button für die lokale Datei.",
     removeFailedClip: "Diesen fehlgeschlagenen Clip entfernen.",
     remove: "Entfernen",
     viewsCount: "{{count}} Aufrufe",

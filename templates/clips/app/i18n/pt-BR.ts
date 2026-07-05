@@ -170,6 +170,8 @@ const messages = {
     connectStorageFinishClip:
       "Conecte o armazenamento para terminar de salvar este clipe.",
     uploadPausedSaved: "Carregamento pausado; clipe salvo localmente.",
+    savedLocallyHint:
+      "O arquivo local fica no app do Clips na barra de menus: clique no ícone e use o botão de pasta do clipe salvo para abri-lo, ou Tentar novamente para enviar de novo.",
     savingWentWrong: "Algo deu errado ao salvar este clipe.",
     finishingClip: "Finalizando seu clipe…",
     loomSourcePreserved:
@@ -1320,7 +1322,7 @@ Todas as mudanças visíveis para usuários do Clips são documentadas aqui. Voc
     connectStorageToFinish:
       "Abra para conectar o armazenamento e concluir o salvamento.",
     retryFromClipsMenu:
-      "Tente novamente pelo menu do Clips; não precisa gravar de novo.",
+      "Tente novamente pelo ícone do Clips na barra de menus — o cartão do clipe salvo também tem um botão de pasta que abre o arquivo local.",
     removeFailedClip: "Remover este clip com falha.",
     remove: "Remover",
     viewsCount: "{{count}} visualizações",

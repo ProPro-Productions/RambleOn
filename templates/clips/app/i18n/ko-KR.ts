@@ -168,6 +168,8 @@ const messages = {
     connectStorageFinishClip: "이 클립 저장을 완료하려면 저장소를 연결하세요.",
     uploadPausedSaved:
       "업로드가 일시중지되었습니다. 클립이 로컬에 저장되었습니다.",
+    savedLocallyHint:
+      "로컬 파일은 메뉴 막대의 Clips 앱에 있습니다. 트레이 아이콘을 클릭한 뒤 저장된 클립의 폴더 버튼으로 열거나, 재시도로 다시 업로드하세요.",
     savingWentWrong: "이 클립을 저장하는 중에 문제가 발생했습니다.",
     finishingClip: "클립을 마무리하는 중…",
     loomSourcePreserved:
@@ -1295,7 +1297,7 @@ Clips의 모든 사용자 대상 변경 사항은 여기에 기록됩니다. 명
     uploadFailed: "업로드 실패",
     connectStorageToFinish: "열어서 저장소를 연결하고 저장을 완료하세요.",
     retryFromClipsMenu:
-      "Clips 메뉴에서 다시 시도하세요. 다시 녹화할 필요는 없습니다.",
+      "메뉴 막대의 Clips 아이콘에서 재시도하세요. 저장된 클립 카드에는 로컬 파일을 여는 폴더 버튼도 있습니다.",
     removeFailedClip: "실패한 클립 제거.",
     remove: "제거",
     viewsCount: "조회수 {{count}}회",

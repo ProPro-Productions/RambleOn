@@ -166,6 +166,8 @@ const messages = {
     connectStorageImportLoom: "قم بتوصيل وحدة التخزين لاستيراد Loom هذا.",
     connectStorageFinishClip: "قم بتوصيل وحدة التخزين لإنهاء حفظ هذا المقطع.",
     uploadPausedSaved: "تم إيقاف التحميل مؤقتًا؛ تم حفظ المقطع محليًا.",
+    savedLocallyHint:
+      "الملف المحلي موجود في تطبيق Clips بشريط القوائم: انقر على أيقونة الشريط واستخدم زر المجلد على المقطع المحفوظ لفتحه، أو أعد المحاولة لرفعه مجددًا.",
     savingWentWrong: "حدث خطأ ما أثناء حفظ هذا المقطع.",
     finishingClip: "جارٍ الانتهاء من المقطع الخاص بك...",
     loomSourcePreserved:
@@ -1300,7 +1302,8 @@ const messages = {
     savedLocally: "حُفظ محليًا",
     uploadFailed: "فشل الرفع",
     connectStorageToFinish: "افتح للاتصال بالتخزين وإنهاء الحفظ.",
-    retryFromClipsMenu: "أعد المحاولة من قائمة Clips؛ لا حاجة لإعادة التسجيل.",
+    retryFromClipsMenu:
+      "أعد المحاولة من أيقونة Clips في شريط القوائم — بطاقة المقطع المحفوظ هناك تتضمن أيضًا زر مجلد يفتح الملف المحلي.",
     removeFailedClip: "إزالة هذا المقطع الفاشل.",
     remove: "إزالة",
     viewsCount: "{{count}} مشاهدة",
