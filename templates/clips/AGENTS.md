@@ -60,6 +60,14 @@ Detailed media, meeting, dictation, editing, and sharing rules live in
   the UI-internal `save-recording-markers` batch action; the recording page's
   Activity tab shows the marker review strip. Read the `annotations` skill
   before deeper work.
+- Edit versions are how edited cuts come back to a recording's owner: AI or
+  human editors call `propose-edit-version` (a full alternative `editsJson`
+  set stored beside the original), the owner reviews with
+  `review-edit-version` (accept applies it and auto-archives the previous
+  edits as a `superseded` version; reject just flips status), and
+  `list-edit-versions` / `get-edit-version` read them. Never mutate
+  `recordings.edits_json` directly for non-trivial AI edits — propose a
+  version. Read the `edit-versions` skill before deeper work.
 - Use `view-screen` when the active recording, transcript segment, meeting, or
   share context is unclear.
 - Calendar-sourced meeting actions are shortcuts, but do not add raw
@@ -174,6 +182,7 @@ Read the relevant skill before deeper work:
 - `video-projects` for the full multi-track editor (compositions, imports,
   project persistence, editor asset uploads).
 - `annotations` for the unified timestamp/section/comment annotation layer.
+- `edit-versions` for proposed edit sets and the owner review/accept flow.
 - `video-sharing` for public links, passwords, expiry, embeds, and grants.
 - `meetings` and `dictate` for calendar-sourced meetings and dictation flows.
 - `actions`, `security`, `frontend-design`, and `shadcn-ui` as needed.
