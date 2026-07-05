@@ -998,6 +998,7 @@ All notable user-facing changes to Clips are documented here. Open it any time f
     noVideoYet: "No video available yet.",
   },
   transcriptEditor: {
+    createSection: "Create section",
     transcript: "Transcript",
     selectionRange: "· selection {{start}} → {{end}}",
     selectTextToTrim: "· select text to trim",

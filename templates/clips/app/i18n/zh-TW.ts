@@ -958,6 +958,7 @@ const messages = {
     noVideoYet: "還沒有可用影片。",
   },
   transcriptEditor: {
+    createSection: "建立片段區間",
     transcript: "轉錄",
     selectionRange: "· 已選取 {{start}} → {{end}}",
     selectTextToTrim: "· 選取文字進行修剪",

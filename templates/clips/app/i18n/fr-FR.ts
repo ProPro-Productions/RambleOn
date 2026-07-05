@@ -1022,6 +1022,7 @@ Tous les changements visibles par les utilisateurs de Clips sont documentés ici
     noVideoYet: "Aucune vidéo disponible pour le moment.",
   },
   transcriptEditor: {
+    createSection: "Créer une section",
     transcript: "Transcription",
     selectionRange: "· sélection {{start}} → {{end}}",
     selectTextToTrim: "· sélectionnez du texte à découper",

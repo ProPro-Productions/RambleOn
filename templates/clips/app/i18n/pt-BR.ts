@@ -1017,6 +1017,7 @@ Todas as mudanças visíveis para usuários do Clips são documentadas aqui. Voc
     noVideoYet: "Ainda não há vídeo disponível.",
   },
   transcriptEditor: {
+    createSection: "Criar seção",
     transcript: "Transcrição",
     selectionRange: "· seleção {{start}} → {{end}}",
     selectTextToTrim: "· selecione texto para recortar",

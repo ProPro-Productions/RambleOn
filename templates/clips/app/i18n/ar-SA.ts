@@ -999,6 +999,7 @@ const messages = {
     noVideoYet: "لا يوجد فيديو متاح بعد.",
   },
   transcriptEditor: {
+    createSection: "إنشاء مقطع",
     transcript: "النص",
     selectionRange: "· التحديد {{start}} → {{end}}",
     selectTextToTrim: "· حدد نصاً لقصه",

@@ -92,7 +92,11 @@ Two capture paths, same keys and persistence:
 
 The recording page's Activity tab shows a review strip of all markers (seek,
 delete), and both the player scrubber and the clips editor timeline render
-them as needles/bands.
+them as needles/bands. In the clips editor, the transcript side panel also
+renders point markers inline in the text at their spoken position, and
+selecting transcript text mirrors onto the timeline selection — "Create
+section" turns the selected range into a section annotation (Descript-style
+scenes).
 
 ## Timeline presentation (player)
 

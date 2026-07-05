@@ -516,15 +516,16 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
       />
 
       {/* Preview + transcript + chapters sidebar */}
-      <div
-        className={cn(
-          "grid flex-1 min-h-0 min-w-0 overflow-hidden",
-          chaptersOpen
-            ? "grid-cols-[minmax(0,1fr)_300px]"
-            : "grid-cols-[minmax(0,1fr)]",
-        )}
-      >
-        <div className="flex min-h-0 min-w-0 flex-col overflow-hidden">
+      <div className="flex flex-1 min-h-0 min-w-0 flex-col overflow-hidden">
+        {/* Top region: video | transcript panel | optional chapters */}
+        <div
+          className={cn(
+            "grid flex-1 min-h-0 min-w-0 overflow-hidden",
+            chaptersOpen
+              ? "grid-cols-[minmax(0,1fr)_minmax(280px,360px)_300px]"
+              : "grid-cols-[minmax(0,1fr)_minmax(280px,360px)]",
+          )}
+        >
           {/* Row 1: video */}
           <div className="flex min-h-0 min-w-0 flex-1 basis-[220px] items-center justify-center overflow-hidden bg-black p-4">
             {videoUrl ? (
@@ -544,140 +545,191 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
             )}
           </div>
 
-          {/* Row 2: transcript editor */}
-          <div className="h-40 shrink-0 border-t border-border">
+          {/* Transcript: Descript-like side panel, docked by default */}
+          <div className="flex min-h-0 min-w-0 flex-col border-l border-border">
             <TranscriptEditor
               segments={transcriptSegments}
               edits={edits}
               currentMs={playheadMs}
+              annotations={timelineAnnotations}
               onSeek={seek}
               onTrimRange={callTrim}
+              onSelectionChange={(range) => setSelectionRange(range)}
+              onCreateSection={(range) =>
+                addAnnotationMutation.mutate(
+                  {
+                    recordingId,
+                    startMs: Math.round(range.startMs),
+                    endMs: Math.round(range.endMs),
+                    kind: "generic",
+                  } as any,
+                  { onSettled: () => refetchAnnotations() } as any,
+                )
+              }
+              className="flex-1"
             />
           </div>
 
-          {/* Row 3: waveform + timeline */}
+          {/* Sidebar: chapters */}
+          {chaptersOpen ? (
+            <div className="flex min-h-0 min-w-0 flex-col border-l border-border">
+              <ChaptersEditor
+                recordingId={recordingId}
+                chapters={chapters}
+                currentMs={playheadMs}
+                onSeek={seek}
+                className="flex-1"
+              />
+            </div>
+          ) : null}
+        </div>
+
+        {/* Row 3: waveform + timeline (full width, below the top region) */}
+        <div
+          ref={containerRef}
+          className="relative min-w-0 shrink-0 space-y-1 overflow-hidden border-t border-border bg-card/30 p-2"
+        >
           <div
-            ref={containerRef}
-            className="relative min-w-0 shrink-0 space-y-1 overflow-hidden border-t border-border bg-card/30 p-2"
+            className="min-w-0 overflow-hidden rounded-sm border border-border/70"
+            style={{ width: viewportWidth }}
           >
             <div
-              className="min-w-0 overflow-hidden rounded-sm border border-border/70"
-              style={{ width: viewportWidth }}
+              style={{
+                transform: `translateX(${-scrollLeft}px)`,
+                width: totalWidth,
+              }}
+            >
+              <Timeline
+                width={totalWidth}
+                durationMs={durationMs}
+                playheadMs={playheadMs}
+                chapters={chapters}
+                annotations={timelineAnnotations}
+                excludedRanges={excludedRanges}
+                splitPoints={splitPoints}
+                scrollLeft={scrollLeft}
+                onSeek={seek}
+                onClickChapter={(c) => seek(c.startMs)}
+                onClickAnnotation={(a) => seek(a.startMs)}
+                onAddAnnotationAt={addMarkerAt}
+                getEditActions={(ms) =>
+                  buildTimelineActions({
+                    atMs: ms,
+                    durationMs,
+                    selectionRange,
+                    t,
+                    formatTime: formatMs,
+                    handlers: {
+                      splitAt: (atMs) =>
+                        splitMutation.mutate({ recordingId, atMs } as any),
+                      trimRange: (startMs, endMs) =>
+                        trimMutation.mutate({
+                          recordingId,
+                          startMs,
+                          endMs,
+                        } as any),
+                      addMarker: addMarkerAt,
+                    },
+                  })
+                }
+                onToggleAnnotationResolved={(a) =>
+                  updateAnnotationMutation.mutate(
+                    { id: a.id, resolved: !a.resolved } as any,
+                    { onSettled: () => refetchAnnotations() } as any,
+                  )
+                }
+                onChangeAnnotationKind={(a, kind) =>
+                  updateAnnotationMutation.mutate(
+                    { id: a.id, kind } as any,
+                    { onSettled: () => refetchAnnotations() } as any,
+                  )
+                }
+                onDeleteAnnotation={(a) =>
+                  deleteAnnotationMutation.mutate(
+                    { id: a.id } as any,
+                    { onSettled: () => refetchAnnotations() } as any,
+                  )
+                }
+              />
+            </div>
+          </div>
+
+          <div
+            className="relative min-w-0 overflow-hidden rounded-sm border border-border/70 bg-black/20"
+            style={{ width: viewportWidth, height: TRACK_STRIP_HEIGHT }}
+          >
+            {/* Filmstrip (frames) — click seeks, like the waveform. */}
+            <div
+              className="absolute inset-x-0 top-0 cursor-pointer overflow-hidden"
+              style={{ height: FILMSTRIP_HEIGHT }}
+              onClick={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                const x = e.clientX - rect.left + scrollLeft;
+                seek(
+                  Math.max(
+                    0,
+                    Math.min(durationMs, (x / totalWidth) * durationMs),
+                  ),
+                );
+              }}
             >
               <div
                 style={{
-                  transform: `translateX(${-scrollLeft}px)`,
                   width: totalWidth,
+                  transform: `translateX(${-scrollLeft}px)`,
                 }}
               >
-                <Timeline
-                  width={totalWidth}
-                  durationMs={durationMs}
-                  playheadMs={playheadMs}
-                  chapters={chapters}
-                  annotations={timelineAnnotations}
-                  excludedRanges={excludedRanges}
-                  splitPoints={splitPoints}
-                  scrollLeft={scrollLeft}
-                  onSeek={seek}
-                  onClickChapter={(c) => seek(c.startMs)}
-                  onClickAnnotation={(a) => seek(a.startMs)}
-                  onAddAnnotationAt={addMarkerAt}
-                  getEditActions={(ms) =>
-                    buildTimelineActions({
-                      atMs: ms,
-                      durationMs,
-                      selectionRange,
-                      t,
-                      formatTime: formatMs,
-                      handlers: {
-                        splitAt: (atMs) =>
-                          splitMutation.mutate({ recordingId, atMs } as any),
-                        trimRange: (startMs, endMs) =>
-                          trimMutation.mutate({
-                            recordingId,
-                            startMs,
-                            endMs,
-                          } as any),
-                        addMarker: addMarkerAt,
-                      },
-                    })
-                  }
-                  onToggleAnnotationResolved={(a) =>
-                    updateAnnotationMutation.mutate(
-                      { id: a.id, resolved: !a.resolved } as any,
-                      { onSettled: () => refetchAnnotations() } as any,
-                    )
-                  }
-                  onChangeAnnotationKind={(a, kind) =>
-                    updateAnnotationMutation.mutate(
-                      { id: a.id, kind } as any,
-                      { onSettled: () => refetchAnnotations() } as any,
-                    )
-                  }
-                  onDeleteAnnotation={(a) =>
-                    deleteAnnotationMutation.mutate(
-                      { id: a.id } as any,
-                      { onSettled: () => refetchAnnotations() } as any,
-                    )
-                  }
+                <canvas
+                  ref={filmstripCanvasRef}
+                  style={{ width: totalWidth, height: FILMSTRIP_HEIGHT }}
                 />
               </div>
             </div>
-
+            {/* Recording title, overlaid like the full editor's item label */}
+            <div className="pointer-events-none absolute left-1 top-1 z-10 max-w-[60%] truncate rounded bg-black/60 px-1.5 py-0.5 text-[11px] font-medium text-white">
+              {recording.title}
+            </div>
             <div
-              className="relative min-w-0 overflow-hidden rounded-sm border border-border/70 bg-black/20"
-              style={{ width: viewportWidth, height: TRACK_STRIP_HEIGHT }}
+              className="absolute inset-x-0 bottom-0"
+              style={{ height: WAVEFORM_HEIGHT }}
             >
-              {/* Filmstrip (frames) — click seeks, like the waveform. */}
+              <Waveform
+                peaks={peaks}
+                width={viewportWidth}
+                height={WAVEFORM_HEIGHT}
+                zoom={zoom}
+                playheadMs={playheadMs}
+                durationMs={durationMs}
+                excludedRanges={excludedRanges}
+                selectionRange={selectionRange}
+                activityRanges={transcriptSegments}
+                onSeek={seek}
+                onScroll={(s) => setScrollLeft(s)}
+              />
+            </div>
+            <div className="pointer-events-none absolute inset-0 overflow-hidden">
               <div
-                className="absolute inset-x-0 top-0 cursor-pointer overflow-hidden"
-                style={{ height: FILMSTRIP_HEIGHT }}
-                onClick={(e) => {
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  const x = e.clientX - rect.left + scrollLeft;
-                  seek(
-                    Math.max(
-                      0,
-                      Math.min(durationMs, (x / totalWidth) * durationMs),
-                    ),
-                  );
+                className="relative h-full"
+                style={{
+                  width: totalWidth,
+                  transform: `translateX(${-scrollLeft}px)`,
                 }}
               >
-                <div
-                  style={{
-                    width: totalWidth,
-                    transform: `translateX(${-scrollLeft}px)`,
-                  }}
-                >
-                  <canvas
-                    ref={filmstripCanvasRef}
-                    style={{ width: totalWidth, height: FILMSTRIP_HEIGHT }}
-                  />
-                </div>
-              </div>
-              {/* Recording title, overlaid like the full editor's item label */}
-              <div className="pointer-events-none absolute left-1 top-1 z-10 max-w-[60%] truncate rounded bg-black/60 px-1.5 py-0.5 text-[11px] font-medium text-white">
-                {recording.title}
-              </div>
-              <div
-                className="absolute inset-x-0 bottom-0"
-                style={{ height: WAVEFORM_HEIGHT }}
-              >
-                <Waveform
-                  peaks={peaks}
-                  width={viewportWidth}
-                  height={WAVEFORM_HEIGHT}
-                  zoom={zoom}
-                  playheadMs={playheadMs}
+                <TrimHandles
+                  width={totalWidth}
+                  height={TRACK_STRIP_HEIGHT}
+                  value={effectiveSelection}
+                  onChange={setSelectionRange}
                   durationMs={durationMs}
-                  excludedRanges={excludedRanges}
-                  selectionRange={selectionRange}
-                  activityRanges={transcriptSegments}
-                  onSeek={seek}
-                  onScroll={(s) => setScrollLeft(s)}
+                  scrollLeft={scrollLeft}
                 />
               </div>
+            </div>
+            {/* Timestamp markers are a first-class layer: stems run from
+                  under the ruler through the filmstrip and waveform,
+                  mirroring the full-editor treatment. Bounded to the strip
+                  so they never bleed into the footer. */}
+            {timelineAnnotations.length > 0 && (
               <div className="pointer-events-none absolute inset-0 overflow-hidden">
                 <div
                   className="relative h-full"
@@ -686,96 +738,59 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
                     transform: `translateX(${-scrollLeft}px)`,
                   }}
                 >
-                  <TrimHandles
-                    width={totalWidth}
-                    height={TRACK_STRIP_HEIGHT}
-                    value={effectiveSelection}
-                    onChange={setSelectionRange}
-                    durationMs={durationMs}
-                    scrollLeft={scrollLeft}
-                  />
+                  {timelineAnnotations
+                    .filter((a) => a.endMs !== null)
+                    .map((a) => {
+                      const left =
+                        (a.startMs / Math.max(durationMs, 1)) * totalWidth;
+                      const width = Math.max(
+                        1,
+                        ((Math.min(durationMs, a.endMs ?? 0) - a.startMs) /
+                          Math.max(durationMs, 1)) *
+                          totalWidth,
+                      );
+                      return (
+                        <div
+                          key={`stem-band-${a.id}`}
+                          className={cn(
+                            "absolute inset-y-0 opacity-10",
+                            annotationColorClass(a.kind),
+                            a.resolved && "opacity-[0.04]",
+                          )}
+                          style={{ left, width }}
+                        />
+                      );
+                    })}
+                  {timelineAnnotations.map((a) => (
+                    <div
+                      key={`stem-${a.id}`}
+                      className={cn(
+                        "absolute inset-y-0 w-0.5 -translate-x-1/2 opacity-60",
+                        annotationColorClass(a.kind),
+                        a.resolved && "opacity-20",
+                      )}
+                      style={{
+                        left:
+                          (a.startMs / Math.max(durationMs, 1)) * totalWidth,
+                      }}
+                    />
+                  ))}
                 </div>
               </div>
-              {/* Timestamp markers are a first-class layer: stems run from
-                  under the ruler through the filmstrip and waveform,
-                  mirroring the full-editor treatment. Bounded to the strip
-                  so they never bleed into the footer. */}
-              {timelineAnnotations.length > 0 && (
-                <div className="pointer-events-none absolute inset-0 overflow-hidden">
-                  <div
-                    className="relative h-full"
-                    style={{
-                      width: totalWidth,
-                      transform: `translateX(${-scrollLeft}px)`,
-                    }}
-                  >
-                    {timelineAnnotations
-                      .filter((a) => a.endMs !== null)
-                      .map((a) => {
-                        const left =
-                          (a.startMs / Math.max(durationMs, 1)) * totalWidth;
-                        const width = Math.max(
-                          1,
-                          ((Math.min(durationMs, a.endMs ?? 0) - a.startMs) /
-                            Math.max(durationMs, 1)) *
-                            totalWidth,
-                        );
-                        return (
-                          <div
-                            key={`stem-band-${a.id}`}
-                            className={cn(
-                              "absolute inset-y-0 opacity-10",
-                              annotationColorClass(a.kind),
-                              a.resolved && "opacity-[0.04]",
-                            )}
-                            style={{ left, width }}
-                          />
-                        );
-                      })}
-                    {timelineAnnotations.map((a) => (
-                      <div
-                        key={`stem-${a.id}`}
-                        className={cn(
-                          "absolute inset-y-0 w-0.5 -translate-x-1/2 opacity-60",
-                          annotationColorClass(a.kind),
-                          a.resolved && "opacity-20",
-                        )}
-                        style={{
-                          left:
-                            (a.startMs / Math.max(durationMs, 1)) * totalWidth,
-                        }}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
+            )}
+          </div>
 
-            <div className="flex justify-between gap-3 pt-1 font-mono text-[10px] text-muted-foreground">
-              <span>
-                {excludedRanges.length} trim(s) · {splitPoints.length} split(s)
-              </span>
-              <span className="truncate text-right">
-                speed {playbackSpeed}x · zoom {zoom}x · selection{" "}
-                {formatMs(effectiveSelection.startMs)}–
-                {formatMs(effectiveSelection.endMs)}
-              </span>
-            </div>
+          <div className="flex justify-between gap-3 pt-1 font-mono text-[10px] text-muted-foreground">
+            <span>
+              {excludedRanges.length} trim(s) · {splitPoints.length} split(s)
+            </span>
+            <span className="truncate text-right">
+              speed {playbackSpeed}x · zoom {zoom}x · selection{" "}
+              {formatMs(effectiveSelection.startMs)}–
+              {formatMs(effectiveSelection.endMs)}
+            </span>
           </div>
         </div>
-
-        {/* Sidebar: chapters */}
-        {chaptersOpen ? (
-          <div className="flex min-h-0 min-w-0 flex-col border-l border-border">
-            <ChaptersEditor
-              recordingId={recordingId}
-              chapters={chapters}
-              currentMs={playheadMs}
-              onSeek={seek}
-              className="flex-1"
-            />
-          </div>
-        ) : null}
       </div>
 
       <ThumbnailPicker

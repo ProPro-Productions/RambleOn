@@ -1028,6 +1028,7 @@ Alle sichtbaren Änderungen für Clips-Nutzer werden hier dokumentiert. Du kanns
     noVideoYet: "Noch kein Video verfügbar.",
   },
   transcriptEditor: {
+    createSection: "Abschnitt erstellen",
     transcript: "Transkript",
     selectionRange: "· Auswahl {{start}} → {{end}}",
     selectTextToTrim: "· Text zum Trimmen auswählen",
