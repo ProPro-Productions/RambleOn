@@ -78,6 +78,7 @@ import { Timeline } from "./timeline";
 import { buildTimelineActions } from "./timeline-actions";
 import { TranscriptEditor } from "./transcript-editor";
 import { TrimHandles } from "./trim-handles";
+import { useFilmstrip } from "./use-filmstrip";
 import { Waveform } from "./waveform";
 
 export interface EditorLayoutProps {
@@ -85,7 +86,11 @@ export interface EditorLayoutProps {
   className?: string;
 }
 
-const WAVEFORM_HEIGHT = 120;
+// Track strip anatomy (mirrors the full editor's item look): filmstrip of
+// frames on top, waveform underneath, ruler ABOVE the strip.
+const FILMSTRIP_HEIGHT = 54;
+const WAVEFORM_HEIGHT = 46;
+const TRACK_STRIP_HEIGHT = FILMSTRIP_HEIGHT + WAVEFORM_HEIGHT;
 
 function shouldProxyWaveformUrl(videoUrl: string): boolean {
   try {
@@ -261,6 +266,14 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
     viewportWidth,
     Math.floor(viewportWidth * Math.max(1, zoom)),
   );
+
+  const { canvasRef: filmstripCanvasRef } = useFilmstrip({
+    videoUrl,
+    durationMs,
+    totalWidth,
+    height: FILMSTRIP_HEIGHT,
+    enabled: Boolean(videoUrl) && durationMs > 0,
+  });
 
   useEffect(() => {
     setScrollLeft((current) =>
@@ -547,101 +560,6 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
             ref={containerRef}
             className="relative min-w-0 shrink-0 space-y-1 overflow-hidden border-t border-border bg-card/30 p-2"
           >
-            <div className="relative min-w-0 overflow-hidden">
-              <Waveform
-                peaks={peaks}
-                width={viewportWidth}
-                height={WAVEFORM_HEIGHT}
-                zoom={zoom}
-                playheadMs={playheadMs}
-                durationMs={durationMs}
-                excludedRanges={excludedRanges}
-                selectionRange={selectionRange}
-                activityRanges={transcriptSegments}
-                onSeek={seek}
-                onScroll={(s) => setScrollLeft(s)}
-              />
-              <div
-                className="pointer-events-none absolute inset-0 overflow-hidden"
-                style={{ height: WAVEFORM_HEIGHT }}
-              >
-                <div
-                  className="relative h-full"
-                  style={{
-                    width: totalWidth,
-                    transform: `translateX(${-scrollLeft}px)`,
-                  }}
-                >
-                  <TrimHandles
-                    width={totalWidth}
-                    height={WAVEFORM_HEIGHT}
-                    value={effectiveSelection}
-                    onChange={setSelectionRange}
-                    durationMs={durationMs}
-                    scrollLeft={scrollLeft}
-                  />
-                </div>
-              </div>
-              {/* Timestamp markers are a first-class layer: stems continue
-                  up through the waveform so, together with the ruler's
-                  interactive needles below, a marker reads as one line from
-                  the top of the content to the ruler — mirroring the
-                  full-editor treatment. Bounded to the waveform: they must
-                  not bleed into the chapters row or the footer. */}
-              {timelineAnnotations.length > 0 && (
-                <div
-                  className="pointer-events-none absolute inset-0 overflow-hidden"
-                  style={{ height: WAVEFORM_HEIGHT }}
-                >
-                  <div
-                    className="relative h-full"
-                    style={{
-                      width: totalWidth,
-                      transform: `translateX(${-scrollLeft}px)`,
-                    }}
-                  >
-                    {timelineAnnotations
-                      .filter((a) => a.endMs !== null)
-                      .map((a) => {
-                        const left =
-                          (a.startMs / Math.max(durationMs, 1)) * totalWidth;
-                        const width = Math.max(
-                          1,
-                          ((Math.min(durationMs, a.endMs ?? 0) - a.startMs) /
-                            Math.max(durationMs, 1)) *
-                            totalWidth,
-                        );
-                        return (
-                          <div
-                            key={`stem-band-${a.id}`}
-                            className={cn(
-                              "absolute inset-y-0 opacity-10",
-                              annotationColorClass(a.kind),
-                              a.resolved && "opacity-[0.04]",
-                            )}
-                            style={{ left, width }}
-                          />
-                        );
-                      })}
-                    {timelineAnnotations.map((a) => (
-                      <div
-                        key={`stem-${a.id}`}
-                        className={cn(
-                          "absolute inset-y-0 w-0.5 -translate-x-1/2 opacity-60",
-                          annotationColorClass(a.kind),
-                          a.resolved && "opacity-20",
-                        )}
-                        style={{
-                          left:
-                            (a.startMs / Math.max(durationMs, 1)) * totalWidth,
-                        }}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
             <div
               className="min-w-0 overflow-hidden rounded-sm border border-border/70"
               style={{ width: viewportWidth }}
@@ -705,6 +623,132 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
                   }
                 />
               </div>
+            </div>
+
+            <div
+              className="relative min-w-0 overflow-hidden rounded-sm border border-border/70 bg-black/20"
+              style={{ width: viewportWidth, height: TRACK_STRIP_HEIGHT }}
+            >
+              {/* Filmstrip (frames) — click seeks, like the waveform. */}
+              <div
+                className="absolute inset-x-0 top-0 cursor-pointer overflow-hidden"
+                style={{ height: FILMSTRIP_HEIGHT }}
+                onClick={(e) => {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const x = e.clientX - rect.left + scrollLeft;
+                  seek(
+                    Math.max(
+                      0,
+                      Math.min(durationMs, (x / totalWidth) * durationMs),
+                    ),
+                  );
+                }}
+              >
+                <div
+                  style={{
+                    width: totalWidth,
+                    transform: `translateX(${-scrollLeft}px)`,
+                  }}
+                >
+                  <canvas
+                    ref={filmstripCanvasRef}
+                    style={{ width: totalWidth, height: FILMSTRIP_HEIGHT }}
+                  />
+                </div>
+              </div>
+              {/* Recording title, overlaid like the full editor's item label */}
+              <div className="pointer-events-none absolute left-1 top-1 z-10 max-w-[60%] truncate rounded bg-black/60 px-1.5 py-0.5 text-[11px] font-medium text-white">
+                {recording.title}
+              </div>
+              <div
+                className="absolute inset-x-0 bottom-0"
+                style={{ height: WAVEFORM_HEIGHT }}
+              >
+                <Waveform
+                  peaks={peaks}
+                  width={viewportWidth}
+                  height={WAVEFORM_HEIGHT}
+                  zoom={zoom}
+                  playheadMs={playheadMs}
+                  durationMs={durationMs}
+                  excludedRanges={excludedRanges}
+                  selectionRange={selectionRange}
+                  activityRanges={transcriptSegments}
+                  onSeek={seek}
+                  onScroll={(s) => setScrollLeft(s)}
+                />
+              </div>
+              <div className="pointer-events-none absolute inset-0 overflow-hidden">
+                <div
+                  className="relative h-full"
+                  style={{
+                    width: totalWidth,
+                    transform: `translateX(${-scrollLeft}px)`,
+                  }}
+                >
+                  <TrimHandles
+                    width={totalWidth}
+                    height={TRACK_STRIP_HEIGHT}
+                    value={effectiveSelection}
+                    onChange={setSelectionRange}
+                    durationMs={durationMs}
+                    scrollLeft={scrollLeft}
+                  />
+                </div>
+              </div>
+              {/* Timestamp markers are a first-class layer: stems run from
+                  under the ruler through the filmstrip and waveform,
+                  mirroring the full-editor treatment. Bounded to the strip
+                  so they never bleed into the footer. */}
+              {timelineAnnotations.length > 0 && (
+                <div className="pointer-events-none absolute inset-0 overflow-hidden">
+                  <div
+                    className="relative h-full"
+                    style={{
+                      width: totalWidth,
+                      transform: `translateX(${-scrollLeft}px)`,
+                    }}
+                  >
+                    {timelineAnnotations
+                      .filter((a) => a.endMs !== null)
+                      .map((a) => {
+                        const left =
+                          (a.startMs / Math.max(durationMs, 1)) * totalWidth;
+                        const width = Math.max(
+                          1,
+                          ((Math.min(durationMs, a.endMs ?? 0) - a.startMs) /
+                            Math.max(durationMs, 1)) *
+                            totalWidth,
+                        );
+                        return (
+                          <div
+                            key={`stem-band-${a.id}`}
+                            className={cn(
+                              "absolute inset-y-0 opacity-10",
+                              annotationColorClass(a.kind),
+                              a.resolved && "opacity-[0.04]",
+                            )}
+                            style={{ left, width }}
+                          />
+                        );
+                      })}
+                    {timelineAnnotations.map((a) => (
+                      <div
+                        key={`stem-${a.id}`}
+                        className={cn(
+                          "absolute inset-y-0 w-0.5 -translate-x-1/2 opacity-60",
+                          annotationColorClass(a.kind),
+                          a.resolved && "opacity-20",
+                        )}
+                        style={{
+                          left:
+                            (a.startMs / Math.max(durationMs, 1)) * totalWidth,
+                        }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="flex justify-between gap-3 pt-1 font-mono text-[10px] text-muted-foreground">

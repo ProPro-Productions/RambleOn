@@ -252,10 +252,10 @@ export function Timeline({
                     setMenuTarget({ type: "annotation", annotation: a });
                   }}
                   className={cn(
-                    "absolute -top-1 flex -translate-x-1/2 flex-col items-center",
+                    "absolute top-0 flex -translate-x-1/2 flex-col items-center",
                     a.resolved && "opacity-40",
                   )}
-                  style={{ left: x, height: RULER_HEIGHT + 4 }}
+                  style={{ left: x, height: RULER_HEIGHT }}
                 >
                   <span
                     className={cn(
