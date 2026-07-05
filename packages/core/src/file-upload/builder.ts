@@ -11,7 +11,20 @@ const DEFAULT_BUILDER_APP_HOST = "https://builder.io";
 /** Files larger than this are routed through the GCS signed-URL flow. */
 const LARGE_FILE_THRESHOLD_BYTES = 30 * 1024 * 1024;
 const UPLOAD_TIMEOUT_MS = 120_000;
+// A flat 2-minute abort kills slow-but-progressing uploads: a 136MB screen
+// recording on a ~2 Mbit/s uplink legitimately needs >10 minutes and used to
+// die with "This operation was aborted" mid-PUT. Body-carrying requests scale
+// the window with payload size (budgeting ~0.1 MB/s) so the timeout only
+// catches genuinely hung connections; metadata calls keep the flat timeout.
+const UPLOAD_TIMEOUT_PER_MB_MS = 10_000;
+const UPLOAD_TIMEOUT_MAX_MS = 30 * 60_000;
 const SMALL_FILE_RETRY_DELAYS_MS = [600, 1800];
+
+function uploadTimeoutForBytes(byteLength: number): number {
+  const scaled =
+    UPLOAD_TIMEOUT_MS + (byteLength / (1024 * 1024)) * UPLOAD_TIMEOUT_PER_MB_MS;
+  return Math.min(UPLOAD_TIMEOUT_MAX_MS, Math.round(scaled));
+}
 
 function builderUploadHost(): string {
   return (
@@ -36,9 +49,13 @@ function shouldUseSignedUrlUpload(
   );
 }
 
-function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number = UPLOAD_TIMEOUT_MS,
+): Promise<Response> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   return fetch(url, { ...init, signal: controller.signal }).finally(() =>
     clearTimeout(timer),
   );
@@ -82,11 +99,15 @@ async function uploadLargeFileViaSignedUrl(
   // Step 2 — PUT bytes directly to GCS. Only requiredHeaders; no Authorization
   // (signed URL carries its own auth — extra signed headers break the signature).
   console.log(`[builder-upload] step 2 [${assetId}]: PUT ${mb}MB to GCS`);
-  const step2Res = await fetchWithTimeout(uploadUrl, {
-    method: "PUT",
-    headers: requiredHeaders,
-    body: makeBody(bytes, bareMimeType),
-  });
+  const step2Res = await fetchWithTimeout(
+    uploadUrl,
+    {
+      method: "PUT",
+      headers: requiredHeaders,
+      body: makeBody(bytes, bareMimeType),
+    },
+    uploadTimeoutForBytes(bytes.byteLength),
+  );
   await assertOk(step2Res, "GCS upload failed");
   console.log(
     `[builder-upload] step 2 ok [${assetId}]: GCS ${step2Res.status} etag=${step2Res.headers.get("etag") ?? "none"}`,
@@ -178,7 +199,11 @@ async function completeBuilderUpload(
 // Retry transient 5xx once with backoff. Builder.io's upload service
 // occasionally returns a bodyless 500 ("Internal Error") on the first
 // attempt — usually GCS write hiccups that succeed on retry.
-async function uploadSmallFile(url: URL, init: RequestInit): Promise<Response> {
+async function uploadSmallFile(
+  url: URL,
+  init: RequestInit,
+  byteLength: number,
+): Promise<Response> {
   let response: Response | null = null;
   let lastErrorBody = "";
 
@@ -189,7 +214,11 @@ async function uploadSmallFile(url: URL, init: RequestInit): Promise<Response> {
   ) {
     const retryDelay = SMALL_FILE_RETRY_DELAYS_MS[attempt]; // undefined on last attempt
     try {
-      response = await fetchWithTimeout(url.toString(), init);
+      response = await fetchWithTimeout(
+        url.toString(),
+        init,
+        uploadTimeoutForBytes(byteLength),
+      );
     } catch (err) {
       if (!retryDelay) throw err;
       await new Promise((r) => setTimeout(r, retryDelay));
@@ -263,14 +292,18 @@ export const builderFileUploadProvider: FileUploadProvider = {
       setSkipCompressionQueryParams(url);
     }
 
-    const response = await uploadSmallFile(url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${privateKey}`,
-        "Content-Type": bareMimeType,
+    const response = await uploadSmallFile(
+      url,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${privateKey}`,
+          "Content-Type": bareMimeType,
+        },
+        body: makeBody(bytes, bareMimeType),
       },
-      body: makeBody(bytes, bareMimeType),
-    });
+      bytes.byteLength,
+    );
 
     const json = (await response.json().catch(() => ({}))) as {
       url?: string;
