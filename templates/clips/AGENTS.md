@@ -183,6 +183,8 @@ Read the relevant skill before deeper work:
   project persistence, editor asset uploads).
 - `annotations` for the unified timestamp/section/comment annotation layer.
 - `edit-versions` for proposed edit sets and the owner review/accept flow.
+- `edit-synthesis` for turning markers + transcript into a phased edit plan
+  and a proposed version.
 - `video-sharing` for public links, passwords, expiry, embeds, and grants.
 - `meetings` and `dictate` for calendar-sourced meetings and dictation flows.
 - `actions`, `security`, `frontend-design`, and `shadcn-ui` as needed.
