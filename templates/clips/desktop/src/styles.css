@@ -1762,6 +1762,15 @@ body[data-clips-route="recording-pill"] #root {
   border-color: #93c5fd;
 }
 
+.pending-upload-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  /* Bound the stack when many clips are saved; each row keeps its actions. */
+  max-height: 168px;
+  overflow-y: auto;
+}
+
 .pending-upload-banner {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;

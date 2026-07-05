@@ -1653,6 +1653,13 @@ export function App() {
     const targetServerUrl = serverUrlForPendingUpload(upload, serverUrl);
     setRecError(null);
     setRetryingUploadId(upload.recordingId);
+    // Open the recording page NOW — same principle as the stop-time early
+    // open: a retry of a large clip can run for many minutes, and the page
+    // live-updates to ready (or shows the failure) while the popover stays
+    // open so remaining saved clips are still visible.
+    openExternal(`${targetServerUrl}/r/${upload.recordingId}`).catch((err) => {
+      console.error("[clips-tray] open failed:", err);
+    });
     try {
       const authToken = loadDesktopAuthToken(targetServerUrl);
       if (upload.kind === "native") {
@@ -1671,11 +1678,6 @@ export function App() {
       }
       await loadPendingUploads();
       await fetchRecent();
-      await openExternal(`${targetServerUrl}/r/${upload.recordingId}`);
-      getCurrentWindow()
-        .hide()
-        .catch(() => {});
-      emit("clips:popover-visible", false).catch(() => {});
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error("[clips-tray] retry saved upload failed:", err);
@@ -2607,36 +2609,70 @@ function PendingUploadBanner({
   onOpenFolder: (upload: PendingDesktopUpload) => void;
   onConnectStorage: (upload: PendingDesktopUpload) => void;
 }) {
-  const latest = uploads[0];
-  if (!latest) return null;
-
-  const retrying = retryingUploadId === latest.recordingId;
-  const storageSetupFailure = isStorageSetupFailureMessage(latest.lastError);
-  const exporting = exportingUploadId === latest.recordingId;
-  const canOpenFolder = latest.kind === "native" && !!latest.folderPath;
-  const canExport = latest.kind === "browser";
+  if (uploads.length === 0) return null;
+  // One row per saved clip: each has its own retry/folder/discard so the
+  // user acts on individual recordings instead of a single opaque "Retry"
+  // that only handled the latest one.
   const actionsDisabled =
     !!retryingUploadId || !!exportingUploadId || !!discardingUploadId;
-  const savedLabel =
-    uploads.length === 1
-      ? "1 Clip saved locally"
-      : `${uploads.length} Clips saved locally`;
-  const nativeCorrupt = latest.kind === "native" && !!latest.corrupt;
+  return (
+    <div className="pending-upload-stack">
+      {uploads.map((upload) => (
+        <PendingUploadRow
+          key={`${upload.kind}-${upload.recordingId}`}
+          upload={upload}
+          retrying={retryingUploadId === upload.recordingId}
+          exporting={exportingUploadId === upload.recordingId}
+          actionsDisabled={actionsDisabled}
+          onExport={onExport}
+          onRetry={onRetry}
+          onDiscard={onDiscard}
+          onOpenFolder={onOpenFolder}
+          onConnectStorage={onConnectStorage}
+        />
+      ))}
+    </div>
+  );
+}
+
+function PendingUploadRow({
+  upload,
+  retrying,
+  exporting,
+  actionsDisabled,
+  onExport,
+  onRetry,
+  onDiscard,
+  onOpenFolder,
+  onConnectStorage,
+}: {
+  upload: PendingDesktopUpload;
+  retrying: boolean;
+  exporting: boolean;
+  actionsDisabled: boolean;
+  onExport: (upload: PendingDesktopUpload) => void;
+  onRetry: (upload: PendingDesktopUpload) => void;
+  onDiscard: (upload: PendingDesktopUpload) => void;
+  onOpenFolder: (upload: PendingDesktopUpload) => void;
+  onConnectStorage: (upload: PendingDesktopUpload) => void;
+}) {
+  const storageSetupFailure = isStorageSetupFailureMessage(upload.lastError);
+  const canOpenFolder = upload.kind === "native" && !!upload.folderPath;
+  const canExport = upload.kind === "browser";
+  const nativeCorrupt = upload.kind === "native" && !!upload.corrupt;
   const title = nativeCorrupt
-    ? uploads.length === 1
-      ? "Clip could not be finalized"
-      : "Some Clips could not be finalized"
+    ? "Clip could not be finalized"
     : storageSetupFailure
-      ? uploads.length === 1
-        ? "Connect storage to upload saved Clip"
-        : "Connect storage to upload saved Clips"
-      : savedLabel;
+      ? "Connect storage to upload saved Clip"
+      : retrying
+        ? "Uploading saved Clip…"
+        : "Clip saved locally";
   const details = [
-    latest.savedAt ? `saved ${formatAgo(latest.savedAt)}` : null,
-    formatFileSize(latest.bytes),
+    upload.savedAt ? `saved ${formatAgo(upload.savedAt)}` : null,
+    formatFileSize(upload.bytes),
   ].filter(Boolean);
-  const errorText = latest.lastError
-    ? latest.lastError.replace(/\s+/g, " ").slice(0, 140)
+  const errorText = upload.lastError
+    ? upload.lastError.replace(/\s+/g, " ").slice(0, 140)
     : null;
 
   return (
@@ -2657,7 +2693,9 @@ function PendingUploadBanner({
             ? `${details.join(" · ")} · discard and record again`
             : storageSetupFailure
               ? `${details.join(" · ")} · your clip is safe locally`
-              : `${details.join(" · ")}${errorText ? ` · ${errorText}` : ""}`}
+              : retrying
+                ? `${details.join(" · ")} · progress opens in your browser`
+                : `${details.join(" · ")}${errorText ? ` · ${errorText}` : ""}`}
         </div>
         {storageSetupFailure ? (
           <Tooltip>
@@ -2682,7 +2720,7 @@ function PendingUploadBanner({
             type="button"
             className="pending-upload-folder"
             disabled={actionsDisabled}
-            onClick={() => onOpenFolder(latest)}
+            onClick={() => onOpenFolder(upload)}
             aria-label="Open saved local clip folder"
             title="Open saved local clip folder"
           >
@@ -2694,19 +2732,19 @@ function PendingUploadBanner({
             type="button"
             className="pending-upload-folder"
             disabled={actionsDisabled}
-            onClick={() => onExport(latest)}
+            onClick={() => onExport(upload)}
             aria-label="Download saved local clip"
             title="Download saved local clip"
           >
             <IconDownload size={14} stroke={2} />
           </button>
         ) : null}
-        {latest.kind === "native" && latest.corrupt ? (
+        {nativeCorrupt ? (
           <button
             type="button"
             className="pending-upload-discard"
             disabled={actionsDisabled}
-            onClick={() => onDiscard(latest)}
+            onClick={() => onDiscard(upload)}
             aria-label="Discard corrupted clip"
             title="This clip is corrupted and cannot be recovered. Discard it and record again."
           >
@@ -2719,7 +2757,7 @@ function PendingUploadBanner({
                 type="button"
                 className="pending-upload-connect"
                 disabled={actionsDisabled}
-                onClick={() => onConnectStorage(latest)}
+                onClick={() => onConnectStorage(upload)}
               >
                 <IconExternalLink size={14} stroke={2} />
                 Connect
@@ -2729,7 +2767,7 @@ function PendingUploadBanner({
               type="button"
               className="pending-upload-retry"
               disabled={actionsDisabled}
-              onClick={() => onRetry(latest)}
+              onClick={() => onRetry(upload)}
             >
               <IconRefresh size={14} stroke={2} />
               {retrying ? "Retrying" : "Retry"}
@@ -2738,7 +2776,7 @@ function PendingUploadBanner({
               type="button"
               className="pending-upload-discard"
               disabled={actionsDisabled}
-              onClick={() => onDiscard(latest)}
+              onClick={() => onDiscard(upload)}
               aria-label="Discard saved local clip"
               title="Discard saved local clip"
             >
