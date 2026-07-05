@@ -8,6 +8,10 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import {
+  annotationColorClass,
+  annotationKindLabel,
+} from "@/lib/annotation-kinds";
 import { cn } from "@/lib/utils";
 
 import { scrubberPositionFromClientX } from "./scrubber-position";
@@ -22,16 +26,6 @@ export interface ScrubberAnnotation {
   body: string | null;
   resolved: boolean;
   mayEdit: boolean;
-}
-
-const ANNOTATION_COLORS: Record<string, string> = {
-  "editor-note": "bg-blue-400",
-  "b-roll": "bg-purple-400",
-  retake: "bg-red-400",
-};
-
-function annotationColor(kind: string): string {
-  return ANNOTATION_COLORS[kind] ?? "bg-amber-400";
 }
 
 type ScrubberMenuTarget =
@@ -164,24 +158,9 @@ export function Scrubber(props: ScrubberProps) {
     onAddAnnotationAt || onToggleAnnotationResolved || onDeleteAnnotation,
   );
 
-  const annotationKindLabel = (kind: string) => {
-    switch (kind) {
-      case "editor-note":
-        return t("annotationsStrip.editorNote");
-      case "b-roll":
-        return t("annotationsStrip.bRoll");
-      case "retake":
-        return t("annotationsStrip.retake");
-      case "generic":
-        return t("annotationsStrip.marker");
-      default:
-        return kind;
-    }
-  };
-
   const annotationTooltip = (a: ScrubberAnnotation) => {
     const text = a.label ?? a.body ?? "";
-    const kindLabel = annotationKindLabel(a.kind);
+    const kindLabel = annotationKindLabel(a.kind, t);
     return text ? `${kindLabel}: ${text.slice(0, 100)}` : kindLabel;
   };
 
@@ -301,7 +280,7 @@ export function Scrubber(props: ScrubberProps) {
                 data-annotation-marker
                 className={cn(
                   "absolute inset-y-0 rounded-sm opacity-40",
-                  annotationColor(a.kind),
+                  annotationColorClass(a.kind),
                   a.resolved && "opacity-15",
                 )}
                 style={{
@@ -346,10 +325,10 @@ export function Scrubber(props: ScrubberProps) {
             <span
               className={cn(
                 "h-2 w-2 rounded-full border border-black/40 transition-transform hover:scale-125",
-                annotationColor(a.kind),
+                annotationColorClass(a.kind),
               )}
             />
-            <span className={cn("h-2.5 w-0.5", annotationColor(a.kind))} />
+            <span className={cn("h-2.5 w-0.5", annotationColorClass(a.kind))} />
           </button>
         ))}
 

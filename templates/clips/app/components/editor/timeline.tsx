@@ -5,6 +5,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { annotationColorClass } from "@/lib/annotation-kinds";
 import { formatMs } from "@/lib/timestamp-mapping";
 import { cn } from "@/lib/utils";
 
@@ -21,17 +22,6 @@ export interface TimelineAnnotation {
   label: string | null;
   body: string | null;
   resolved: boolean;
-}
-
-// Same kind → color language as the player scrubber (scrubber.tsx).
-const ANNOTATION_COLORS: Record<string, string> = {
-  "editor-note": "bg-blue-400",
-  "b-roll": "bg-purple-400",
-  retake: "bg-red-400",
-};
-
-function annotationColor(kind: string): string {
-  return ANNOTATION_COLORS[kind] ?? "bg-amber-400";
 }
 
 export interface TimelineProps {
@@ -173,7 +163,7 @@ export function Timeline({
                 key={`ann-section-${a.id}`}
                 className={cn(
                   "absolute top-0 h-full pointer-events-none opacity-30",
-                  annotationColor(a.kind),
+                  annotationColorClass(a.kind),
                   a.resolved && "opacity-10",
                 )}
                 style={{ left: xStart, width: Math.max(1, xEnd - xStart) }}
@@ -203,11 +193,11 @@ export function Timeline({
                   <span
                     className={cn(
                       "h-2 w-2 rounded-full border border-black/30 transition-transform hover:scale-125",
-                      annotationColor(a.kind),
+                      annotationColorClass(a.kind),
                     )}
                   />
                   <span
-                    className={cn("w-0.5 flex-1", annotationColor(a.kind))}
+                    className={cn("w-0.5 flex-1", annotationColorClass(a.kind))}
                   />
                 </button>
               </TooltipTrigger>

@@ -1,15 +1,13 @@
 import { useActionMutation, useT } from "@agent-native/core/client";
 import { IconBookmark, IconX } from "@tabler/icons-react";
 
+import {
+  annotationChipClass,
+  annotationKindLabel,
+} from "@/lib/annotation-kinds";
 import { formatTimecode } from "@/lib/timecodes";
 
 import { useRecordingAnnotations } from "./use-recording-annotations";
-
-const KIND_STYLES: Record<string, string> = {
-  "editor-note": "bg-blue-500/15 text-blue-600 dark:text-blue-400",
-  "b-roll": "bg-purple-500/15 text-purple-600 dark:text-purple-400",
-  retake: "bg-red-500/15 text-red-600 dark:text-red-400",
-};
 
 /**
  * Compact review strip for a recording's annotations — the markers dropped
@@ -33,21 +31,6 @@ export function AnnotationsStrip({
   const deleteAnnotation = useActionMutation("delete-annotation" as any);
 
   if (annotations.length === 0) return null;
-
-  const kindLabel = (kind: string) => {
-    switch (kind) {
-      case "editor-note":
-        return t("annotationsStrip.editorNote");
-      case "b-roll":
-        return t("annotationsStrip.bRoll");
-      case "retake":
-        return t("annotationsStrip.retake");
-      case "generic":
-        return t("annotationsStrip.marker");
-      default:
-        return kind;
-    }
-  };
 
   return (
     <div className="mb-3 shrink-0 rounded-lg border bg-muted/30 p-2">
@@ -84,10 +67,10 @@ export function AnnotationsStrip({
               <span
                 className={
                   "shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium " +
-                  (KIND_STYLES[a.kind] ?? "bg-muted text-muted-foreground")
+                  annotationChipClass(a.kind)
                 }
               >
-                {kindLabel(a.kind)}
+                {annotationKindLabel(a.kind, t)}
               </span>
               <span className="min-w-0 flex-1 truncate text-foreground/80">
                 {a.label ?? a.body ?? ""}
