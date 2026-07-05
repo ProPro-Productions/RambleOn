@@ -547,59 +547,6 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
             ref={containerRef}
             className="relative min-w-0 shrink-0 space-y-1 overflow-hidden border-t border-border bg-card/30 p-2"
           >
-            {/* Timestamp markers are a first-class layer: their stems run
-                top-to-bottom across the waveform AND the ruler (the ruler
-                keeps the interactive needle heads/menus). Mirrors the
-                full-editor treatment so both timelines read the same. */}
-            {timelineAnnotations.length > 0 && (
-              <div className="pointer-events-none absolute inset-x-2 bottom-2 top-2 z-10 overflow-hidden">
-                <div
-                  className="relative h-full"
-                  style={{
-                    width: totalWidth,
-                    transform: `translateX(${-scrollLeft}px)`,
-                  }}
-                >
-                  {timelineAnnotations
-                    .filter((a) => a.endMs !== null)
-                    .map((a) => {
-                      const left =
-                        (a.startMs / Math.max(durationMs, 1)) * totalWidth;
-                      const width = Math.max(
-                        1,
-                        ((Math.min(durationMs, a.endMs ?? 0) - a.startMs) /
-                          Math.max(durationMs, 1)) *
-                          totalWidth,
-                      );
-                      return (
-                        <div
-                          key={`stem-band-${a.id}`}
-                          className={cn(
-                            "absolute inset-y-0 opacity-10",
-                            annotationColorClass(a.kind),
-                            a.resolved && "opacity-[0.04]",
-                          )}
-                          style={{ left, width }}
-                        />
-                      );
-                    })}
-                  {timelineAnnotations.map((a) => (
-                    <div
-                      key={`stem-${a.id}`}
-                      className={cn(
-                        "absolute inset-y-0 w-0.5 -translate-x-1/2 opacity-60",
-                        annotationColorClass(a.kind),
-                        a.resolved && "opacity-20",
-                      )}
-                      style={{
-                        left:
-                          (a.startMs / Math.max(durationMs, 1)) * totalWidth,
-                      }}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
             <div className="relative min-w-0 overflow-hidden">
               <Waveform
                 peaks={peaks}
@@ -635,6 +582,64 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
                   />
                 </div>
               </div>
+              {/* Timestamp markers are a first-class layer: stems continue
+                  up through the waveform so, together with the ruler's
+                  interactive needles below, a marker reads as one line from
+                  the top of the content to the ruler — mirroring the
+                  full-editor treatment. Bounded to the waveform: they must
+                  not bleed into the chapters row or the footer. */}
+              {timelineAnnotations.length > 0 && (
+                <div
+                  className="pointer-events-none absolute inset-0 overflow-hidden"
+                  style={{ height: WAVEFORM_HEIGHT }}
+                >
+                  <div
+                    className="relative h-full"
+                    style={{
+                      width: totalWidth,
+                      transform: `translateX(${-scrollLeft}px)`,
+                    }}
+                  >
+                    {timelineAnnotations
+                      .filter((a) => a.endMs !== null)
+                      .map((a) => {
+                        const left =
+                          (a.startMs / Math.max(durationMs, 1)) * totalWidth;
+                        const width = Math.max(
+                          1,
+                          ((Math.min(durationMs, a.endMs ?? 0) - a.startMs) /
+                            Math.max(durationMs, 1)) *
+                            totalWidth,
+                        );
+                        return (
+                          <div
+                            key={`stem-band-${a.id}`}
+                            className={cn(
+                              "absolute inset-y-0 opacity-10",
+                              annotationColorClass(a.kind),
+                              a.resolved && "opacity-[0.04]",
+                            )}
+                            style={{ left, width }}
+                          />
+                        );
+                      })}
+                    {timelineAnnotations.map((a) => (
+                      <div
+                        key={`stem-${a.id}`}
+                        className={cn(
+                          "absolute inset-y-0 w-0.5 -translate-x-1/2 opacity-60",
+                          annotationColorClass(a.kind),
+                          a.resolved && "opacity-20",
+                        )}
+                        style={{
+                          left:
+                            (a.startMs / Math.max(durationMs, 1)) * totalWidth,
+                        }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div
