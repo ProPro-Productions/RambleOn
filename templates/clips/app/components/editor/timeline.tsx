@@ -1,5 +1,13 @@
-import { useMemo } from "react";
+import { useT } from "@agent-native/core/client";
+import { useMemo, useState } from "react";
 
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import {
   Tooltip,
   TooltipContent,
@@ -37,8 +45,16 @@ export interface TimelineProps {
   onSeek?: (originalMs: number) => void;
   onClickChapter?: (chapter: TimelineChapter) => void;
   onClickAnnotation?: (annotation: TimelineAnnotation) => void;
+  /** Enables the right-click menu (same actions as the player scrubber). */
+  onAddAnnotationAt?: (ms: number) => void;
+  onToggleAnnotationResolved?: (annotation: TimelineAnnotation) => void;
+  onDeleteAnnotation?: (annotation: TimelineAnnotation) => void;
   className?: string;
 }
+
+type TimelineMenuTarget =
+  | { type: "ruler"; ms: number }
+  | { type: "annotation"; annotation: TimelineAnnotation };
 
 const RULER_HEIGHT = 26;
 
@@ -63,8 +79,16 @@ export function Timeline({
   onSeek,
   onClickChapter,
   onClickAnnotation,
+  onAddAnnotationAt,
+  onToggleAnnotationResolved,
+  onDeleteAnnotation,
   className,
 }: TimelineProps) {
+  const t = useT();
+  const [menuTarget, setMenuTarget] = useState<TimelineMenuTarget | null>(null);
+  const menuEnabled = Boolean(
+    onAddAnnotationAt || onToggleAnnotationResolved || onDeleteAnnotation,
+  );
   const ticks = useMemo(() => {
     if (durationMs <= 0) return [];
     // Target ~1 tick per 100px at the current zoom, rounded to a human interval.
@@ -94,13 +118,27 @@ export function Timeline({
 
   const playheadX = (playheadMs / Math.max(durationMs, 1)) * width;
 
-  return (
+  const body = (
     <div className={cn("relative", className)}>
       {/* Ruler */}
       <div
         className="relative border-b border-border bg-card/40 cursor-pointer"
         style={{ width, height: RULER_HEIGHT }}
         onClick={handleSeek}
+        onContextMenu={(e) => {
+          if (!menuEnabled) return;
+          // Needles set their own target; the empty ruler is the fallback.
+          if ((e.target as HTMLElement).closest("[data-annotation-marker]")) {
+            return;
+          }
+          const rect = e.currentTarget.getBoundingClientRect();
+          const x = e.clientX - rect.left + scrollLeft;
+          const ms = Math.max(
+            0,
+            Math.min(durationMs, (x / width) * durationMs),
+          );
+          setMenuTarget({ type: "ruler", ms });
+        }}
       >
         {ticks.map((t) => {
           const x = (t.ms / Math.max(durationMs, 1)) * width;
@@ -180,10 +218,14 @@ export function Timeline({
               <TooltipTrigger asChild>
                 <button
                   type="button"
+                  data-annotation-marker
                   onClick={(e) => {
                     e.stopPropagation();
                     onClickAnnotation?.(a);
                   }}
+                  onContextMenu={() =>
+                    setMenuTarget({ type: "annotation", annotation: a })
+                  }
                   className={cn(
                     "absolute -top-1 flex -translate-x-1/2 flex-col items-center",
                     a.resolved && "opacity-40",
@@ -251,5 +293,57 @@ export function Timeline({
         </div>
       )}
     </div>
+  );
+
+  if (!menuEnabled) return body;
+
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>{body}</ContextMenuTrigger>
+      <ContextMenuContent>
+        {menuTarget?.type === "ruler" && onAddAnnotationAt ? (
+          <ContextMenuItem
+            onSelect={() => onAddAnnotationAt(Math.round(menuTarget.ms))}
+          >
+            {t("annotationsStrip.addMarkerAt", {
+              time: formatMs(menuTarget.ms),
+            })}
+          </ContextMenuItem>
+        ) : null}
+        {menuTarget?.type === "annotation" ? (
+          <>
+            <ContextMenuItem
+              onSelect={() => onSeek?.(menuTarget.annotation.startMs)}
+            >
+              {t("annotationsStrip.jumpTo", {
+                time: formatMs(menuTarget.annotation.startMs),
+              })}
+            </ContextMenuItem>
+            {onToggleAnnotationResolved || onDeleteAnnotation ? (
+              <ContextMenuSeparator />
+            ) : null}
+            {onToggleAnnotationResolved ? (
+              <ContextMenuItem
+                onSelect={() =>
+                  onToggleAnnotationResolved(menuTarget.annotation)
+                }
+              >
+                {menuTarget.annotation.resolved
+                  ? t("annotationsStrip.reopen")
+                  : t("annotationsStrip.resolve")}
+              </ContextMenuItem>
+            ) : null}
+            {onDeleteAnnotation ? (
+              <ContextMenuItem
+                className="text-destructive focus:text-destructive"
+                onSelect={() => onDeleteAnnotation(menuTarget.annotation)}
+              >
+                {t("annotationsStrip.delete")}
+              </ContextMenuItem>
+            ) : null}
+          </>
+        ) : null}
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
