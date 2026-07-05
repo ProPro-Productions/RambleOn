@@ -2631,12 +2631,13 @@ body[data-clips-route="recording-pill"] #root {
   cursor: grabbing;
 }
 
-/* Fixed-height home for Stop / time / Pause. Its height equals the collapsed
-   pill's content box (150px − 20px vertical padding = 130px), so the trio is
-   centered exactly as before when collapsed and never shifts when the pill
-   grows on hover — the extra height flows into .toolbar-v-hover-actions below. */
+/* Fixed-height home for Stop / time / Pause / marker. Its height equals the
+   collapsed pill's content box (190px − 20px vertical padding = 170px), so the
+   controls are centered exactly as before when collapsed and never shift when
+   the pill grows on hover — the extra height flows into
+   .toolbar-v-hover-actions below. */
 .toolbar-v-primary {
-  flex: 0 0 130px;
+  flex: 0 0 170px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2719,6 +2720,52 @@ body[data-clips-route="recording-pill"] #root {
 .toolbar-v-pause:hover {
   background: rgba(255, 255, 255, 0.1);
   color: white;
+}
+
+.toolbar-v-marker {
+  position: relative;
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  min-height: 30px;
+  flex: 0 0 30px;
+  aspect-ratio: 1 / 1;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.9);
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.toolbar-v-marker:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+}
+
+.toolbar-v-marker-flash {
+  background: #fbbf24;
+  color: #111;
+}
+
+.toolbar-v-marker-count {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: #fbbf24;
+  color: #111;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 15px;
+  text-align: center;
 }
 
 .toolbar-v-hover-actions {

@@ -13,17 +13,40 @@ export interface TimelineChapter {
   title: string;
 }
 
+export interface TimelineAnnotation {
+  id: string;
+  startMs: number;
+  endMs: number | null;
+  kind: string;
+  label: string | null;
+  body: string | null;
+  resolved: boolean;
+}
+
+// Same kind → color language as the player scrubber (scrubber.tsx).
+const ANNOTATION_COLORS: Record<string, string> = {
+  "editor-note": "bg-blue-400",
+  "b-roll": "bg-purple-400",
+  retake: "bg-red-400",
+};
+
+function annotationColor(kind: string): string {
+  return ANNOTATION_COLORS[kind] ?? "bg-amber-400";
+}
+
 export interface TimelineProps {
   width: number;
   durationMs: number;
   /** Current playhead in original ms. */
   playheadMs: number;
   chapters?: TimelineChapter[];
+  annotations?: TimelineAnnotation[];
   excludedRanges?: Array<{ startMs: number; endMs: number }>;
   splitPoints?: number[];
   scrollLeft?: number;
   onSeek?: (originalMs: number) => void;
   onClickChapter?: (chapter: TimelineChapter) => void;
+  onClickAnnotation?: (annotation: TimelineAnnotation) => void;
   className?: string;
 }
 
@@ -43,11 +66,13 @@ export function Timeline({
   durationMs,
   playheadMs,
   chapters = [],
+  annotations = [],
   excludedRanges = [],
   splitPoints = [],
   scrollLeft = 0,
   onSeek,
   onClickChapter,
+  onClickAnnotation,
   className,
 }: TimelineProps) {
   const ticks = useMemo(() => {
@@ -132,6 +157,64 @@ export function Timeline({
                   "repeating-linear-gradient(-45deg, rgba(15,23,42,0.55) 0 4px, rgba(15,23,42,0.25) 4px 8px)",
               }}
             />
+          );
+        })}
+
+        {/* Annotation sections (range bands) */}
+        {annotations
+          .filter((a) => a.endMs !== null)
+          .map((a) => {
+            const xStart = (a.startMs / Math.max(durationMs, 1)) * width;
+            const xEnd =
+              (Math.min(durationMs, a.endMs ?? 0) / Math.max(durationMs, 1)) *
+              width;
+            return (
+              <div
+                key={`ann-section-${a.id}`}
+                className={cn(
+                  "absolute top-0 h-full pointer-events-none opacity-30",
+                  annotationColor(a.kind),
+                  a.resolved && "opacity-10",
+                )}
+                style={{ left: xStart, width: Math.max(1, xEnd - xStart) }}
+              />
+            );
+          })}
+
+        {/* Annotation needles — same language as the player scrubber */}
+        {annotations.map((a) => {
+          const x = (a.startMs / Math.max(durationMs, 1)) * width;
+          const text = a.label ?? a.body ?? "";
+          return (
+            <Tooltip key={`ann-${a.id}`}>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onClickAnnotation?.(a);
+                  }}
+                  className={cn(
+                    "absolute -top-1 flex -translate-x-1/2 flex-col items-center",
+                    a.resolved && "opacity-40",
+                  )}
+                  style={{ left: x, height: RULER_HEIGHT + 4 }}
+                >
+                  <span
+                    className={cn(
+                      "h-2 w-2 rounded-full border border-black/30 transition-transform hover:scale-125",
+                      annotationColor(a.kind),
+                    )}
+                  />
+                  <span
+                    className={cn("w-0.5 flex-1", annotationColor(a.kind))}
+                  />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {`${a.kind}${text ? `: ${text.slice(0, 80)}` : ""} · ${formatMs(a.startMs)}`}
+              </TooltipContent>
+            </Tooltip>
           );
         })}
 

@@ -54,6 +54,7 @@ async function writeAppStateClient(key: string, value: unknown): Promise<void> {
   }
 }
 
+import { useRecordingAnnotations } from "@/components/player/use-recording-annotations";
 import {
   parsePlaybackSpeed,
   readPlaybackSpeedPreference,
@@ -137,6 +138,8 @@ function getWaveformMediaUrl({
 export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
   const t = useT();
   // --- server state -------------------------------------------------------
+  const { annotations: editorAnnotations } =
+    useRecordingAnnotations(recordingId);
   const playerDataQuery = useActionQuery("get-recording-player-data", {
     recordingId,
   });
@@ -564,11 +567,23 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
                   durationMs={durationMs}
                   playheadMs={playheadMs}
                   chapters={chapters}
+                  annotations={editorAnnotations
+                    .filter((a) => a.startMs !== null)
+                    .map((a) => ({
+                      id: a.id,
+                      startMs: a.startMs ?? 0,
+                      endMs: a.endMs,
+                      kind: a.kind,
+                      label: a.label,
+                      body: a.body,
+                      resolved: a.resolved,
+                    }))}
                   excludedRanges={excludedRanges}
                   splitPoints={splitPoints}
                   scrollLeft={scrollLeft}
                   onSeek={seek}
                   onClickChapter={(c) => seek(c.startMs)}
+                  onClickAnnotation={(a) => seek(a.startMs)}
                 />
               </div>
             </div>

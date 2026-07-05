@@ -3,6 +3,7 @@ import {
   IconLoader2,
   IconPlayerPauseFilled,
   IconPlayerPlayFilled,
+  IconBookmarkFilled,
   IconRefresh,
   IconTrash,
 } from "@tabler/icons-react";
@@ -14,11 +15,11 @@ import type { FocusEvent } from "react";
 
 const OVERLAY_SHADOW_GUTTER = 18;
 const TOOLBAR_CONTENT_WIDTH = 72;
-const TOOLBAR_COLLAPSED_HEIGHT = 150;
-// Collapsed content box (150 − 20 padding = 130) holds the centered primary
-// zone; the expanded height must fit that fixed 130 zone + the 88px hover
+const TOOLBAR_COLLAPSED_HEIGHT = 190;
+// Collapsed content box (190 − 20 padding = 170) holds the centered primary
+// zone; the expanded height must fit that fixed 170 zone + the 88px hover
 // actions (+2 margin) + 20 vertical padding so nothing clips on hover.
-const TOOLBAR_EXPANDED_HEIGHT = 240;
+const TOOLBAR_EXPANDED_HEIGHT = 280;
 const TOOLBAR_WINDOW_WIDTH = TOOLBAR_CONTENT_WIDTH + OVERLAY_SHADOW_GUTTER * 2;
 const TOOLBAR_COLLAPSED_WINDOW_HEIGHT =
   TOOLBAR_COLLAPSED_HEIGHT + OVERLAY_SHADOW_GUTTER * 2;
@@ -61,6 +62,9 @@ export function Toolbar() {
   const [diskSpaceLevel, setDiskSpaceLevel] = useState<
     "ok" | "warning" | "critical"
   >("ok");
+  const [markerCount, setMarkerCount] = useState(0);
+  const [markerFlash, setMarkerFlash] = useState(false);
+  const markerFlashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fallbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const expandedRef = useRef(false);
 
@@ -103,7 +107,16 @@ export function Toolbar() {
           setDiskSpaceLevel("ok");
           setPaused(false);
           setElapsed(0);
+          setMarkerCount(0);
         }
+      }),
+    );
+    trackListen(
+      listen<{ count: number }>("clips:marker-added", (ev) => {
+        setMarkerCount(ev.payload.count ?? 0);
+        setMarkerFlash(true);
+        if (markerFlashTimer.current) clearTimeout(markerFlashTimer.current);
+        markerFlashTimer.current = setTimeout(() => setMarkerFlash(false), 700);
       }),
     );
     trackListen(
@@ -136,6 +149,10 @@ export function Toolbar() {
       if (fallbackTimer.current) {
         clearTimeout(fallbackTimer.current);
         fallbackTimer.current = null;
+      }
+      if (markerFlashTimer.current) {
+        clearTimeout(markerFlashTimer.current);
+        markerFlashTimer.current = null;
       }
     };
   }, []);
@@ -317,6 +334,26 @@ export function Toolbar() {
             <IconPlayerPlayFilled size={18} />
           ) : (
             <IconPlayerPauseFilled size={18} />
+          )}
+        </button>
+        <button
+          className={`toolbar-v-marker ${markerFlash ? "toolbar-v-marker-flash" : ""}`}
+          onClick={() => {
+            if (!enabled || pendingAction) return;
+            emit("clips:marker", { kind: "generic" }).catch(() => {});
+          }}
+          disabled={!enabled || !!pendingAction}
+          aria-label="Add timestamp marker"
+          title={
+            enabled
+              ? "Add timestamp marker (⌥⇧M · note ⌥⇧E · b-roll ⌥⇧B · retake ⌥⇧N)"
+              : "Recording not started yet"
+          }
+          data-no-drag
+        >
+          <IconBookmarkFilled size={14} />
+          {markerCount > 0 && (
+            <span className="toolbar-v-marker-count">{markerCount}</span>
           )}
         </button>
       </div>

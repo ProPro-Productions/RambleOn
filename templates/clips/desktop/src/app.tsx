@@ -66,6 +66,12 @@ import {
   type RecorderStopResult,
 } from "./lib/recorder";
 import {
+  discardCapturedMarkers,
+  saveCapturedMarkers,
+  startMarkerCapture,
+  takeCapturedMarkers,
+} from "./lib/recording-markers";
+import {
   loadBool,
   loadString,
   loadStringAllowEmpty,
@@ -1825,6 +1831,10 @@ export function App() {
     // mid-setup — so the countdown and toolbar render behind a hidden
     // popover and the user sees nothing happen.
     invoke("set_recording_state", { active: true }).catch(() => {});
+    // Arm capture-time marker buffering: Rust registers the global
+    // marker hotkeys off the same recording-state flag, and this listens
+    // for the clips:marker presses they emit.
+    startMarkerCapture().catch(() => {});
 
     // Hand the live camera stream to the recorder so it doesn't
     // re-acquire the camera (which would trigger WebKit's
@@ -1944,6 +1954,7 @@ export function App() {
         bubbleStreamTransferredToRecorder.current = false;
         recordingFlowGateRef.current = false;
         setRecordingFlowActive(false);
+        discardCapturedMarkers();
         try {
           await invoke("set_recording_state", { active: false });
         } catch {
@@ -2051,12 +2062,21 @@ export function App() {
           stopResult = await recorder.stop();
           if (cancelled) return;
           if (stopResult.localOnly) {
+            discardCapturedMarkers();
             setLocalRecordingNotice({
               folderPath: stopResult.localFolder,
               files: stopResult.localFiles ?? [],
             });
           } else {
             setLastRecordingId(stopResult.recordingId);
+            // Persist hotkey markers in one batch — best-effort, never
+            // blocks the recording hand-off.
+            void saveCapturedMarkers({
+              serverUrl,
+              recordingId: stopResult.recordingId,
+              markers: takeCapturedMarkers(),
+              authToken: loadDesktopAuthToken(serverUrl),
+            });
           }
         } catch (err) {
           stopFailed = true;
@@ -2111,6 +2131,7 @@ export function App() {
             recordingFlowGateRef.current = false;
             setRecorder(null);
             setRecordingFlowActive(false);
+            discardCapturedMarkers();
             invoke("set_recording_state", { active: false }).catch(() => {});
             invoke("show_popover").catch(() => {});
           }
