@@ -6,9 +6,13 @@ import {
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import {
+  ANNOTATION_KIND_ORDER,
   annotationColorClass,
   annotationKindLabel,
 } from "@/lib/annotation-kinds";
@@ -41,8 +45,12 @@ export interface ScrubberProps {
   reactions?: { id: string; emoji: string; videoTimestampMs: number }[];
   excludedRanges?: { startMs: number; endMs: number }[];
   annotations?: ScrubberAnnotation[];
-  onAddAnnotationAt?: (ms: number) => void;
+  onAddAnnotationAt?: (ms: number, kind: string) => void;
   onToggleAnnotationResolved?: (annotation: ScrubberAnnotation) => void;
+  onChangeAnnotationKind?: (
+    annotation: ScrubberAnnotation,
+    kind: string,
+  ) => void;
   onDeleteAnnotation?: (annotation: ScrubberAnnotation) => void;
 }
 
@@ -58,6 +66,7 @@ export function Scrubber(props: ScrubberProps) {
     annotations,
     onAddAnnotationAt,
     onToggleAnnotationResolved,
+    onChangeAnnotationKind,
     onDeleteAnnotation,
   } = props;
   const t = useT();
@@ -155,7 +164,10 @@ export function Scrubber(props: ScrubberProps) {
   }, [comments]);
 
   const menuEnabled = Boolean(
-    onAddAnnotationAt || onToggleAnnotationResolved || onDeleteAnnotation,
+    onAddAnnotationAt ||
+    onToggleAnnotationResolved ||
+    onChangeAnnotationKind ||
+    onDeleteAnnotation,
   );
 
   const annotationTooltip = (a: ScrubberAnnotation) => {
@@ -383,18 +395,32 @@ export function Scrubber(props: ScrubberProps) {
   if (!menuEnabled) return body;
 
   return (
-    <ContextMenu>
+    // modal=false keeps outside pointer events alive while the menu is open,
+    // so right-clicking another marker re-anchors instead of only dismissing.
+    <ContextMenu modal={false}>
       <ContextMenuTrigger asChild>{body}</ContextMenuTrigger>
       <ContextMenuContent>
-        {menuTarget?.type === "bar" && onAddAnnotationAt ? (
-          <ContextMenuItem
-            onSelect={() => onAddAnnotationAt(Math.round(menuTarget.ms))}
-          >
-            {t("annotationsStrip.addMarkerAt", {
-              time: msToClock(menuTarget.ms),
-            })}
-          </ContextMenuItem>
-        ) : null}
+        {menuTarget?.type === "bar" && onAddAnnotationAt
+          ? ANNOTATION_KIND_ORDER.map((kind) => (
+              <ContextMenuItem
+                key={kind}
+                onSelect={() =>
+                  onAddAnnotationAt(Math.round(menuTarget.ms), kind)
+                }
+              >
+                <span
+                  className={cn(
+                    "me-2 inline-block h-2 w-2 rounded-full",
+                    annotationColorClass(kind),
+                  )}
+                />
+                {t("annotationsStrip.addKindAt", {
+                  kind: annotationKindLabel(kind, t),
+                  time: msToClock(menuTarget.ms),
+                })}
+              </ContextMenuItem>
+            ))
+          : null}
         {menuTarget?.type === "annotation" ? (
           <>
             <ContextMenuItem
@@ -404,6 +430,32 @@ export function Scrubber(props: ScrubberProps) {
                 time: msToClock(menuTarget.annotation.startMs),
               })}
             </ContextMenuItem>
+            {menuTarget.annotation.mayEdit && onChangeAnnotationKind ? (
+              <ContextMenuSub>
+                <ContextMenuSubTrigger>
+                  {t("annotationsStrip.changeType")}
+                </ContextMenuSubTrigger>
+                <ContextMenuSubContent>
+                  {ANNOTATION_KIND_ORDER.map((kind) => (
+                    <ContextMenuItem
+                      key={kind}
+                      disabled={kind === menuTarget.annotation.kind}
+                      onSelect={() =>
+                        onChangeAnnotationKind(menuTarget.annotation, kind)
+                      }
+                    >
+                      <span
+                        className={cn(
+                          "me-2 inline-block h-2 w-2 rounded-full",
+                          annotationColorClass(kind),
+                        )}
+                      />
+                      {annotationKindLabel(kind, t)}
+                    </ContextMenuItem>
+                  ))}
+                </ContextMenuSubContent>
+              </ContextMenuSub>
+            ) : null}
             {menuTarget.annotation.mayEdit &&
             (onToggleAnnotationResolved || onDeleteAnnotation) ? (
               <ContextMenuSeparator />

@@ -6,6 +6,9 @@ import {
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import {
@@ -13,9 +16,15 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { annotationColorClass } from "@/lib/annotation-kinds";
+import {
+  ANNOTATION_KIND_ORDER,
+  annotationColorClass,
+  annotationKindLabel,
+} from "@/lib/annotation-kinds";
 import { formatMs } from "@/lib/timestamp-mapping";
 import { cn } from "@/lib/utils";
+
+import type { TimelineActionItem } from "./timeline-actions";
 
 export interface TimelineChapter {
   startMs: number;
@@ -46,9 +55,15 @@ export interface TimelineProps {
   onClickChapter?: (chapter: TimelineChapter) => void;
   onClickAnnotation?: (annotation: TimelineAnnotation) => void;
   /** Enables the right-click menu (same actions as the player scrubber). */
-  onAddAnnotationAt?: (ms: number) => void;
+  onAddAnnotationAt?: (ms: number, kind: string) => void;
   onToggleAnnotationResolved?: (annotation: TimelineAnnotation) => void;
+  onChangeAnnotationKind?: (
+    annotation: TimelineAnnotation,
+    kind: string,
+  ) => void;
   onDeleteAnnotation?: (annotation: TimelineAnnotation) => void;
+  /** Registry-built edit actions (split/trim) for a right-clicked position. */
+  getEditActions?: (ms: number) => TimelineActionItem[];
   className?: string;
 }
 
@@ -81,13 +96,18 @@ export function Timeline({
   onClickAnnotation,
   onAddAnnotationAt,
   onToggleAnnotationResolved,
+  onChangeAnnotationKind,
   onDeleteAnnotation,
+  getEditActions,
   className,
 }: TimelineProps) {
   const t = useT();
   const [menuTarget, setMenuTarget] = useState<TimelineMenuTarget | null>(null);
   const menuEnabled = Boolean(
-    onAddAnnotationAt || onToggleAnnotationResolved || onDeleteAnnotation,
+    onAddAnnotationAt ||
+    onToggleAnnotationResolved ||
+    onDeleteAnnotation ||
+    getEditActions,
   );
   const ticks = useMemo(() => {
     if (durationMs <= 0) return [];
@@ -298,18 +318,53 @@ export function Timeline({
   if (!menuEnabled) return body;
 
   return (
-    <ContextMenu>
+    // modal=false keeps outside pointer events alive while the menu is open,
+    // so right-clicking another marker re-anchors instead of only dismissing.
+    <ContextMenu modal={false}>
       <ContextMenuTrigger asChild>{body}</ContextMenuTrigger>
       <ContextMenuContent>
-        {menuTarget?.type === "ruler" && onAddAnnotationAt ? (
-          <ContextMenuItem
-            onSelect={() => onAddAnnotationAt(Math.round(menuTarget.ms))}
-          >
-            {t("annotationsStrip.addMarkerAt", {
-              time: formatMs(menuTarget.ms),
-            })}
-          </ContextMenuItem>
+        {menuTarget?.type === "ruler" && getEditActions ? (
+          <>
+            {getEditActions(Math.round(menuTarget.ms))
+              .filter((action) => !action.markerKind)
+              .map((action) => (
+                <ContextMenuItem
+                  key={action.id}
+                  disabled={action.disabled}
+                  onSelect={() => action.run()}
+                  className={
+                    action.destructive
+                      ? "text-destructive focus:text-destructive"
+                      : undefined
+                  }
+                >
+                  {action.label}
+                </ContextMenuItem>
+              ))}
+            {onAddAnnotationAt ? <ContextMenuSeparator /> : null}
+          </>
         ) : null}
+        {menuTarget?.type === "ruler" && onAddAnnotationAt
+          ? ANNOTATION_KIND_ORDER.map((kind) => (
+              <ContextMenuItem
+                key={kind}
+                onSelect={() =>
+                  onAddAnnotationAt(Math.round(menuTarget.ms), kind)
+                }
+              >
+                <span
+                  className={cn(
+                    "me-2 inline-block h-2 w-2 rounded-full",
+                    annotationColorClass(kind),
+                  )}
+                />
+                {t("annotationsStrip.addKindAt", {
+                  kind: annotationKindLabel(kind, t),
+                  time: formatMs(menuTarget.ms),
+                })}
+              </ContextMenuItem>
+            ))
+          : null}
         {menuTarget?.type === "annotation" ? (
           <>
             <ContextMenuItem
@@ -319,6 +374,32 @@ export function Timeline({
                 time: formatMs(menuTarget.annotation.startMs),
               })}
             </ContextMenuItem>
+            {onChangeAnnotationKind ? (
+              <ContextMenuSub>
+                <ContextMenuSubTrigger>
+                  {t("annotationsStrip.changeType")}
+                </ContextMenuSubTrigger>
+                <ContextMenuSubContent>
+                  {ANNOTATION_KIND_ORDER.map((kind) => (
+                    <ContextMenuItem
+                      key={kind}
+                      disabled={kind === menuTarget.annotation.kind}
+                      onSelect={() =>
+                        onChangeAnnotationKind(menuTarget.annotation, kind)
+                      }
+                    >
+                      <span
+                        className={cn(
+                          "me-2 inline-block h-2 w-2 rounded-full",
+                          annotationColorClass(kind),
+                        )}
+                      />
+                      {annotationKindLabel(kind, t)}
+                    </ContextMenuItem>
+                  ))}
+                </ContextMenuSubContent>
+              </ContextMenuSub>
+            ) : null}
             {onToggleAnnotationResolved || onDeleteAnnotation ? (
               <ContextMenuSeparator />
             ) : null}

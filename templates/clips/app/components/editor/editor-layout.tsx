@@ -74,6 +74,7 @@ import { EditorToolbar } from "./editor-toolbar";
 import { StitchManager } from "./stitch-manager";
 import { ThumbnailPicker } from "./thumbnail-picker";
 import { Timeline } from "./timeline";
+import { buildTimelineActions } from "./timeline-actions";
 import { TranscriptEditor } from "./transcript-editor";
 import { TrimHandles } from "./trim-handles";
 import { Waveform } from "./waveform";
@@ -147,6 +148,13 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
   const deleteAnnotationMutation = useActionMutation(
     "delete-annotation" as any,
   );
+  const trimMutation = useActionMutation("trim-recording");
+  const splitMutation = useActionMutation("split-recording");
+  const addMarkerAt = (ms: number, kind: string) =>
+    addAnnotationMutation.mutate(
+      { recordingId, startMs: Math.round(ms), kind } as any,
+      { onSettled: () => refetchAnnotations() } as any,
+    );
   const playerDataQuery = useActionQuery("get-recording-player-data", {
     recordingId,
   });
@@ -474,6 +482,7 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
         onOpenThumbnailPicker={() => setThumbOpen(true)}
         onOpenChapters={() => setChaptersOpen((v) => !v)}
         onOpenStitch={() => setStitchOpen(true)}
+        onAddMarker={addMarkerAt}
         chaptersOpen={chaptersOpen}
       />
 
@@ -591,15 +600,36 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
                   onSeek={seek}
                   onClickChapter={(c) => seek(c.startMs)}
                   onClickAnnotation={(a) => seek(a.startMs)}
-                  onAddAnnotationAt={(ms) =>
-                    addAnnotationMutation.mutate(
-                      { recordingId, startMs: ms, kind: "generic" } as any,
-                      { onSettled: () => refetchAnnotations() } as any,
-                    )
+                  onAddAnnotationAt={addMarkerAt}
+                  getEditActions={(ms) =>
+                    buildTimelineActions({
+                      atMs: ms,
+                      durationMs,
+                      selectionRange,
+                      t,
+                      formatTime: formatMs,
+                      handlers: {
+                        splitAt: (atMs) =>
+                          splitMutation.mutate({ recordingId, atMs } as any),
+                        trimRange: (startMs, endMs) =>
+                          trimMutation.mutate({
+                            recordingId,
+                            startMs,
+                            endMs,
+                          } as any),
+                        addMarker: addMarkerAt,
+                      },
+                    })
                   }
                   onToggleAnnotationResolved={(a) =>
                     updateAnnotationMutation.mutate(
                       { id: a.id, resolved: !a.resolved } as any,
+                      { onSettled: () => refetchAnnotations() } as any,
+                    )
+                  }
+                  onChangeAnnotationKind={(a, kind) =>
+                    updateAnnotationMutation.mutate(
+                      { id: a.id, kind } as any,
                       { onSettled: () => refetchAnnotations() } as any,
                     )
                   }

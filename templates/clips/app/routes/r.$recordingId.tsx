@@ -1216,12 +1216,12 @@ export default function RecordingPage() {
                   annotations={scrubberAnnotations}
                   onAddAnnotationAt={
                     session?.email
-                      ? (ms) =>
+                      ? (ms, kind) =>
                           addAnnotationMutation.mutate(
                             {
                               recordingId: recording.id,
                               startMs: Math.round(ms),
-                              kind: "generic",
+                              kind,
                             } as any,
                             {
                               onSettled: () =>
@@ -1233,6 +1233,14 @@ export default function RecordingPage() {
                   onToggleAnnotationResolved={(a) =>
                     updateAnnotationMutation.mutate(
                       { id: a.id, resolved: !a.resolved } as any,
+                      {
+                        onSettled: () => recordingAnnotationsResult.refetch(),
+                      } as any,
+                    )
+                  }
+                  onChangeAnnotationKind={(a, kind) =>
+                    updateAnnotationMutation.mutate(
+                      { id: a.id, kind } as any,
                       {
                         onSettled: () => recordingAnnotationsResult.refetch(),
                       } as any,

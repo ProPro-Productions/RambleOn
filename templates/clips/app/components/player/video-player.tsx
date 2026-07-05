@@ -156,8 +156,12 @@ export interface VideoPlayerProps {
   chapters?: { startMs: number; title: string }[];
   reactions?: { id: string; emoji: string; videoTimestampMs: number }[];
   annotations?: ScrubberAnnotation[];
-  onAddAnnotationAt?: (ms: number) => void;
+  onAddAnnotationAt?: (ms: number, kind: string) => void;
   onToggleAnnotationResolved?: (annotation: ScrubberAnnotation) => void;
+  onChangeAnnotationKind?: (
+    annotation: ScrubberAnnotation,
+    kind: string,
+  ) => void;
   onDeleteAnnotation?: (annotation: ScrubberAnnotation) => void;
   transcriptSegments?: { startMs: number; endMs: number; text: string }[];
   /** Theatre-mode wraps the whole viewport. */
@@ -213,6 +217,7 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(
       annotations,
       onAddAnnotationAt,
       onToggleAnnotationResolved,
+      onChangeAnnotationKind,
       onDeleteAnnotation,
       transcriptSegments,
       theaterMode,
@@ -1174,6 +1179,7 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(
               annotations={annotations}
               onAddAnnotationAt={onAddAnnotationAt}
               onToggleAnnotationResolved={onToggleAnnotationResolved}
+              onChangeAnnotationKind={onChangeAnnotationKind}
               onDeleteAnnotation={onDeleteAnnotation}
               hasCaptions={!!transcriptSegments?.length}
               onPlayPause={() => {

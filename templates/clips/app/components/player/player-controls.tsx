@@ -53,8 +53,12 @@ export interface PlayerControlsProps {
   reactions?: { id: string; emoji: string; videoTimestampMs: number }[];
   excludedRanges?: { startMs: number; endMs: number }[];
   annotations?: ScrubberAnnotation[];
-  onAddAnnotationAt?: (ms: number) => void;
+  onAddAnnotationAt?: (ms: number, kind: string) => void;
   onToggleAnnotationResolved?: (annotation: ScrubberAnnotation) => void;
+  onChangeAnnotationKind?: (
+    annotation: ScrubberAnnotation,
+    kind: string,
+  ) => void;
   onDeleteAnnotation?: (annotation: ScrubberAnnotation) => void;
   onPlayPause: () => void;
   onSeek: (ms: number) => void;
@@ -89,6 +93,7 @@ export function PlayerControls(props: PlayerControlsProps) {
     annotations,
     onAddAnnotationAt,
     onToggleAnnotationResolved,
+    onChangeAnnotationKind,
     onDeleteAnnotation,
     onPlayPause,
     onSeek,
@@ -124,6 +129,7 @@ export function PlayerControls(props: PlayerControlsProps) {
         annotations={annotations}
         onAddAnnotationAt={onAddAnnotationAt}
         onToggleAnnotationResolved={onToggleAnnotationResolved}
+        onChangeAnnotationKind={onChangeAnnotationKind}
         onDeleteAnnotation={onDeleteAnnotation}
       />
 

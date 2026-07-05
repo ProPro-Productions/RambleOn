@@ -16,6 +16,7 @@ import {
   IconLoader2,
   IconMovie,
   IconTrash,
+  IconBolt,
 } from "@tabler/icons-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -50,6 +51,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { OpenInVideoProjectDialog } from "@/components/video-projects/open-in-video-project-dialog";
+import { annotationColorClass } from "@/lib/annotation-kinds";
 import {
   exportMp4,
   LONG_EXPORT_THRESHOLD_MS,
@@ -62,6 +64,8 @@ import {
   type EditsJson,
 } from "@/lib/timestamp-mapping";
 import { cn } from "@/lib/utils";
+
+import { buildTimelineActions } from "./timeline-actions";
 
 export interface EditorToolbarProps {
   recordingId: string;
@@ -84,6 +88,7 @@ export interface EditorToolbarProps {
   onOpenThumbnailPicker: () => void;
   onOpenChapters: () => void;
   onOpenStitch: () => void;
+  onAddMarker?: (ms: number, kind: string) => void;
   chaptersOpen?: boolean;
 }
 
@@ -103,6 +108,7 @@ export function EditorToolbar({
   onOpenThumbnailPicker,
   onOpenChapters,
   onOpenStitch,
+  onAddMarker,
   chaptersOpen,
 }: EditorToolbarProps) {
   const t = useT();
@@ -204,6 +210,28 @@ export function EditorToolbar({
     }
   };
 
+  // Context-aware Actions dropdown — same registry the timeline's
+  // right-click menu consumes, anchored at the playhead.
+  const timelineActions = buildTimelineActions({
+    atMs: playheadMs,
+    durationMs,
+    selectionRange,
+    t,
+    formatTime: formatMs,
+    handlers: {
+      splitAt: () => void handleSplit(),
+      trimRange: (startMs, endMs) => {
+        void trim
+          .mutateAsync({ recordingId, startMs, endMs })
+          .then(() => toast.success(t("editorToolbar.selectionCut")))
+          .catch((err: any) =>
+            toast.error(err?.message ?? t("editorToolbar.trimFailed")),
+          );
+      },
+      addMarker: (ms, kind) => onAddMarker?.(ms, kind),
+    },
+  }).filter((a) => (a.id.startsWith("marker-") ? !!onAddMarker : true));
+
   const runExport = async () => {
     if (!video.videoUrl) {
       toast.error(t("editorToolbar.videoNotReady"));
@@ -270,6 +298,43 @@ export function EditorToolbar({
         </TooltipTrigger>
         <TooltipContent>{t("editorToolbar.undoTooltip")}</TooltipContent>
       </Tooltip>
+      <Separator orientation="vertical" className="mx-1 h-6" />
+
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button size="sm" variant="ghost" className="gap-1">
+            <IconBolt className="h-4 w-4" />
+            <span className="hidden xl:inline">
+              {t("editorToolbar.actions")}
+            </span>
+            <IconChevronDown className="h-3 w-3 opacity-60" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          {timelineActions.map((action) => (
+            <DropdownMenuItem
+              key={action.id}
+              disabled={action.disabled}
+              onSelect={() => action.run()}
+              className={
+                action.destructive
+                  ? "text-destructive focus:text-destructive"
+                  : undefined
+              }
+            >
+              {action.markerKind ? (
+                <span
+                  className={cn(
+                    "me-2 inline-block h-2 w-2 rounded-full",
+                    annotationColorClass(action.markerKind),
+                  )}
+                />
+              ) : null}
+              {action.label}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
       <Separator orientation="vertical" className="mx-1 h-6" />
 
       <Tooltip>

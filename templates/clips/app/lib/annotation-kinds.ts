@@ -38,6 +38,14 @@ const KIND_STYLES: Record<string, AnnotationKindStyle> = {
   },
 };
 
+/** Canonical kind order for pickers and menus. */
+export const ANNOTATION_KIND_ORDER = [
+  "generic",
+  "editor-note",
+  "b-roll",
+  "retake",
+] as const;
+
 export function annotationKindStyle(kind: string): AnnotationKindStyle {
   return KIND_STYLES[kind] ?? KIND_STYLES.generic;
 }
