@@ -55,7 +55,11 @@ items) and chapters (viewer-facing navigation, own table). Annotations carry
   `startMs`. **Also merges the recording's comments** into the same shape with
   `entity: "comment"` (kind `comment`, point anchor from `videoTimestampMs`,
   thread fields preserved) so one call returns everything anchored to the
-  timeline. Filter with `kind`, `includeComments`, `includeResolved`.
+  timeline. Filter with `kind`, `includeComments`, `includeResolved`. Pass
+  `includeTranscriptContext=true` when synthesizing edits: each anchored
+  annotation gains `transcriptContext` — what the creator said around the
+  anchor (window biased ~12s after it, since people speak their intent right
+  after hitting a marker hotkey).
 - `update-annotation` — move anchors (`startMs`/`endMs`, `clearAnchor`,
   `clearEnd`), change kind/label/body/groups, set `resolved`. Authors edit
   their own; recording editors edit any.
