@@ -130,6 +130,7 @@ const messages = {
     pageTitle: "मीटिंग · Clips",
   },
   recordingPage: {
+    synthesizeEditPlan: "मेरे मार्करों से एक एडिट प्लान बनाओ",
     untitledClip: "शीर्षक रहित क्लिप",
     recordingNotFound: "रिकॉर्डिंग नहीं मिली",
     noAccess: "हो सकता है कि आपके पास इस क्लिप तक पहुंच न हो.",

@@ -131,6 +131,7 @@ const messages = {
     pageTitle: "ミーティング · Clips",
   },
   recordingPage: {
+    synthesizeEditPlan: "マーカーから編集プランを作成して",
     untitledClip: "無題のクリップ",
     recordingNotFound: "録画が見つかりません",
     noAccess: "このクリップにアクセスできない可能性があります。",

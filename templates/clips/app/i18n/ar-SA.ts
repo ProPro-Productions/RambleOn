@@ -129,6 +129,7 @@ const messages = {
     pageTitle: "اجتماع · Clips",
   },
   recordingPage: {
+    synthesizeEditPlan: "أنشئ خطة مونتاج من علاماتي",
     untitledClip: "مقطع بدون عنوان",
     recordingNotFound: "لم يتم العثور على التسجيل",
     noAccess: "قد لا يكون لديك حق الوصول إلى هذا المقطع.",

@@ -130,6 +130,7 @@ const messages = {
     pageTitle: "Meeting · Clips",
   },
   recordingPage: {
+    synthesizeEditPlan: "Create an edit plan from my markers",
     untitledClip: "Untitled Clip",
     recordingNotFound: "Recording not found",
     noAccess: "You may not have access to this clip.",

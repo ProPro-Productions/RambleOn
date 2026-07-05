@@ -130,6 +130,7 @@ const messages = {
     pageTitle: "회의 · Clips",
   },
   recordingPage: {
+    synthesizeEditPlan: "내 마커로 편집 계획을 만들어 줘",
     untitledClip: "제목 없는 클립",
     recordingNotFound: "녹화를 찾을 수 없습니다",
     noAccess: "이 클립에 액세스할 수 없을 수도 있습니다.",

@@ -861,10 +861,10 @@ export default function RecordingPage() {
           suggestions={
             canEdit
               ? [
+                  t("recordingPage.synthesizeEditPlan"),
                   t("recordingPage.summarizeClip"),
                   t("recordingPage.generateChapters"),
                   t("recordingPage.findActionItems"),
-                  t("recordingPage.draftRecap"),
                 ]
               : [
                   t("recordingPage.summarizeClip"),

@@ -131,6 +131,7 @@ const messages = {
     pageTitle: "Reunião · Clips",
   },
   recordingPage: {
+    synthesizeEditPlan: "Crie um plano de edição a partir dos meus marcadores",
     untitledClip: "Clipe sem título",
     recordingNotFound: "Gravação não encontrada",
     noAccess: "Você pode não ter acesso a este clipe.",

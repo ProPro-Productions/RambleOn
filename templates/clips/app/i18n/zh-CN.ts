@@ -126,6 +126,7 @@ const messages = {
     pageTitle: "会议 · Clips",
   },
   recordingPage: {
+    synthesizeEditPlan: "根据我的标记生成剪辑计划",
     untitledClip: "无标题剪辑",
     recordingNotFound: "找不到录制",
     noAccess: "您可能无权访问此剪辑。",
