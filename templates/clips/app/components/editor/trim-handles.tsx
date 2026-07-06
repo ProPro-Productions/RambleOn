@@ -1,3 +1,4 @@
+import { IconGripHorizontal } from "@tabler/icons-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { formatMs } from "@/lib/timestamp-mapping";
@@ -136,6 +137,10 @@ export function TrimHandles({
         <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-full bg-foreground text-background text-[10px] px-1.5 py-0.5 rounded font-mono whitespace-nowrap">
           {formatMs(value.endMs - value.startMs)}
         </div>
+        {/* Grip affordance so the bar visibly reads as draggable, not just
+            a static highlight — Descript shows the same cue on its
+            selection range. */}
+        <IconGripHorizontal className="absolute top-1 left-1/2 -translate-x-1/2 h-3 w-3 text-white/70" />
       </div>
 
       {/* Left handle */}

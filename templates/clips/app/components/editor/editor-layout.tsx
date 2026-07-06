@@ -429,20 +429,31 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
   const undo = useActionMutation("undo-edit");
 
   const callTrim = useCallback(
-    async (range: { startMs: number; endMs: number }) => {
+    async (
+      range: { startMs: number; endMs: number },
+      opts?: { hidden?: boolean },
+    ) => {
       try {
         await trim.mutateAsync({
           recordingId,
           startMs: Math.round(range.startMs),
           endMs: Math.round(range.endMs),
+          hidden: opts?.hidden ?? false,
         });
-        toast.success(t("editorLayout.trimmed"));
+        toast.success(
+          opts?.hidden ? t("editorLayout.cut") : t("editorLayout.trimmed"),
+        );
         setSelectionRange(null);
       } catch (err: any) {
-        toast.error(err?.message ?? t("editorLayout.trimFailed"));
+        toast.error(
+          err?.message ??
+            (opts?.hidden
+              ? t("editorLayout.cutFailed")
+              : t("editorLayout.trimFailed")),
+        );
       }
     },
-    [recordingId, trim],
+    [recordingId, trim, t],
   );
 
   const seek = useCallback((ms: number) => {
@@ -485,23 +496,19 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
           endMs: playheadMs,
         }));
       } else if (e.key.toLowerCase() === "x") {
-        // Cut: trim the current selection range
+        // Real Cut: was previously the same plain trim as Backspace with a
+        // mislabeled "Cut" toast. Now matches the context menu's Cut —
+        // copies the text and removes it from the transcript view entirely
+        // (hidden), instead of leaving a strikethrough.
         const range = selectionRange;
         if (range) {
           e.preventDefault();
-          trim
-            .mutateAsync({
-              recordingId,
-              startMs: Math.round(range.startMs),
-              endMs: Math.round(range.endMs),
-            })
-            .then(() => {
-              toast.success(t("editorLayout.cut"));
-              setSelectionRange(null);
-            })
-            .catch((err: any) =>
-              toast.error(err?.message ?? t("editorLayout.cutFailed")),
-            );
+          const text = transcriptSegments
+            .filter((s) => s.startMs < range.endMs && s.endMs > range.startMs)
+            .map((s) => s.text.trim())
+            .join(" ");
+          if (text) navigator.clipboard?.writeText(text).catch(() => {});
+          callTrim(range, { hidden: true });
         }
       } else if (e.key.toLowerCase() === "s") {
         // Split at playhead
@@ -516,7 +523,15 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [playheadMs, recordingId, selectionRange, split, trim, undo]);
+  }, [
+    playheadMs,
+    recordingId,
+    selectionRange,
+    split,
+    undo,
+    callTrim,
+    transcriptSegments,
+  ]);
 
   // Default selection window so the TrimHandles have something to render.
   const effectiveSelection = selectionRange ?? {
@@ -634,6 +649,9 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
               onSplitAt={(atMs) =>
                 splitMutation.mutate({ recordingId, atMs } as any)
               }
+              splitPoints={splitPoints}
+              videoUrl={videoUrl}
+              onSelectSegmentAt={(ms) => setSelectionRange(segmentBoundsAt(ms))}
               className="flex-1"
             />
           </div>

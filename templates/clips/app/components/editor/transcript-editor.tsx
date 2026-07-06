@@ -3,11 +3,18 @@ import {
   IconArrowBackUp,
   IconBookmark,
   IconBracketsContain,
+  IconCopy,
+  IconCut,
   IconStrikethrough,
+  IconTrash,
 } from "@tabler/icons-react";
 import { useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import {
   Tooltip,
   TooltipContent,
@@ -21,9 +28,13 @@ import {
   formatMs,
   getExcludedRanges,
   isExcluded,
+  isHidden,
   type EditsJson,
 } from "@/lib/timestamp-mapping";
 import { cn } from "@/lib/utils";
+
+import { CoordinateMenu } from "./coordinate-menu";
+import { useSceneThumbnails } from "./use-scene-thumbnails";
 
 export interface TranscriptAnnotation {
   id: string;
@@ -50,9 +61,14 @@ export interface TranscriptEditorProps {
   onSeek?: (originalMs: number) => void;
   /**
    * Fires with an (original) ms range when the user trims a selection — the
-   * parent should call `trim-recording` with it.
+   * parent should call `trim-recording` with it. `hidden: true` (Cut) removes
+   * the text from view entirely instead of the default strikethrough
+   * (Ignore/Backspace).
    */
-  onTrimRange?: (range: { startMs: number; endMs: number }) => void;
+  onTrimRange?: (
+    range: { startMs: number; endMs: number },
+    opts?: { hidden?: boolean },
+  ) => void;
   /**
    * Mirrors the text selection onto the timeline (Descript scenes): fires
    * with the resolved ms range on select, null when cleared.
@@ -68,6 +84,15 @@ export interface TranscriptEditorProps {
   onAddMarkerAt?: (ms: number) => void;
   /** Splits the recording at a position — typed "/" splits at the playhead. */
   onSplitAt?: (ms: number) => void;
+  /**
+   * Split points (original ms). Each starts a new scene block in the text,
+   * led by a mini video-frame thumbnail (Descript scenes) captured from
+   * `videoUrl`. Time 0 gets one too — every segment begins with its frame.
+   */
+  splitPoints?: number[];
+  videoUrl?: string | null;
+  /** Clicking a scene thumbnail seeks AND selects that segment's range. */
+  onSelectSegmentAt?: (ms: number) => void;
   className?: string;
 }
 
@@ -103,6 +128,9 @@ export function TranscriptEditor({
   onRestoreRange,
   onAddMarkerAt,
   onSplitAt,
+  splitPoints = [],
+  videoUrl = null,
+  onSelectSegmentAt,
   className,
 }: TranscriptEditorProps) {
   const t = useT();
@@ -111,10 +139,12 @@ export function TranscriptEditor({
   const [toolbarPos, setToolbarPos] = useState<{ x: number; y: number } | null>(
     null,
   );
+  const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null);
 
   const clearSelection = () => {
     setSelection(null);
     setToolbarPos(null);
+    setMenuPos(null);
     onSelectionChange?.(null);
     window.getSelection()?.removeAllRanges();
   };
@@ -146,6 +176,10 @@ export function TranscriptEditor({
   };
 
   const handleMouseUp = () => {
+    // A new plain selection always dismisses any menu left open from a
+    // previous right-click — otherwise it would pop back open at the old
+    // (now stale) coordinates as soon as `selection` becomes non-null again.
+    setMenuPos(null);
     const sel = resolveSelection();
     setSelection(sel);
     onSelectionChange?.(
@@ -192,6 +226,59 @@ export function TranscriptEditor({
       window.getSelection()?.removeAllRanges();
     }
   };
+
+  // Right-click anywhere with a live selection opens a context menu — same
+  // Copy/Cut/Delete surface whether the selection spans a whole segment or
+  // just a partial range within one (there was previously no menu at all for
+  // a partial-range selection, only the floating toolbar).
+  const handleContextMenu = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!selection) return;
+    e.preventDefault();
+    setMenuPos({ x: e.clientX, y: e.clientY });
+  };
+
+  const copySelection = () => {
+    if (!selection) return;
+    navigator.clipboard?.writeText(selection.text).catch(() => {});
+  };
+
+  /** Delete/Backspace and the menu's "Delete": strikethrough, reversible. */
+  const deleteSelection = () => {
+    if (!selection || !onTrimRange) return;
+    onTrimRange({ startMs: selection.startMs, endMs: selection.endMs });
+    clearSelection();
+  };
+
+  /**
+   * The menu's "Cut": copies the text (real clipboard semantics) AND removes
+   * it from the transcript view entirely rather than leaving a strikethrough
+   * — a more committed action than Delete, though still a reversible
+   * non-destructive trim under the hood (Restore brings it back either way).
+   */
+  const cutSelection = () => {
+    if (!selection || !onTrimRange) return;
+    copySelection();
+    onTrimRange(
+      { startMs: selection.startMs, endMs: selection.endMs },
+      { hidden: true },
+    );
+    clearSelection();
+  };
+
+  // One preview frame per scene start: time 0 plus every split point. The
+  // thumbnails ARE the split markers in the text (Descript scenes) — "the
+  // fact that it's mini screenshots and not just split markers makes it
+  // more beautiful".
+  const sceneTimes = useMemo(() => {
+    if (segments.length === 0) return [];
+    const sorted = [...splitPoints].sort((a, b) => a - b);
+    return [0, ...sorted.filter((ms) => ms > 0)];
+  }, [segments.length, splitPoints]);
+  const sceneThumbs = useSceneThumbnails({
+    videoUrl,
+    times: sceneTimes,
+    enabled: Boolean(videoUrl) && segments.length > 0,
+  });
 
   const rendered = useMemo(() => {
     // Point markers slot inline before the first segment they precede — the
@@ -240,13 +327,60 @@ export function TranscriptEditor({
         );
       }
     };
+    // A split starts a new scene: break the paragraph and lead the next one
+    // with the scene's preview frame. Splits land on the first segment at or
+    // after their time (whisper segments are our text granularity).
+    let sceneIndex = 0;
+    const pushScenesBefore = (segStartMs: number, segEndMs: number) => {
+      while (
+        sceneIndex < sceneTimes.length &&
+        sceneTimes[sceneIndex] <= Math.max(segStartMs, segEndMs - 1)
+      ) {
+        const ms = sceneTimes[sceneIndex++];
+        flushParagraph();
+        const thumb = sceneThumbs[ms];
+        paragraph.push(
+          <Tooltip key={`scene-${ms}`}>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSeek?.(ms);
+                  onSelectSegmentAt?.(ms);
+                }}
+                className="mr-1.5 inline-block h-10 w-[72px] shrink-0 cursor-pointer overflow-hidden rounded border border-border/70 bg-muted align-middle transition-[border-color] hover:border-primary"
+              >
+                {thumb ? (
+                  <img
+                    src={thumb}
+                    alt=""
+                    draggable={false}
+                    className="h-full w-full object-cover"
+                  />
+                ) : null}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {`${t("transcriptEditor.segmentStart")} · ${formatMs(ms)}`}
+            </TooltipContent>
+          </Tooltip>,
+        );
+      }
+    };
     let prevEndMs: number | null = null;
     segments.forEach((s, i) => {
       if (prevEndMs !== null && s.startMs - prevEndMs > PARAGRAPH_PAUSE_MS) {
         flushParagraph();
       }
       prevEndMs = s.endMs;
+      pushScenesBefore(s.startMs, s.endMs);
       pushMarkersBefore(s.endMs);
+      // A Cut (hidden) segment is removed from the transcript view entirely
+      // — no strikethrough, no gap left behind. It's still selectable/
+      // restorable from the waveform/timeline's excluded-range overlay,
+      // which renders regardless of `hidden`.
+      if (isHidden(s.startMs, edits)) return;
       const excluded = isExcluded(s.startMs, edits);
       const active = currentMs >= s.startMs && currentMs < s.endMs;
       paragraph.push(
@@ -272,7 +406,17 @@ export function TranscriptEditor({
     pushMarkersBefore(Number.POSITIVE_INFINITY);
     flushParagraph();
     return paragraphs;
-  }, [segments, edits, currentMs, onSeek, annotations, t]);
+  }, [
+    segments,
+    edits,
+    currentMs,
+    onSeek,
+    annotations,
+    t,
+    sceneTimes,
+    sceneThumbs,
+    onSelectSegmentAt,
+  ]);
 
   return (
     <div className={cn("flex flex-col h-full min-h-0", className)}>
@@ -296,6 +440,7 @@ export function TranscriptEditor({
         ref={rootRef}
         onMouseUp={handleMouseUp}
         onKeyDown={handleKeyDown}
+        onContextMenu={handleContextMenu}
         tabIndex={0}
         className="relative flex-1 overflow-auto p-3 text-[14px] leading-relaxed outline-none"
       >
@@ -366,6 +511,84 @@ export function TranscriptEditor({
           rendered
         )}
       </div>
+
+      {/* Right-click on a selection — previously there was no context menu
+          at all for a partial (sub-segment) selection, only the floating
+          toolbar. Copy/Cut/Delete here mirror Descript's own menu; Cut
+          removes the text from view (see `cutSelection`), Delete matches
+          plain Backspace (strikethrough, reversible). */}
+      {selection ? (
+        <CoordinateMenu
+          open={menuPos !== null}
+          x={menuPos?.x ?? 0}
+          y={menuPos?.y ?? 0}
+          onOpenChange={(open) => {
+            if (!open) setMenuPos(null);
+          }}
+        >
+          <DropdownMenuItem onSelect={copySelection}>
+            <IconCopy className="h-4 w-4" />
+            {t("transcriptEditor.copy")}
+          </DropdownMenuItem>
+          {onTrimRange ? (
+            <DropdownMenuItem onSelect={cutSelection}>
+              <IconCut className="h-4 w-4" />
+              {t("transcriptEditor.cut")}
+            </DropdownMenuItem>
+          ) : null}
+          {onTrimRange ? (
+            <DropdownMenuItem onSelect={deleteSelection}>
+              <IconTrash className="h-4 w-4" />
+              {t("transcriptEditor.delete")}
+            </DropdownMenuItem>
+          ) : null}
+          {selectionTouchesExcluded && onRestoreRange ? (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onSelect={() => {
+                  onRestoreRange({
+                    startMs: selection.startMs,
+                    endMs: selection.endMs,
+                  });
+                  clearSelection();
+                  setMenuPos(null);
+                }}
+              >
+                <IconArrowBackUp className="h-4 w-4" />
+                {t("transcriptEditor.restore")}
+              </DropdownMenuItem>
+            </>
+          ) : null}
+          {onCreateSection ? (
+            <DropdownMenuItem
+              onSelect={() => {
+                onCreateSection({
+                  startMs: selection.startMs,
+                  endMs: selection.endMs,
+                });
+                clearSelection();
+                setMenuPos(null);
+              }}
+            >
+              <IconBracketsContain className="h-4 w-4" />
+              {t("transcriptEditor.createSection")}
+            </DropdownMenuItem>
+          ) : null}
+          {onAddMarkerAt ? (
+            <DropdownMenuItem
+              onSelect={() => {
+                onAddMarkerAt(selection.startMs);
+                clearSelection();
+                setMenuPos(null);
+              }}
+            >
+              <IconBookmark className="h-4 w-4" />
+              {t("transcriptEditor.addMarker")}
+            </DropdownMenuItem>
+          ) : null}
+        </CoordinateMenu>
+      ) : null}
     </div>
   );
 }

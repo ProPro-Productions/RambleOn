@@ -19,6 +19,14 @@ export interface TrimRange {
   endMs: number;
   /** If true, this range is skipped during playback. False = split marker. */
   excluded: boolean;
+  /**
+   * Descript-style "Cut" vs "Ignore" (strikethrough): both are the same
+   * non-destructive excluded range under the hood, but a hidden range is
+   * removed from the transcript view entirely instead of rendering
+   * struck-through. Undefined/false = strikethrough (the default, reversible
+   * "Ignore" / Backspace behavior).
+   */
+  hidden?: boolean;
 }
 
 export interface BlurBox {
@@ -104,6 +112,10 @@ export function normalizeExcluded(ranges: TrimRange[]): TrimRange[] {
     const cur = sorted[i];
     if (cur.startMs <= prev.endMs) {
       prev.endMs = Math.max(prev.endMs, cur.endMs);
+      // Sticky: a merged range hides its text if ANY of its constituent
+      // ranges was a hide (a Cut spanning into an adjacent Ignore should
+      // still fully hide, not fall back to strikethrough).
+      prev.hidden = prev.hidden || cur.hidden;
     } else {
       out.push(cur);
     }
@@ -169,6 +181,24 @@ export function isExcluded(originalMs: number, edits: EditsJson): boolean {
 }
 
 /**
+ * True if the given original timestamp falls inside an excluded range that
+ * was Cut (hidden) rather than Ignored (strikethrough) — the transcript
+ * should omit this text entirely instead of rendering it struck-through.
+ */
+export function isHidden(originalMs: number, edits: EditsJson): boolean {
+  for (const range of getExcludedRanges(edits)) {
+    if (
+      range.hidden &&
+      originalMs >= range.startMs &&
+      originalMs < range.endMs
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Build a playback sequence of "kept" ranges in original time. The player
  * iterates these and seeks the underlying <video> whenever playback crosses
  * the end of a kept range.
@@ -201,11 +231,13 @@ export function mergeExcluded(
   edits: EditsJson,
   startMs: number,
   endMs: number,
+  hidden = false,
 ): EditsJson {
   const clamped = {
     startMs: Math.max(0, Math.min(startMs, endMs)),
     endMs: Math.max(0, Math.max(startMs, endMs)),
     excluded: true,
+    hidden,
   };
   const excluded = normalizeExcluded([
     ...edits.trims.filter((t) => t.excluded),
