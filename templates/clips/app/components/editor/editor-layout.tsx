@@ -265,6 +265,18 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
         .map((t) => t.startMs),
     [edits],
   );
+  // Segments between split points — the track strip renders one card per
+  // segment so splits read as visible gaps, not just ruler needles.
+  const segmentRanges = useMemo(() => {
+    const bounds = [0, ...[...splitPoints].sort((a, b) => a - b), durationMs];
+    const out: Array<{ startMs: number; endMs: number }> = [];
+    for (let i = 0; i < bounds.length - 1; i++) {
+      if (bounds[i + 1] > bounds[i]) {
+        out.push({ startMs: bounds[i], endMs: bounds[i + 1] });
+      }
+    }
+    return out;
+  }, [splitPoints, durationMs]);
 
   const transcriptSegments: Array<{
     startMs: number;
@@ -297,6 +309,14 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
     startMs: number;
     endMs: number;
   } | null>(null);
+  // Drag state for the track-strip segment dividers (the Descript-style
+  // visible gap between segment cards) — same gesture as the ruler needle.
+  const [trackSplitDrag, setTrackSplitDrag] = useState<{
+    fromMs: number;
+    ghostMs: number;
+  } | null>(null);
+  const trackSplitStartXRef = useRef(0);
+  const trackSplitMovedRef = useRef(false);
 
   const [thumbOpen, setThumbOpen] = useState(false);
   const [stitchOpen, setStitchOpen] = useState(false);
@@ -932,6 +952,119 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
                       }}
                     />
                   ))}
+                </div>
+              </div>
+            )}
+            {/* Descript-style segment cards: the track itself visibly splits
+                — an opaque gap divider between segments (draggable: moving
+                it moves the boundary), with a subtle card outline per
+                segment, instead of only a needle line in the ruler. */}
+            {splitPoints.length > 0 && (
+              <div className="pointer-events-none absolute inset-0 overflow-hidden">
+                <div
+                  className="relative h-full"
+                  style={{
+                    width: totalWidth,
+                    transform: `translateX(${-scrollLeft}px)`,
+                  }}
+                >
+                  {segmentRanges.map((seg, i) => {
+                    const left =
+                      (seg.startMs / Math.max(durationMs, 1)) * totalWidth;
+                    const segWidth =
+                      ((seg.endMs - seg.startMs) / Math.max(durationMs, 1)) *
+                      totalWidth;
+                    return (
+                      <div
+                        key={`seg-card-${i}`}
+                        className="absolute inset-y-0 rounded-md border border-border/60"
+                        style={{ left: left + 2, width: segWidth - 4 }}
+                      />
+                    );
+                  })}
+                  {splitPoints.map((ms, i) => {
+                    const dragging = trackSplitDrag?.fromMs === ms;
+                    const shownMs = dragging ? trackSplitDrag.ghostMs : ms;
+                    const x = (shownMs / Math.max(durationMs, 1)) * totalWidth;
+                    return (
+                      <button
+                        key={`seg-divider-${i}-${ms}`}
+                        type="button"
+                        className="group pointer-events-auto absolute inset-y-0 w-[11px] -translate-x-1/2 cursor-col-resize"
+                        style={{ left: x }}
+                        title={`Split @ ${formatMs(shownMs)}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (trackSplitMovedRef.current) {
+                            trackSplitMovedRef.current = false;
+                            return;
+                          }
+                          seek(ms);
+                        }}
+                        onPointerDown={(e) => {
+                          if (e.button !== 0) return;
+                          e.stopPropagation();
+                          trackSplitStartXRef.current = e.clientX;
+                          trackSplitMovedRef.current = false;
+                          e.currentTarget.setPointerCapture(e.pointerId);
+                          setTrackSplitDrag({ fromMs: ms, ghostMs: ms });
+                        }}
+                        onPointerMove={(e) => {
+                          if (!dragging) return;
+                          if (!e.currentTarget.hasPointerCapture(e.pointerId))
+                            return;
+                          if (
+                            Math.abs(e.clientX - trackSplitStartXRef.current) >
+                            3
+                          ) {
+                            trackSplitMovedRef.current = true;
+                          }
+                          const parent = e.currentTarget.parentElement;
+                          if (!parent) return;
+                          const rect = parent.getBoundingClientRect();
+                          const ghostMs = Math.max(
+                            0,
+                            Math.min(
+                              durationMs,
+                              ((e.clientX - rect.left) / totalWidth) *
+                                durationMs,
+                            ),
+                          );
+                          setTrackSplitDrag({ fromMs: ms, ghostMs });
+                        }}
+                        onPointerUp={(e) => {
+                          if (!dragging) return;
+                          e.currentTarget.releasePointerCapture(e.pointerId);
+                          if (trackSplitMovedRef.current) {
+                            moveSplitMutation.mutate({
+                              recordingId,
+                              fromMs: ms,
+                              toMs: Math.round(trackSplitDrag.ghostMs),
+                            } as any);
+                          }
+                          setTrackSplitDrag(null);
+                        }}
+                        onPointerCancel={() => {
+                          trackSplitMovedRef.current = false;
+                          setTrackSplitDrag(null);
+                        }}
+                      >
+                        {/* Opaque gap that separates the segment cards —
+                            filmstrip content can be near-black, so the gap
+                            alone isn't enough: the card edge lines and the
+                            always-visible grip make the cut read. */}
+                        <span className="absolute inset-y-0 left-1/2 w-[8px] -translate-x-1/2 bg-background" />
+                        <span className="absolute inset-y-0 left-1/2 ml-[-5px] w-px bg-border" />
+                        <span className="absolute inset-y-0 left-1/2 ml-[4px] w-px bg-border" />
+                        <span
+                          className={cn(
+                            "absolute left-1/2 top-1/2 h-8 w-[3px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-muted-foreground/50 transition-colors group-hover:bg-muted-foreground",
+                            dragging && "bg-rose-400",
+                          )}
+                        />
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}

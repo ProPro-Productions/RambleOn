@@ -211,7 +211,10 @@ export function Timeline({
               type="button"
               data-annotation-marker
               className={cn(
-                "absolute top-0 h-full w-[5px] -translate-x-1/2 before:absolute before:inset-y-0 before:left-1/2 before:w-px before:-translate-x-1/2 before:bg-rose-500/80 hover:before:w-[3px]",
+                // Subtle by design: the track strip's segment gap is the
+                // primary representation of a split; this ruler tick is the
+                // secondary handle for dragging and the context menu.
+                "absolute top-0 h-full w-[7px] -translate-x-1/2 before:absolute before:inset-y-0 before:left-1/2 before:w-px before:-translate-x-1/2 before:bg-foreground/30 hover:before:w-[3px] hover:before:bg-rose-400",
                 onMoveSplit ? "cursor-col-resize" : "cursor-pointer",
                 dragging && "before:w-[3px] before:bg-rose-400",
               )}
