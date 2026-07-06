@@ -654,26 +654,6 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
         className,
       )}
     >
-      <EditorToolbar
-        recordingId={recordingId}
-        playheadMs={playheadMs}
-        durationMs={durationMs}
-        playing={playing}
-        onPlayPause={() => setPlaying((p) => !p)}
-        playbackSpeed={playbackSpeed}
-        onPlaybackSpeedChange={handlePlaybackSpeedChange}
-        zoom={zoom}
-        onZoomChange={setZoom}
-        edits={edits}
-        selectionRange={selectionRange}
-        video={{ videoUrl, videoFormat, title: recording.title }}
-        onOpenThumbnailPicker={() => setThumbOpen(true)}
-        onOpenChapters={() => setChaptersOpen((v) => !v)}
-        onOpenStitch={() => setStitchOpen(true)}
-        onAddMarker={addMarkerAt}
-        chaptersOpen={chaptersOpen}
-      />
-
       {/* Preview + transcript + chapters sidebar */}
       <div className="flex flex-1 min-h-0 min-w-0 flex-col overflow-hidden">
         {/* Top region: video | transcript panel | optional chapters */}
@@ -763,10 +743,33 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
           ) : null}
         </div>
 
-        {/* Row 3: waveform + timeline (full width, below the top region) */}
+        {/* Control bar: undo, actions, play, split, speed — Descript keeps
+            transport controls with the timeline, so it lives directly above
+            the timeline bars rather than at the top of the editor. */}
+        <EditorToolbar
+          recordingId={recordingId}
+          playheadMs={playheadMs}
+          durationMs={durationMs}
+          playing={playing}
+          onPlayPause={() => setPlaying((p) => !p)}
+          playbackSpeed={playbackSpeed}
+          onPlaybackSpeedChange={handlePlaybackSpeedChange}
+          zoom={zoom}
+          onZoomChange={setZoom}
+          edits={edits}
+          selectionRange={selectionRange}
+          video={{ videoUrl, videoFormat, title: recording.title }}
+          onOpenThumbnailPicker={() => setThumbOpen(true)}
+          onOpenChapters={() => setChaptersOpen((v) => !v)}
+          onOpenStitch={() => setStitchOpen(true)}
+          onAddMarker={addMarkerAt}
+          chaptersOpen={chaptersOpen}
+        />
+
+        {/* Row 3: waveform + timeline (full width, below the control bar) */}
         <div
           ref={containerRef}
-          className="relative min-w-0 shrink-0 space-y-1 overflow-hidden border-t border-border bg-card/30 p-2"
+          className="relative min-w-0 shrink-0 space-y-1 overflow-hidden bg-card/30 p-2"
         >
           <div
             className="min-w-0 overflow-hidden rounded-sm border border-border/70"

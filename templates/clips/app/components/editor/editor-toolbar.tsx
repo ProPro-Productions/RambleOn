@@ -65,6 +65,7 @@ import {
 } from "@/lib/timestamp-mapping";
 import { cn } from "@/lib/utils";
 
+import { IconSplitSegment } from "./split-icon";
 import { buildTimelineActions } from "./timeline-actions";
 
 export interface EditorToolbarProps {
@@ -284,7 +285,7 @@ export function EditorToolbar({
   };
 
   return (
-    <div className="flex h-11 min-w-0 items-center gap-1 overflow-hidden border-b border-border bg-card/40 px-2">
+    <div className="flex h-11 min-w-0 items-center gap-1 overflow-hidden border-y border-border bg-card/40 px-2">
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
@@ -366,6 +367,36 @@ export function EditorToolbar({
           </span>
         )}
       </div>
+
+      {/* The prominent Split button — splitting at the playhead is the
+          primary segmentation gesture (the playhead itself is deliberately
+          not selectable). */}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            size="sm"
+            variant="secondary"
+            className="gap-1.5"
+            disabled={split.isPending}
+            onClick={() =>
+              split
+                .mutateAsync({
+                  recordingId,
+                  atMs: Math.round(playheadMs),
+                })
+                .catch((err: any) =>
+                  toast.error(err?.message ?? t("editorToolbar.trimFailed")),
+                )
+            }
+          >
+            <IconSplitSegment className="h-4 w-4" />
+            {t("editorToolbar.split")}
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>
+          {t("editorToolbar.splitAtTime", { time: formatMs(playheadMs) })}
+        </TooltipContent>
+      </Tooltip>
 
       <DropdownMenu>
         <Tooltip>
