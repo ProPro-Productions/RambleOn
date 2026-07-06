@@ -1041,6 +1041,7 @@ const messages = {
     seekTo: "跳到 {{time}}",
   },
   editorToolbar: {
+    removeSplit: "移除分割點",
     actions: "動作",
     splitAtTime: "在 {{time}} 分割",
     cutSelection: "剪掉所選範圍",

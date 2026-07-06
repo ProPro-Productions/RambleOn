@@ -156,6 +156,9 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
   );
   const trimMutation = useActionMutation("trim-recording");
   const restoreMutation = useActionMutation("restore-recording-range" as any);
+  const removeSplitMutation = useActionMutation(
+    "remove-recording-split" as any,
+  );
   const splitMutation = useActionMutation("split-recording");
   const addMarkerAt = (ms: number, kind: string) =>
     addAnnotationMutation.mutate(
@@ -243,6 +246,15 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
   }, [playerData?.chapters, recording?.chaptersJson]);
 
   const excludedRanges = useMemo(() => getExcludedRanges(edits), [edits]);
+  const segmentBoundsAt = (ms: number): { startMs: number; endMs: number } => {
+    let start = 0;
+    let end = durationMs;
+    for (const split of splitPoints) {
+      if (split <= ms && split > start) start = split;
+      if (split > ms && split < end) end = split;
+    }
+    return { startMs: start, endMs: end };
+  };
   const splitPoints = useMemo(
     () =>
       edits.trims
@@ -688,6 +700,9 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
                     },
                   })
                 }
+                onRemoveSplit={(atMs) =>
+                  removeSplitMutation.mutate({ recordingId, atMs } as any)
+                }
                 onToggleAnnotationResolved={(a) =>
                   updateAnnotationMutation.mutate(
                     { id: a.id, resolved: !a.resolved } as any,
@@ -759,7 +774,15 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
                 excludedRanges={excludedRanges}
                 selectionRange={selectionRange}
                 activityRanges={transcriptSegments}
-                onSeek={seek}
+                onSeek={(ms) => {
+                  // Clicking the audio representation selects the enclosing
+                  // segment (Descript-style) besides seeking; the filmstrip
+                  // above stays seek-only.
+                  seek(ms);
+                  if (splitPoints.length > 0) {
+                    setSelectionRange(segmentBoundsAt(ms));
+                  }
+                }}
                 onScroll={(s) => setScrollLeft(s)}
               />
             </div>

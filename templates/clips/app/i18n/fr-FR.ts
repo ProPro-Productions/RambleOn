@@ -1108,6 +1108,7 @@ Tous les changements visibles par les utilisateurs de Clips sont documentés ici
     seekTo: "Aller à {{time}}",
   },
   editorToolbar: {
+    removeSplit: "Supprimer la scission",
     actions: "Actions",
     splitAtTime: "Scinder à {{time}}",
     cutSelection: "Couper la sélection",

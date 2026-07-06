@@ -1085,6 +1085,7 @@ const messages = {
     seekTo: "Seek to {{time}} (مترجم)",
   },
   editorToolbar: {
+    removeSplit: "إزالة التقسيم",
     actions: "الإجراءات",
     splitAtTime: "تقسيم عند {{time}}",
     cutSelection: "قص التحديد",

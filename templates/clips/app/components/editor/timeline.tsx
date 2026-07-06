@@ -62,12 +62,15 @@ export interface TimelineProps {
   onDeleteAnnotation?: (annotation: TimelineAnnotation) => void;
   /** Registry-built edit actions (split/trim) for a right-clicked position. */
   getEditActions?: (ms: number) => TimelineActionItem[];
+  /** Removes the split at a position — splits are selectable entities. */
+  onRemoveSplit?: (ms: number) => void;
   className?: string;
 }
 
 type TimelineMenuTarget =
   | { type: "ruler"; ms: number }
-  | { type: "annotation"; annotation: TimelineAnnotation };
+  | { type: "annotation"; annotation: TimelineAnnotation }
+  | { type: "split"; ms: number };
 
 const RULER_HEIGHT = 26;
 
@@ -97,6 +100,7 @@ export function Timeline({
   onChangeAnnotationKind,
   onDeleteAnnotation,
   getEditActions,
+  onRemoveSplit,
   className,
 }: TimelineProps) {
   const t = useT();
@@ -182,11 +186,24 @@ export function Timeline({
         {splitPoints.map((ms, i) => {
           const x = (ms / Math.max(durationMs, 1)) * width;
           return (
-            <div
+            <button
               key={`split-${i}-${ms}`}
-              className="absolute top-0 h-full w-px"
-              style={{ left: x, background: "rgba(244,63,94,0.8)" }}
+              type="button"
+              data-annotation-marker
+              className="absolute top-0 h-full w-[5px] -translate-x-1/2 cursor-pointer before:absolute before:inset-y-0 before:left-1/2 before:w-px before:-translate-x-1/2 before:bg-rose-500/80 hover:before:w-[3px]"
+              style={{ left: x }}
               title={`Split @ ${formatMs(ms)}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onSeek?.(ms);
+              }}
+              onContextMenu={(e) => {
+                if (!menuEnabled) return;
+                e.preventDefault();
+                e.stopPropagation();
+                setMenuPos({ x: e.clientX, y: e.clientY });
+                setMenuTarget({ type: "split", ms });
+              }}
             />
           );
         })}
@@ -375,6 +392,24 @@ export function Timeline({
               </DropdownMenuItem>
             ))
           : null}
+        {menuTarget?.type === "split" ? (
+          <>
+            <DropdownMenuItem onSelect={() => onSeek?.(menuTarget.ms)}>
+              {t("annotationsStrip.jumpTo", { time: formatMs(menuTarget.ms) })}
+            </DropdownMenuItem>
+            {onRemoveSplit ? (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  className="text-destructive focus:text-destructive"
+                  onSelect={() => onRemoveSplit(menuTarget.ms)}
+                >
+                  {t("editorToolbar.removeSplit")}
+                </DropdownMenuItem>
+              </>
+            ) : null}
+          </>
+        ) : null}
         {menuTarget?.type === "annotation" ? (
           <>
             <DropdownMenuItem
