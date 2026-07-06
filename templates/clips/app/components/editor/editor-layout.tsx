@@ -575,6 +575,9 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
                 } as any)
               }
               onAddMarkerAt={(ms) => addMarkerAt(ms, "generic")}
+              onSplitAt={(atMs) =>
+                splitMutation.mutate({ recordingId, atMs } as any)
+              }
               className="flex-1"
             />
           </div>

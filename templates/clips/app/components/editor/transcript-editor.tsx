@@ -66,6 +66,8 @@ export interface TranscriptEditorProps {
   onRestoreRange?: (range: { startMs: number; endMs: number }) => void;
   /** Adds a point marker at a position (selection start). */
   onAddMarkerAt?: (ms: number) => void;
+  /** Splits the recording at a position — typed "/" splits at the playhead. */
+  onSplitAt?: (ms: number) => void;
   className?: string;
 }
 
@@ -100,6 +102,7 @@ export function TranscriptEditor({
   onCreateSection,
   onRestoreRange,
   onAddMarkerAt,
+  onSplitAt,
   className,
 }: TranscriptEditorProps) {
   const t = useT();
@@ -167,6 +170,13 @@ export function TranscriptEditor({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    // Descript's slash-to-split, transcript-first: click a word (which seeks
+    // there), then type "/" to split the segment at that spot.
+    if (e.key === "/" && onSplitAt) {
+      e.preventDefault();
+      onSplitAt(Math.round(currentMs));
+      return;
+    }
     if (
       (e.key === "Delete" || e.key === "Backspace") &&
       selection &&
