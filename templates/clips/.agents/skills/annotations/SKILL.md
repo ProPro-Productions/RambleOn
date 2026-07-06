@@ -94,9 +94,11 @@ The recording page's Activity tab shows a review strip of all markers (seek,
 delete), and both the player scrubber and the clips editor timeline render
 them as needles/bands. In the clips editor, the transcript side panel also
 renders point markers inline in the text at their spoken position, and
-selecting transcript text mirrors onto the timeline selection — "Create
-section" turns the selected range into a section annotation (Descript-style
-scenes).
+selecting transcript text mirrors onto the timeline selection and raises a
+floating toolbar: Ignore (restorable strikethrough via trim-recording),
+Restore (restore-recording-range — appears when the selection touches an
+excluded range), Create section, Add marker. Paragraphs split on speech
+pauses so the transcript reads as a document.
 
 ## Timeline presentation (player)
 

@@ -1000,6 +1000,9 @@ const messages = {
     noVideoYet: "لا يوجد فيديو متاح بعد.",
   },
   transcriptEditor: {
+    ignore: "تجاهل",
+    restore: "استعادة",
+    addMarker: "إضافة علامة",
     createSection: "إنشاء مقطع",
     transcript: "النص",
     selectionRange: "· التحديد {{start}} → {{end}}",

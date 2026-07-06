@@ -1,5 +1,10 @@
 import { useT } from "@agent-native/core/client";
-import { IconBookmark, IconScissors } from "@tabler/icons-react";
+import {
+  IconArrowBackUp,
+  IconBookmark,
+  IconBookmarks,
+  IconScissors,
+} from "@tabler/icons-react";
 import { useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -12,7 +17,12 @@ import {
   annotationColorClass,
   annotationKindLabel,
 } from "@/lib/annotation-kinds";
-import { formatMs, isExcluded, type EditsJson } from "@/lib/timestamp-mapping";
+import {
+  formatMs,
+  getExcludedRanges,
+  isExcluded,
+  type EditsJson,
+} from "@/lib/timestamp-mapping";
 import { cn } from "@/lib/utils";
 
 export interface TranscriptAnnotation {
@@ -52,6 +62,10 @@ export interface TranscriptEditorProps {
   ) => void;
   /** Creates a section annotation from the selected range. */
   onCreateSection?: (range: { startMs: number; endMs: number }) => void;
+  /** Restores (un-ignores) an excluded range — Descript's Restore. */
+  onRestoreRange?: (range: { startMs: number; endMs: number }) => void;
+  /** Adds a point marker at a position (selection start). */
+  onAddMarkerAt?: (ms: number) => void;
   className?: string;
 }
 
@@ -60,6 +74,12 @@ interface Selection {
   endMs: number;
   text: string;
 }
+
+/**
+ * A silence gap this long between segments starts a new paragraph — the
+ * transcript must read like a real document, never one text blob.
+ */
+const PARAGRAPH_PAUSE_MS = 1_400;
 
 /**
  * Transcript viewer with selection-to-trim support.
@@ -78,11 +98,30 @@ export function TranscriptEditor({
   onTrimRange,
   onSelectionChange,
   onCreateSection,
+  onRestoreRange,
+  onAddMarkerAt,
   className,
 }: TranscriptEditorProps) {
   const t = useT();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [selection, setSelection] = useState<Selection | null>(null);
+  const [toolbarPos, setToolbarPos] = useState<{ x: number; y: number } | null>(
+    null,
+  );
+
+  const clearSelection = () => {
+    setSelection(null);
+    setToolbarPos(null);
+    onSelectionChange?.(null);
+    window.getSelection()?.removeAllRanges();
+  };
+
+  const selectionTouchesExcluded = useMemo(() => {
+    if (!selection) return false;
+    return getExcludedRanges(edits).some(
+      (r) => r.startMs < selection.endMs && r.endMs > selection.startMs,
+    );
+  }, [selection, edits]);
 
   // For each segment we add a data-start-ms attribute so we can resolve the
   // browser's text Selection back to original timestamps.
@@ -109,6 +148,22 @@ export function TranscriptEditor({
     onSelectionChange?.(
       sel ? { startMs: sel.startMs, endMs: sel.endMs } : null,
     );
+    if (sel && rootRef.current) {
+      const domSel = window.getSelection();
+      const rect =
+        domSel && domSel.rangeCount > 0
+          ? domSel.getRangeAt(0).getBoundingClientRect()
+          : null;
+      const rootRect = rootRef.current.getBoundingClientRect();
+      if (rect && rect.width > 0) {
+        setToolbarPos({
+          x: rect.left - rootRect.left + rect.width / 2,
+          y: rect.top - rootRect.top + rootRef.current.scrollTop,
+        });
+      }
+    } else {
+      setToolbarPos(null);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -131,14 +186,24 @@ export function TranscriptEditor({
       .filter((a) => a.endMs === null)
       .sort((a, b) => a.startMs - b.startMs);
     let markerIndex = 0;
-    const out: React.ReactNode[] = [];
+    let paragraph: React.ReactNode[] = [];
+    const paragraphs: React.ReactNode[] = [];
+    const flushParagraph = () => {
+      if (paragraph.length === 0) return;
+      paragraphs.push(
+        <p key={`para-${paragraphs.length}`} className="mb-3">
+          {paragraph}
+        </p>,
+      );
+      paragraph = [];
+    };
     const pushMarkersBefore = (ms: number) => {
       while (
         markerIndex < markers.length &&
         markers[markerIndex].startMs < ms
       ) {
         const m = markers[markerIndex++];
-        out.push(
+        paragraph.push(
           <Tooltip key={`marker-${m.id}`}>
             <TooltipTrigger asChild>
               <button
@@ -161,11 +226,16 @@ export function TranscriptEditor({
         );
       }
     };
+    let prevEndMs: number | null = null;
     segments.forEach((s, i) => {
+      if (prevEndMs !== null && s.startMs - prevEndMs > PARAGRAPH_PAUSE_MS) {
+        flushParagraph();
+      }
+      prevEndMs = s.endMs;
       pushMarkersBefore(s.endMs);
       const excluded = isExcluded(s.startMs, edits);
       const active = currentMs >= s.startMs && currentMs < s.endMs;
-      out.push(
+      paragraph.push(
         <Tooltip key={`${s.startMs}-${i}`}>
           <TooltipTrigger asChild>
             <span
@@ -186,7 +256,8 @@ export function TranscriptEditor({
       );
     });
     pushMarkersBefore(Number.POSITIVE_INFINITY);
-    return out;
+    flushParagraph();
+    return paragraphs;
   }, [segments, edits, currentMs, onSeek, annotations, t]);
 
   return (
@@ -205,44 +276,6 @@ export function TranscriptEditor({
             <span>{t("transcriptEditor.selectTextToTrim")}</span>
           )}
         </div>
-        {selection ? (
-          <div className="flex items-center gap-1.5">
-            {onCreateSection ? (
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => {
-                  onCreateSection({
-                    startMs: selection.startMs,
-                    endMs: selection.endMs,
-                  });
-                  setSelection(null);
-                  onSelectionChange?.(null);
-                  window.getSelection()?.removeAllRanges();
-                }}
-              >
-                <IconBookmark className="mr-1 h-3.5 w-3.5" />
-                {t("transcriptEditor.createSection")}
-              </Button>
-            ) : null}
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => {
-                onTrimRange?.({
-                  startMs: selection.startMs,
-                  endMs: selection.endMs,
-                });
-                setSelection(null);
-                onSelectionChange?.(null);
-                window.getSelection()?.removeAllRanges();
-              }}
-            >
-              <IconScissors className="mr-1 h-3.5 w-3.5" />
-              {t("transcriptEditor.cutSelection")}
-            </Button>
-          </div>
-        ) : null}
       </div>
 
       <div
@@ -250,8 +283,79 @@ export function TranscriptEditor({
         onMouseUp={handleMouseUp}
         onKeyDown={handleKeyDown}
         tabIndex={0}
-        className="flex-1 overflow-auto p-3 text-[14px] leading-relaxed outline-none"
+        className="relative flex-1 overflow-auto p-3 text-[14px] leading-relaxed outline-none"
       >
+        {selection && toolbarPos ? (
+          <div
+            className="absolute z-20 flex -translate-x-1/2 -translate-y-full items-center gap-0.5 rounded-md border border-border bg-popover p-0.5 shadow-md"
+            style={{ left: toolbarPos.x, top: Math.max(0, toolbarPos.y - 6) }}
+            onMouseUp={(e) => e.stopPropagation()}
+          >
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 px-2 text-xs"
+              onClick={() => {
+                onTrimRange?.({
+                  startMs: selection.startMs,
+                  endMs: selection.endMs,
+                });
+                clearSelection();
+              }}
+            >
+              <IconScissors className="me-1 h-3.5 w-3.5" />
+              {t("transcriptEditor.ignore")}
+            </Button>
+            {selectionTouchesExcluded && onRestoreRange ? (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 px-2 text-xs"
+                onClick={() => {
+                  onRestoreRange({
+                    startMs: selection.startMs,
+                    endMs: selection.endMs,
+                  });
+                  clearSelection();
+                }}
+              >
+                <IconArrowBackUp className="me-1 h-3.5 w-3.5" />
+                {t("transcriptEditor.restore")}
+              </Button>
+            ) : null}
+            {onCreateSection ? (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 px-2 text-xs"
+                onClick={() => {
+                  onCreateSection({
+                    startMs: selection.startMs,
+                    endMs: selection.endMs,
+                  });
+                  clearSelection();
+                }}
+              >
+                <IconBookmark className="me-1 h-3.5 w-3.5" />
+                {t("transcriptEditor.createSection")}
+              </Button>
+            ) : null}
+            {onAddMarkerAt ? (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 px-2 text-xs"
+                onClick={() => {
+                  onAddMarkerAt(selection.startMs);
+                  clearSelection();
+                }}
+              >
+                <IconBookmarks className="me-1 h-3.5 w-3.5" />
+                {t("transcriptEditor.addMarker")}
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
         {segments.length === 0 ? (
           <div className="text-muted-foreground text-sm">
             {t("transcriptEditor.noTranscript")}

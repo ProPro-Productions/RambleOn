@@ -1029,6 +1029,9 @@ Alle sichtbaren Änderungen für Clips-Nutzer werden hier dokumentiert. Du kanns
     noVideoYet: "Noch kein Video verfügbar.",
   },
   transcriptEditor: {
+    ignore: "Ignorieren",
+    restore: "Wiederherstellen",
+    addMarker: "Marke hinzufügen",
     createSection: "Abschnitt erstellen",
     transcript: "Transkript",
     selectionRange: "· Auswahl {{start}} → {{end}}",

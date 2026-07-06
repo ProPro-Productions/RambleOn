@@ -1001,6 +1001,9 @@ Clips의 모든 사용자 대상 변경 사항은 여기에 기록됩니다. 명
     noVideoYet: "아직 사용할 수 있는 비디오가 없습니다.",
   },
   transcriptEditor: {
+    ignore: "무시",
+    restore: "복원",
+    addMarker: "마커 추가",
     createSection: "섹션 만들기",
     transcript: "기록",
     selectionRange: "· 선택 {{start}} → {{end}}",

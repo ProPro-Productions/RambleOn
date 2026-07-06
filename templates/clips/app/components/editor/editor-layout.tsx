@@ -155,6 +155,7 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
     "delete-annotation" as any,
   );
   const trimMutation = useActionMutation("trim-recording");
+  const restoreMutation = useActionMutation("restore-recording-range" as any);
   const splitMutation = useActionMutation("split-recording");
   const addMarkerAt = (ms: number, kind: string) =>
     addAnnotationMutation.mutate(
@@ -566,6 +567,14 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
                   { onSettled: () => refetchAnnotations() } as any,
                 )
               }
+              onRestoreRange={(range) =>
+                restoreMutation.mutate({
+                  recordingId,
+                  startMs: Math.round(range.startMs),
+                  endMs: Math.round(range.endMs),
+                } as any)
+              }
+              onAddMarkerAt={(ms) => addMarkerAt(ms, "generic")}
               className="flex-1"
             />
           </div>

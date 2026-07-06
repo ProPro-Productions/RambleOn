@@ -959,6 +959,9 @@ const messages = {
     noVideoYet: "還沒有可用影片。",
   },
   transcriptEditor: {
+    ignore: "忽略",
+    restore: "還原",
+    addMarker: "新增標記",
     createSection: "建立片段區間",
     transcript: "轉錄",
     selectionRange: "· 已選取 {{start}} → {{end}}",

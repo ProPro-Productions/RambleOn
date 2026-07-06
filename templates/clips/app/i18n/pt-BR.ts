@@ -1018,6 +1018,9 @@ Todas as mudanças visíveis para usuários do Clips são documentadas aqui. Voc
     noVideoYet: "Ainda não há vídeo disponível.",
   },
   transcriptEditor: {
+    ignore: "Ignorar",
+    restore: "Restaurar",
+    addMarker: "Adicionar marcador",
     createSection: "Criar seção",
     transcript: "Transcrição",
     selectionRange: "· seleção {{start}} → {{end}}",
