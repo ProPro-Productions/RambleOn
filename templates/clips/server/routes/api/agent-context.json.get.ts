@@ -41,13 +41,17 @@ export default defineEventHandler(async (event: H3Event) => {
   }
 
   const recording = accessResult.access.recording;
-  const [{ transcript, agentSegments }, ctas, browserDiagnostics, bugReport] =
-    await Promise.all([
-      loadAgentTranscript(recording.id, recording.durationMs),
-      loadAgentCtas(recording.id),
-      loadAgentBrowserDiagnostics(recording.id),
-      loadAgentBugReport(recording.id),
-    ]);
+  const [
+    { transcript, agentSegments, excludedRanges },
+    ctas,
+    browserDiagnostics,
+    bugReport,
+  ] = await Promise.all([
+    loadAgentTranscript(recording.id, recording.durationMs),
+    loadAgentCtas(recording.id),
+    loadAgentBrowserDiagnostics(recording.id),
+    loadAgentBugReport(recording.id),
+  ]);
   const chapters = parseAgentChapters(recording);
 
   return buildPublicAgentContext({
@@ -55,6 +59,7 @@ export default defineEventHandler(async (event: H3Event) => {
     access: accessResult.access,
     transcript,
     agentSegments,
+    excludedRanges,
     chapters,
     ctas,
     browserDiagnostics,
