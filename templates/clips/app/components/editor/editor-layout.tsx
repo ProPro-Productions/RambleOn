@@ -17,6 +17,7 @@ import {
   useActionQuery,
   useT,
 } from "@agent-native/core/client";
+import { IconZoomIn, IconZoomOut } from "@tabler/icons-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -55,6 +56,7 @@ async function writeAppStateClient(key: string, value: unknown): Promise<void> {
 }
 
 import { useRecordingAnnotations } from "@/components/player/use-recording-annotations";
+import { Button } from "@/components/ui/button";
 import { annotationColorClass } from "@/lib/annotation-kinds";
 import {
   parsePlaybackSpeed,
@@ -332,6 +334,57 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
       Math.min(current, Math.max(0, totalWidth - viewportWidth)),
     );
   }, [totalWidth, viewportWidth]);
+
+  // Zoom around a viewport x position: the moment under the cursor (or the
+  // viewport center for the buttons) stays put while the scale changes.
+  const zoomRef = useRef(zoom);
+  zoomRef.current = zoom;
+  const scrollLeftRef = useRef(scrollLeft);
+  scrollLeftRef.current = scrollLeft;
+  const viewportWidthRef = useRef(viewportWidth);
+  viewportWidthRef.current = viewportWidth;
+  const zoomAround = useCallback((viewportX: number, factor: number) => {
+    const vw = viewportWidthRef.current;
+    const oldZoom = zoomRef.current;
+    const newZoom = Math.min(50, Math.max(1, oldZoom * factor));
+    if (newZoom === oldZoom) return;
+    const oldTotal = Math.max(vw, Math.floor(vw * oldZoom));
+    const newTotal = Math.max(vw, Math.floor(vw * newZoom));
+    const x = Math.min(Math.max(viewportX, 0), vw);
+    const anchorFrac = (scrollLeftRef.current + x) / oldTotal;
+    setZoom(Math.round(newZoom * 100) / 100);
+    setScrollLeft(
+      Math.min(Math.max(anchorFrac * newTotal - x, 0), newTotal - vw),
+    );
+  }, []);
+
+  // Cmd/Ctrl+scroll zooms around the cursor (Descript's gesture); plain
+  // horizontal wheel pans when zoomed in. Native listener because React's
+  // wheel handlers can't reliably preventDefault (passive) — and this must
+  // beat the browser's page-zoom.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        const rect = el.getBoundingClientRect();
+        zoomAround(e.clientX - rect.left - 8, Math.exp(-e.deltaY * 0.002));
+        return;
+      }
+      const delta = e.deltaX !== 0 ? e.deltaX : e.shiftKey ? e.deltaY : 0;
+      if (delta !== 0 && zoomRef.current > 1) {
+        e.preventDefault();
+        const vw = viewportWidthRef.current;
+        const total = Math.max(vw, Math.floor(vw * zoomRef.current));
+        setScrollLeft(
+          Math.min(Math.max(scrollLeftRef.current + delta, 0), total - vw),
+        );
+      }
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [zoomAround]);
 
   // Sync the <video> to play state.
   useEffect(() => {
@@ -694,7 +747,6 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
                 annotations={timelineAnnotations}
                 excludedRanges={excludedRanges}
                 splitPoints={splitPoints}
-                scrollLeft={scrollLeft}
                 onSeek={seek}
                 onClickChapter={(c) => seek(c.startMs)}
                 onClickAnnotation={(a) => seek(a.startMs)}
@@ -810,6 +862,7 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
                   }
                 }}
                 onScroll={(s) => setScrollLeft(s)}
+                scrollLeft={scrollLeft}
               />
             </div>
             <div className="pointer-events-none absolute inset-0 overflow-hidden">
@@ -826,7 +879,6 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
                   value={effectiveSelection}
                   onChange={setSelectionRange}
                   durationMs={durationMs}
-                  scrollLeft={scrollLeft}
                 />
               </div>
             </div>
@@ -885,14 +937,50 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
             )}
           </div>
 
-          <div className="flex justify-between gap-3 pt-1 font-mono text-[10px] text-muted-foreground">
+          <div className="flex items-center justify-between gap-3 pt-1 font-mono text-[10px] text-muted-foreground">
             <span>
               {excludedRanges.length} trim(s) · {splitPoints.length} split(s)
             </span>
-            <span className="truncate text-right">
-              speed {playbackSpeed}x · zoom {zoom}x · selection{" "}
-              {formatMs(effectiveSelection.startMs)}–
-              {formatMs(effectiveSelection.endMs)}
+            <span className="flex items-center gap-1">
+              <span className="truncate text-right">
+                speed {playbackSpeed}x · selection{" "}
+                {formatMs(effectiveSelection.startMs)}–
+                {formatMs(effectiveSelection.endMs)}
+              </span>
+              {/* Zoom controls, Descript-style at the timeline itself; the
+                  scale readout doubles as fit-to-width. Cmd/Ctrl+scroll on
+                  the timeline zooms around the cursor. */}
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-5 w-5"
+                aria-label={t("editorToolbar.zoomOut")}
+                disabled={zoom <= 1}
+                onClick={() => zoomAround(viewportWidth / 2, 1 / 1.5)}
+              >
+                <IconZoomOut className="h-3.5 w-3.5" />
+              </Button>
+              <button
+                type="button"
+                className="min-w-[38px] cursor-pointer rounded px-1 text-center hover:bg-accent hover:text-foreground"
+                title={t("editorToolbar.fitToWidth")}
+                onClick={() => {
+                  setZoom(1);
+                  setScrollLeft(0);
+                }}
+              >
+                {Math.round(zoom * 100)}%
+              </button>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-5 w-5"
+                aria-label={t("editorToolbar.zoomIn")}
+                disabled={zoom >= 50}
+                onClick={() => zoomAround(viewportWidth / 2, 1.5)}
+              >
+                <IconZoomIn className="h-3.5 w-3.5" />
+              </Button>
             </span>
           </div>
         </div>

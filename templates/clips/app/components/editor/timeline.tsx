@@ -48,7 +48,6 @@ export interface TimelineProps {
   annotations?: TimelineAnnotation[];
   excludedRanges?: Array<{ startMs: number; endMs: number }>;
   splitPoints?: number[];
-  scrollLeft?: number;
   onSeek?: (originalMs: number) => void;
   onClickChapter?: (chapter: TimelineChapter) => void;
   onClickAnnotation?: (annotation: TimelineAnnotation) => void;
@@ -96,7 +95,6 @@ export function Timeline({
   annotations = [],
   excludedRanges = [],
   splitPoints = [],
-  scrollLeft = 0,
   onSeek,
   onClickChapter,
   onClickAnnotation,
@@ -146,10 +144,14 @@ export function Timeline({
     return out;
   }, [durationMs, width]);
 
+  // The ruler renders inside the timeline's translated (scrolled) wrapper,
+  // so its bounding rect already reflects the scroll offset — clientX minus
+  // rect.left IS the content-space position. Adding scrollLeft on top would
+  // double-count once the timeline is zoomed and scrolled.
   const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!onSeek) return;
     const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left + scrollLeft;
+    const x = e.clientX - rect.left;
     const ms = Math.max(0, Math.min(durationMs, (x / width) * durationMs));
     onSeek(ms);
   };
@@ -171,7 +173,7 @@ export function Timeline({
           // moves it: the controlled CoordinateMenu re-anchors to the new
           // coordinates instead of only dismissing.
           const rect = e.currentTarget.getBoundingClientRect();
-          const x = e.clientX - rect.left + scrollLeft;
+          const x = e.clientX - rect.left;
           const ms = Math.max(
             0,
             Math.min(durationMs, (x / width) * durationMs),

@@ -26,6 +26,12 @@ export interface WaveformProps {
   onSeek?: (originalMs: number) => void;
   /** Called on scroll so the parent can sync ruler / chapter markers. */
   onScroll?: (scrollLeft: number, totalWidth: number) => void;
+  /**
+   * Controlled scroll offset: the waveform is the timeline's one native
+   * scroller, so zoom-around-cursor (which must set a computed offset)
+   * writes here and every other layer follows through onScroll.
+   */
+  scrollLeft?: number;
   className?: string;
 }
 
@@ -89,6 +95,7 @@ export function Waveform({
   activityRanges = [],
   onSeek,
   onScroll,
+  scrollLeft,
   className,
 }: WaveformProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -96,6 +103,16 @@ export function Waveform({
 
   // The total drawable width (scrolls horizontally). zoom=1 fits exactly.
   const totalWidth = Math.max(width, Math.floor(width * Math.max(1, zoom)));
+
+  // Controlled scroll: adopt the parent's offset when it diverges (>1px so
+  // the echo from our own onScroll doesn't loop).
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || scrollLeft == null) return;
+    if (Math.abs(el.scrollLeft - scrollLeft) > 1) {
+      el.scrollLeft = scrollLeft;
+    }
+  }, [scrollLeft, totalWidth]);
 
   // Re-draw whenever peaks, size, or excluded ranges change.
   useEffect(() => {
