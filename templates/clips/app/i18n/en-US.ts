@@ -1088,6 +1088,7 @@ All notable user-facing changes to Clips are documented here. Open it any time f
     seekTo: "Seek to {{time}}",
   },
   editorToolbar: {
+    cutSegment: "Cut segment",
     removeSplit: "Remove split",
     actions: "Actions",
     splitAtTime: "Split at {{time}}",

@@ -1107,6 +1107,7 @@ Todas as mudanças visíveis para usuários do Clips são documentadas aqui. Voc
     seekTo: "Ir para {{time}}",
   },
   editorToolbar: {
+    cutSegment: "Cortar segmento",
     removeSplit: "Remover divisão",
     actions: "Ações",
     splitAtTime: "Dividir em {{time}}",

@@ -1110,6 +1110,7 @@ Todos los cambios visibles para los usuarios de Clips se documentan aquí. Puede
     seekTo: "Ir a {{time}}",
   },
   editorToolbar: {
+    cutSegment: "Cortar segmento",
     removeSplit: "Quitar división",
     actions: "Acciones",
     splitAtTime: "Dividir en {{time}}",

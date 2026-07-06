@@ -17,7 +17,13 @@ import {
   useActionQuery,
   useT,
 } from "@agent-native/core/client";
-import { IconZoomIn, IconZoomOut } from "@tabler/icons-react";
+import {
+  IconBracketsContain,
+  IconCut,
+  IconTrash,
+  IconZoomIn,
+  IconZoomOut,
+} from "@tabler/icons-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -57,6 +63,10 @@ async function writeAppStateClient(key: string, value: unknown): Promise<void> {
 
 import { useRecordingAnnotations } from "@/components/player/use-recording-annotations";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import { annotationColorClass } from "@/lib/annotation-kinds";
 import {
   parsePlaybackSpeed,
@@ -73,6 +83,7 @@ import { cn } from "@/lib/utils";
 import { computePeaks, type WaveformPeaks } from "@/lib/waveform-peaks";
 
 import { ChaptersEditor } from "./chapters-editor";
+import { CoordinateMenu } from "./coordinate-menu";
 import { EditorToolbar } from "./editor-toolbar";
 import { StitchManager } from "./stitch-manager";
 import { ThumbnailPicker } from "./thumbnail-picker";
@@ -317,6 +328,14 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
   } | null>(null);
   const trackSplitStartXRef = useRef(0);
   const trackSplitMovedRef = useRef(false);
+  // Right-click menu on the track strip: a segment card or a split divider.
+  const [stripMenu, setStripMenu] = useState<{
+    x: number;
+    y: number;
+    target:
+      | { type: "segment"; range: { startMs: number; endMs: number } }
+      | { type: "split"; ms: number };
+  } | null>(null);
 
   const [thumbOpen, setThumbOpen] = useState(false);
   const [stitchOpen, setStitchOpen] = useState(false);
@@ -826,6 +845,25 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
           <div
             className="relative min-w-0 overflow-hidden rounded-sm border border-border/70 bg-black/20"
             style={{ width: viewportWidth, height: TRACK_STRIP_HEIGHT }}
+            onContextMenu={(e) => {
+              // Right-click a segment card: select it and offer segment
+              // actions. (This container is NOT translated, so the scroll
+              // offset must be added — unlike inside the ruler.)
+              e.preventDefault();
+              const rect = e.currentTarget.getBoundingClientRect();
+              const x = e.clientX - rect.left + scrollLeft;
+              const ms = Math.max(
+                0,
+                Math.min(durationMs, (x / totalWidth) * durationMs),
+              );
+              const range = segmentBoundsAt(ms);
+              setSelectionRange(range);
+              setStripMenu({
+                x: e.clientX,
+                y: e.clientY,
+                target: { type: "segment", range },
+              });
+            }}
           >
             {/* Filmstrip (frames) — click seeks, like the waveform. */}
             <div
@@ -1048,6 +1086,15 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
                           trackSplitMovedRef.current = false;
                           setTrackSplitDrag(null);
                         }}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setStripMenu({
+                            x: e.clientX,
+                            y: e.clientY,
+                            target: { type: "split", ms },
+                          });
+                        }}
                       >
                         {/* Opaque gap that separates the segment cards —
                             filmstrip content can be near-black, so the gap
@@ -1069,6 +1116,98 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
               </div>
             )}
           </div>
+
+          {/* Track-strip context menu: segment cards and split dividers are
+              first-class right-click targets, same as in the ruler. */}
+          {stripMenu ? (
+            <CoordinateMenu
+              open
+              x={stripMenu.x}
+              y={stripMenu.y}
+              onOpenChange={(open) => {
+                if (!open) setStripMenu(null);
+              }}
+            >
+              {stripMenu.target.type === "segment" ? (
+                <>
+                  <DropdownMenuItem
+                    onSelect={() => {
+                      if (stripMenu.target.type !== "segment") return;
+                      seek(stripMenu.target.range.startMs);
+                      setStripMenu(null);
+                    }}
+                  >
+                    {t("annotationsStrip.jumpTo", {
+                      time: formatMs(stripMenu.target.range.startMs),
+                    })}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={() => {
+                      if (stripMenu.target.type !== "segment") return;
+                      addAnnotationMutation.mutate(
+                        {
+                          recordingId,
+                          startMs: Math.round(stripMenu.target.range.startMs),
+                          endMs: Math.round(stripMenu.target.range.endMs),
+                          kind: "generic",
+                        } as any,
+                        { onSettled: () => refetchAnnotations() } as any,
+                      );
+                      setStripMenu(null);
+                    }}
+                  >
+                    <IconBracketsContain className="h-4 w-4" />
+                    {t("transcriptEditor.createSection")}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="text-destructive focus:text-destructive"
+                    onSelect={() => {
+                      if (stripMenu.target.type !== "segment") return;
+                      trimMutation.mutate({
+                        recordingId,
+                        startMs: Math.round(stripMenu.target.range.startMs),
+                        endMs: Math.round(stripMenu.target.range.endMs),
+                      } as any);
+                      setStripMenu(null);
+                    }}
+                  >
+                    <IconCut className="h-4 w-4" />
+                    {t("editorToolbar.cutSegment")}
+                  </DropdownMenuItem>
+                </>
+              ) : (
+                <>
+                  <DropdownMenuItem
+                    onSelect={() => {
+                      if (stripMenu.target.type !== "split") return;
+                      seek(stripMenu.target.ms);
+                      setStripMenu(null);
+                    }}
+                  >
+                    {t("annotationsStrip.jumpTo", {
+                      time: formatMs(stripMenu.target.ms),
+                    })}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="text-destructive focus:text-destructive"
+                    onSelect={() => {
+                      if (stripMenu.target.type !== "split") return;
+                      removeSplitMutation.mutate({
+                        recordingId,
+                        atMs: stripMenu.target.ms,
+                      } as any);
+                      setStripMenu(null);
+                    }}
+                  >
+                    <IconTrash className="h-4 w-4" />
+                    {t("editorToolbar.removeSplit")}
+                  </DropdownMenuItem>
+                </>
+              )}
+            </CoordinateMenu>
+          ) : null}
 
           <div className="flex items-center justify-between gap-3 pt-1 font-mono text-[10px] text-muted-foreground">
             <span>

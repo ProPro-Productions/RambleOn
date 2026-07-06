@@ -1090,6 +1090,7 @@ Clips의 모든 사용자 대상 변경 사항은 여기에 기록됩니다. 명
     seekTo: "{{time}}(으)로 이동",
   },
   editorToolbar: {
+    cutSegment: "세그먼트 잘라내기",
     removeSplit: "분할 제거",
     actions: "작업",
     splitAtTime: "{{time}}에서 분할",
