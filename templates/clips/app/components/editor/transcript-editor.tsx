@@ -106,7 +106,13 @@ interface Selection {
  * A silence gap this long between segments starts a new paragraph — the
  * transcript must read like a real document, never one text blob.
  */
-const PARAGRAPH_PAUSE_MS = 900;
+const PARAGRAPH_PAUSE_MS = 700;
+/**
+ * Fluent speakers can talk for minutes without a 700ms gap, which would
+ * still produce wall-of-text paragraphs — so once a paragraph runs longer
+ * than this, it also breaks at the next sentence end.
+ */
+const PARAGRAPH_MAX_MS = 30_000;
 
 /**
  * Transcript viewer with selection-to-trim support.
@@ -338,6 +344,8 @@ export function TranscriptEditor({
       ) {
         const ms = sceneTimes[sceneIndex++];
         flushParagraph();
+        // A scene break starts a fresh paragraph clock.
+        paragraphStartMs = ms;
         const thumb = sceneThumbs[ms];
         paragraph.push(
           <Tooltip key={`scene-${ms}`}>
@@ -369,11 +377,24 @@ export function TranscriptEditor({
       }
     };
     let prevEndMs: number | null = null;
+    let prevText = "";
+    let paragraphStartMs: number | null = null;
     segments.forEach((s, i) => {
-      if (prevEndMs !== null && s.startMs - prevEndMs > PARAGRAPH_PAUSE_MS) {
+      const pause = prevEndMs !== null ? s.startMs - prevEndMs : 0;
+      const paragraphMs =
+        paragraphStartMs !== null ? s.startMs - paragraphStartMs : 0;
+      const atSentenceEnd = /[.!?…。！？]$/.test(prevText);
+      if (
+        prevEndMs !== null &&
+        (pause > PARAGRAPH_PAUSE_MS ||
+          (paragraphMs > PARAGRAPH_MAX_MS && atSentenceEnd))
+      ) {
         flushParagraph();
+        paragraphStartMs = null;
       }
+      if (paragraphStartMs === null) paragraphStartMs = s.startMs;
       prevEndMs = s.endMs;
+      prevText = s.text.trim();
       pushScenesBefore(s.startMs, s.endMs);
       pushMarkersBefore(s.endMs);
       // A Cut (hidden) segment is removed from the transcript view entirely
