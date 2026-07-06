@@ -841,19 +841,24 @@ pub async fn native_fullscreen_recording_stop_and_upload(
                 );
             }
         }
-    } else if mp4_has_moov(&saved.file_path) == Some(false) {
+    } else if wait_for_mp4_moov(&saved.file_path, std::time::Duration::from_secs(8))
+        == Some(false)
+    {
         // stop_outcome was Ok but the finalize callback timed out — SCK may still be
-        // flushing the moov atom. Persist metadata so the clip appears as retryable
-        // in the UI, then bail out before upload_recording_file re-checks moov and
-        // permanently marks it corrupt.
+        // flushing the moov atom. wait_for_mp4_moov already gave the flush up to 8s
+        // to land; if the atom is still absent, persist metadata so the clip appears
+        // as retryable in the UI, then bail out before upload_recording_file
+        // re-checks moov and permanently marks it corrupt. The file usually becomes
+        // playable moments later, so the message points at retrying the UPLOAD from
+        // the tray, not re-recording.
         saved.last_error = Some(
-            "Recorded MP4 is missing playback metadata. Please retry the recording.".to_string(),
+            "The clip is still being finalized by macOS. It was saved locally — retry the upload from the tray in a moment.".to_string(),
         );
-        eprintln!("[clips-tray] recording missing moov after Ok stop outcome (likely finalize timeout) — saving as retryable, skipping upload");
+        eprintln!("[clips-tray] recording missing moov after Ok stop outcome and 8s wait — saving as retryable, skipping upload");
         write_saved_recording_metadata(&app, &saved)?;
         emit_native_upload_progress(&app, "failed", "Upload paused", None, None);
         return Err(
-            "Recorded MP4 is missing playback metadata. Please retry the recording.".to_string(),
+            "The clip is still being finalized by macOS. It was saved locally — retry the upload from the tray in a moment.".to_string(),
         );
     } else if let Err(merge_err) = &consolidate_outcome {
         saved.last_error = Some(merge_err.clone());
@@ -3083,6 +3088,25 @@ fn is_moov_corrupt_error(err: &str) -> bool {
 /// finding one (file is unplayable), or `None` when the file could not be
 /// read (transient I/O error — callers must not treat this as permanent
 /// corruption).
+/// Wait for the moov atom to appear. ScreenCaptureKit can still be flushing
+/// the atom when the stop callback returns (or times out) — a single instant
+/// check races that flush and produced "missing playback metadata" failures
+/// for files that were fine one second later. Polls up to `max_wait`.
+pub(crate) fn wait_for_mp4_moov(path: &Path, max_wait: std::time::Duration) -> Option<bool> {
+    let deadline = std::time::Instant::now() + max_wait;
+    loop {
+        match mp4_has_moov(path) {
+            Some(true) => return Some(true),
+            outcome => {
+                if std::time::Instant::now() >= deadline {
+                    return outcome;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(500));
+            }
+        }
+    }
+}
+
 pub(crate) fn mp4_has_moov(path: &Path) -> Option<bool> {
     use std::io::{ErrorKind, Read, Seek, SeekFrom};
     let mut f = match std::fs::File::open(path) {
