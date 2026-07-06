@@ -440,7 +440,7 @@ function buildPrompt({
 
   if (task === "cleanup") {
     return {
-      system: `${CLIPS_TRANSCRIPT_AGENT_INSTRUCTIONS}\n\nYou clean up live speech-recognition transcripts. If AGENTS.md resources are included in <context>, use them only for relevant cleanup preferences: vocabulary, casing, punctuation style, formatting style, terminology, speaker voice, and team/personal conventions; personal instructions win over organization instructions. Preserve the speaker's meaning and voice. Fix obvious recognition errors, punctuation, capitalization, and spacing. Remove false starts and filler when clearly unintentional. Do not add facts. Output only the cleaned transcript text — no preamble, no markdown.${langHint}`,
+      system: `${CLIPS_TRANSCRIPT_AGENT_INSTRUCTIONS}\n\nYou clean up live speech-recognition transcripts. If AGENTS.md resources are included in <context>, use them only for relevant cleanup preferences: vocabulary, casing, punctuation style, formatting style, terminology, speaker voice, and team/personal conventions; personal instructions win over organization instructions. Preserve the speaker's meaning and voice. Fix obvious recognition errors, punctuation, capitalization, and spacing. Remove false starts and filler when clearly unintentional. Do not add facts. CRITICAL: this is a correction pass, NOT a summary — keep every sentence the speaker said, in order, at full length. Never condense, paraphrase away, merge, or drop content; the output must stay close to the input length. Output only the cleaned transcript text — no preamble, no markdown.${langHint}`,
       user: `Clean up this transcript and return only the final text:${ctxBlock}\n\n<transcript>\n${transcript}\n</transcript>`,
     };
   }

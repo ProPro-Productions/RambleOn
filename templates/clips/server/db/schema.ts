@@ -219,6 +219,11 @@ export const recordingTranscripts = table("recording_transcripts", {
   // JSON array of { startMs, endMs, text, source }
   segmentsJson: text("segments_json").notNull().default("[]"),
   fullText: text("full_text").notNull().default(""),
+  // Verbatim provider output (whisper/web-speech/cloud) — cleanup writes the
+  // polished text into fullText but must NEVER touch these; they are the
+  // source of truth for re-cleanups and precise text editing.
+  rawFullText: text("raw_full_text"),
+  rawSegmentsJson: text("raw_segments_json"),
   status: text("status", { enum: ["pending", "streaming", "ready", "failed"] })
     .notNull()
     .default("pending"),

@@ -845,6 +845,13 @@ const migrations = runMigrations(
         `CREATE INDEX IF NOT EXISTS clips_edit_versions_recording_idx ON clips_edit_versions (recording_id, created_at)`,
       ].join("; "),
     },
+    {
+      version: 49,
+      sql: [
+        `ALTER TABLE recording_transcripts ADD COLUMN raw_full_text TEXT`,
+        `ALTER TABLE recording_transcripts ADD COLUMN raw_segments_json TEXT`,
+      ].join("; "),
+    },
   ],
   { table: "clips_migrations" },
 );

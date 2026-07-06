@@ -511,16 +511,52 @@ async function cleanupNativeTranscript({
       return { cleaned: false, provider: result.provider };
     }
 
+    // Cleanup exists to fix errors and punctuation, never to condense. A
+    // materially shorter result means the model summarized — rejecting it
+    // preserves the verbatim transcript (a real incident destroyed an 8.6k
+    // whisper transcript into a 2.6k summary this way).
+    if (cleanedText.length < sourceText.length * 0.7) {
+      console.warn(
+        `[clips] transcript cleanup for ${recordingId} rejected: result is ${cleanedText.length}/${sourceText.length} chars (condensed).`,
+      );
+      await writeTranscriptCleanupState(recordingId, {
+        status: "rejected-condensed",
+        provider: result.provider,
+      });
+      return { cleaned: false, provider: result.provider };
+    }
+
     const now = new Date().toISOString();
     const language = await resolveStoredLanguage(db, recordingId);
+
+    // Snapshot the verbatim content into raw_* (once) before cleanup touches
+    // fullText, and KEEP the original segments — their timings are the
+    // foundation for text-based editing and must never be replaced by
+    // segments fabricated from cleaned prose.
+    const [currentRow] = await db
+      .select({
+        fullText: schema.recordingTranscripts.fullText,
+        segmentsJson: schema.recordingTranscripts.segmentsJson,
+        rawFullText: schema.recordingTranscripts.rawFullText,
+      })
+      .from(schema.recordingTranscripts)
+      .where(eq(schema.recordingTranscripts.recordingId, recordingId))
+      .limit(1);
+    const snapshotRaw = !currentRow?.rawFullText?.trim();
+
     await upsertTranscriptRow(db, {
       recordingId,
       ownerEmail,
       status: "ready",
       failureReason: null,
       language,
-      segmentsJson: fullTextSegmentJson(cleanedText, durationMs),
       fullText: cleanedText,
+      ...(snapshotRaw
+        ? {
+            rawFullText: currentRow?.fullText ?? sourceText,
+            rawSegmentsJson: currentRow?.segmentsJson ?? undefined,
+          }
+        : {}),
       now,
     });
     await writeTranscriptCleanupState(recordingId, {
@@ -986,6 +1022,8 @@ export default defineAction({
           language: builderResult.language ?? "en",
           segmentsJson: JSON.stringify(normalizedTranscript.segments),
           fullText,
+          rawFullText: fullText,
+          rawSegmentsJson: JSON.stringify(normalizedTranscript.segments),
           now,
         });
         await writeAppState("refresh-signal", { ts: Date.now() });
@@ -1314,6 +1352,9 @@ async function upsertTranscriptRow(
     language?: string;
     segmentsJson?: string;
     fullText?: string;
+    /** Verbatim provider output — set on fresh transcriptions, never by cleanup. */
+    rawFullText?: string;
+    rawSegmentsJson?: string;
     now: string;
   },
 ): Promise<void> {
@@ -1333,6 +1374,12 @@ async function upsertTranscriptRow(
         ...(row.language ? { language: row.language } : {}),
         ...(row.segmentsJson ? { segmentsJson: row.segmentsJson } : {}),
         ...(row.fullText !== undefined ? { fullText: row.fullText } : {}),
+        ...(row.rawFullText !== undefined
+          ? { rawFullText: row.rawFullText }
+          : {}),
+        ...(row.rawSegmentsJson !== undefined
+          ? { rawSegmentsJson: row.rawSegmentsJson }
+          : {}),
         updatedAt: row.now,
       })
       .where(eq(schema.recordingTranscripts.recordingId, row.recordingId));
@@ -1343,6 +1390,8 @@ async function upsertTranscriptRow(
       language: row.language ?? "en",
       segmentsJson: row.segmentsJson ?? "[]",
       fullText: row.fullText ?? "",
+      rawFullText: row.rawFullText ?? null,
+      rawSegmentsJson: row.rawSegmentsJson ?? null,
       status: row.status,
       failureReason: row.failureReason,
       createdAt: row.now,
