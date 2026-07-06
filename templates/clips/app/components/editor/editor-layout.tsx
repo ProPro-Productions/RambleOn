@@ -162,6 +162,44 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
       { recordingId, startMs: Math.round(ms), kind } as any,
       { onSettled: () => refetchAnnotations() } as any,
     );
+  const [transcriptPanelWidth, setTranscriptPanelWidth] = useState(() => {
+    if (typeof window === "undefined") return 340;
+    const saved = Number(
+      window.localStorage.getItem("clips-editor-transcript-width"),
+    );
+    return Number.isFinite(saved) && saved >= 240 ? Math.min(saved, 720) : 340;
+  });
+  useEffect(() => {
+    window.localStorage.setItem(
+      "clips-editor-transcript-width",
+      String(transcriptPanelWidth),
+    );
+  }, [transcriptPanelWidth]);
+  const transcriptResizeRef = useRef<{
+    startX: number;
+    startWidth: number;
+  } | null>(null);
+  const onTranscriptResizeDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    transcriptResizeRef.current = {
+      startX: e.clientX,
+      startWidth: transcriptPanelWidth,
+    };
+    const onMove = (ev: PointerEvent) => {
+      const drag = transcriptResizeRef.current;
+      if (!drag) return;
+      const next = drag.startWidth + (drag.startX - ev.clientX);
+      setTranscriptPanelWidth(Math.min(720, Math.max(240, Math.round(next))));
+    };
+    const onUp = () => {
+      transcriptResizeRef.current = null;
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
+
   const timelineAnnotations = useMemo(
     () =>
       editorAnnotations
@@ -520,12 +558,12 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
       <div className="flex flex-1 min-h-0 min-w-0 flex-col overflow-hidden">
         {/* Top region: video | transcript panel | optional chapters */}
         <div
-          className={cn(
-            "grid flex-1 min-h-0 min-w-0 overflow-hidden",
-            chaptersOpen
-              ? "grid-cols-[minmax(0,1fr)_minmax(280px,360px)_300px]"
-              : "grid-cols-[minmax(0,1fr)_minmax(280px,360px)]",
-          )}
+          className="grid flex-1 min-h-0 min-w-0 overflow-hidden"
+          style={{
+            gridTemplateColumns: chaptersOpen
+              ? `minmax(0,1fr) ${transcriptPanelWidth}px 300px`
+              : `minmax(0,1fr) ${transcriptPanelWidth}px`,
+          }}
         >
           {/* Row 1: video */}
           <div className="flex min-h-0 min-w-0 flex-1 basis-[220px] items-center justify-center overflow-hidden bg-black p-4">
@@ -546,8 +584,14 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
             )}
           </div>
 
-          {/* Transcript: Descript-like side panel, docked by default */}
-          <div className="flex min-h-0 min-w-0 flex-col border-l border-border">
+          {/* Transcript: Descript-like side panel, docked by default,
+              resizable via the left-edge drag handle */}
+          <div className="relative flex min-h-0 min-w-0 flex-col border-l border-border">
+            <div
+              onPointerDown={onTranscriptResizeDown}
+              className="absolute -left-1 top-0 z-20 h-full w-2 cursor-col-resize hover:bg-primary/20"
+              aria-hidden
+            />
             <TranscriptEditor
               segments={transcriptSegments}
               edits={edits}
