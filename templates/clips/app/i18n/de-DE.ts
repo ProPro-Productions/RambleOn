@@ -927,6 +927,9 @@ Alle sichtbaren Änderungen für Clips-Nutzer werden hier dokumentiert. Du kanns
     markerShortcut: "Marke (⌥⇧M) · Notiz ⌥⇧E · B-Roll ⌥⇧B · Retake ⌥⇧N",
   },
   annotationsStrip: {
+    comment: "Kommentar",
+    resolvedChip: "Erledigt",
+    moreComments: "+{{count}} weitere Kommentare",
     addKindAt: "{{kind}} bei {{time}} hinzufügen",
     changeType: "Typ ändern",
     addMarkerAt: "Marke bei {{time}} setzen",

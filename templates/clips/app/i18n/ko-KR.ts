@@ -900,6 +900,9 @@ Clips의 모든 사용자 대상 변경 사항은 여기에 기록됩니다. 명
     markerShortcut: "마커 (⌥⇧M) · 메모 ⌥⇧E · B롤 ⌥⇧B · 재촬영 ⌥⇧N",
   },
   annotationsStrip: {
+    comment: "댓글",
+    resolvedChip: "해결됨",
+    moreComments: "댓글 {{count}}개 더",
     addKindAt: "{{time}}에 {{kind}} 추가",
     changeType: "유형 변경",
     addMarkerAt: "{{time}}에 마커 추가",

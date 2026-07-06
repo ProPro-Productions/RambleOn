@@ -859,6 +859,9 @@ const messages = {
     markerShortcut: "標記 (⌥⇧M) · 備註 ⌥⇧E · B-roll ⌥⇧B · 重錄 ⌥⇧N",
   },
   annotationsStrip: {
+    comment: "留言",
+    resolvedChip: "已解決",
+    moreComments: "還有 {{count}} 則留言",
     addKindAt: "在 {{time}} 新增{{kind}}",
     changeType: "變更類型",
     addMarkerAt: "在 {{time}} 新增標記",

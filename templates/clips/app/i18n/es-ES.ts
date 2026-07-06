@@ -919,6 +919,9 @@ Todos los cambios visibles para los usuarios de Clips se documentan aquí. Puede
     markerShortcut: "Marca (⌥⇧M) · nota ⌥⇧E · b-roll ⌥⇧B · retoma ⌥⇧N",
   },
   annotationsStrip: {
+    comment: "Comentario",
+    resolvedChip: "Resuelto",
+    moreComments: "+{{count}} comentarios más",
     addKindAt: "Añadir {{kind}} en {{time}}",
     changeType: "Cambiar tipo",
     addMarkerAt: "Añadir marca en {{time}}",

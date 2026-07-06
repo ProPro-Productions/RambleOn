@@ -36,6 +36,13 @@ const KIND_STYLES: Record<string, AnnotationKindStyle> = {
     chip: "bg-red-500/15 text-red-600 dark:text-red-400",
     labelKey: "annotationsStrip.retake",
   },
+  // Comments mapped into the annotation shape by list-annotations — they
+  // share the timeline's annotation layer, so they need a stable color.
+  comment: {
+    bg: "bg-teal-400",
+    chip: "bg-teal-500/15 text-teal-600 dark:text-teal-400",
+    labelKey: "annotationsStrip.comment",
+  },
 };
 
 /** Canonical kind order for pickers and menus. */

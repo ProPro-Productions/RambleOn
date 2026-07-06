@@ -2,6 +2,10 @@ import { useT } from "@agent-native/core/client";
 import { useMemo, useRef, useState } from "react";
 
 import {
+  AnnotationHoverCard,
+  type AnnotationThreadComment,
+} from "@/components/timeline/annotation-hover";
+import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuSub,
@@ -31,12 +35,16 @@ export interface TimelineChapter {
 
 export interface TimelineAnnotation {
   id: string;
+  entity?: "annotation" | "comment";
   startMs: number;
   endMs: number | null;
   kind: string;
   label: string | null;
   body: string | null;
+  authorName?: string | null;
   resolved: boolean;
+  /** Attached discussion thread, folded in by attachCommentThreads. */
+  comments?: AnnotationThreadComment[];
 }
 
 export interface TimelineProps {
@@ -315,48 +323,55 @@ export function Timeline({
             );
           })}
 
-        {/* Annotation needles — same language as the player scrubber */}
+        {/* Annotation layer needles — hover reveals everything attached to
+            the timestamp (note, author, comment thread) via the hover card
+            shared with the full editor's overlay. */}
         {annotations.map((a) => {
           const x = (a.startMs / Math.max(durationMs, 1)) * width;
-          const text = a.label ?? a.body ?? "";
           return (
-            <Tooltip key={`ann-${a.id}`}>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  data-annotation-marker
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onClickAnnotation?.(a);
-                  }}
-                  onContextMenu={(e) => {
-                    if (!menuEnabled) return;
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setMenuPos({ x: e.clientX, y: e.clientY });
-                    setMenuTarget({ type: "annotation", annotation: a });
-                  }}
+            <AnnotationHoverCard
+              key={`ann-${a.id}`}
+              marker={{
+                ...a,
+                entity: a.entity ?? "annotation",
+                comments: a.comments ?? [],
+              }}
+              timeText={formatMs(a.startMs)}
+            >
+              <button
+                type="button"
+                data-annotation-marker
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onClickAnnotation?.(a);
+                }}
+                onContextMenu={(e) => {
+                  if (!menuEnabled) return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  // Comment markers are read-only here — their lifecycle
+                  // belongs to the comment actions, not update-annotation.
+                  if (a.entity === "comment") return;
+                  setMenuPos({ x: e.clientX, y: e.clientY });
+                  setMenuTarget({ type: "annotation", annotation: a });
+                }}
+                className={cn(
+                  "absolute top-0 flex -translate-x-1/2 flex-col items-center",
+                  a.resolved && "opacity-40",
+                )}
+                style={{ left: x, height: RULER_HEIGHT }}
+              >
+                <span
                   className={cn(
-                    "absolute top-0 flex -translate-x-1/2 flex-col items-center",
-                    a.resolved && "opacity-40",
+                    "h-2 w-2 rounded-full border border-black/30 transition-transform hover:scale-125",
+                    annotationColorClass(a.kind),
                   )}
-                  style={{ left: x, height: RULER_HEIGHT }}
-                >
-                  <span
-                    className={cn(
-                      "h-2 w-2 rounded-full border border-black/30 transition-transform hover:scale-125",
-                      annotationColorClass(a.kind),
-                    )}
-                  />
-                  <span
-                    className={cn("w-0.5 flex-1", annotationColorClass(a.kind))}
-                  />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>
-                {`${a.kind}${text ? `: ${text.slice(0, 80)}` : ""} · ${formatMs(a.startMs)}`}
-              </TooltipContent>
-            </Tooltip>
+                />
+                <span
+                  className={cn("w-0.5 flex-1", annotationColorClass(a.kind))}
+                />
+              </button>
+            </AnnotationHoverCard>
           );
         })}
 

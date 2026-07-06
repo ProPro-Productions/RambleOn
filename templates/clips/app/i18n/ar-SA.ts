@@ -900,6 +900,9 @@ const messages = {
       "علامة (⌥⇧M) · ملاحظة ⌥⇧E · لقطات إضافية ⌥⇧B · إعادة تسجيل ⌥⇧N",
   },
   annotationsStrip: {
+    comment: "تعليق",
+    resolvedChip: "تم الحل",
+    moreComments: "+{{count}} تعليقات أخرى",
     addKindAt: "إضافة {{kind}} عند {{time}}",
     changeType: "تغيير النوع",
     addMarkerAt: "إضافة علامة عند {{time}}",

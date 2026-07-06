@@ -158,7 +158,7 @@ function getWaveformMediaUrl({
 export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
   const t = useT();
   // --- server state -------------------------------------------------------
-  const { annotations: editorAnnotations, refetch: refetchAnnotations } =
+  const { threaded: editorAnnotations, refetch: refetchAnnotations } =
     useRecordingAnnotations(recordingId);
   const addAnnotationMutation = useActionMutation("add-annotation" as any);
   const updateAnnotationMutation = useActionMutation(
@@ -223,12 +223,15 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
         .filter((a) => a.startMs !== null)
         .map((a) => ({
           id: a.id,
+          entity: a.entity,
           startMs: a.startMs ?? 0,
           endMs: a.endMs,
           kind: a.kind,
           label: a.label,
           body: a.body,
+          authorName: a.authorName ?? null,
           resolved: a.resolved,
+          comments: a.comments,
         })),
     [editorAnnotations],
   );

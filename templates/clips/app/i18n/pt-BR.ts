@@ -916,6 +916,9 @@ Todas as mudanças visíveis para usuários do Clips são documentadas aqui. Voc
     markerShortcut: "Marcador (⌥⇧M) · nota ⌥⇧E · b-roll ⌥⇧B · regravação ⌥⇧N",
   },
   annotationsStrip: {
+    comment: "Comentário",
+    resolvedChip: "Resolvido",
+    moreComments: "+{{count}} comentários a mais",
     addKindAt: "Adicionar {{kind}} em {{time}}",
     changeType: "Alterar tipo",
     addMarkerAt: "Adicionar marcador em {{time}}",

@@ -898,6 +898,9 @@ All notable user-facing changes to Clips are documented here. Open it any time f
     markerShortcut: "Marker (⌥⇧M) · note ⌥⇧E · b-roll ⌥⇧B · retake ⌥⇧N",
   },
   annotationsStrip: {
+    comment: "Comment",
+    resolvedChip: "Resolved",
+    moreComments: "+{{count}} more comments",
     addKindAt: "Add {{kind}} at {{time}}",
     changeType: "Change type",
     addMarkerAt: "Add marker at {{time}}",

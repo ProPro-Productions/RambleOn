@@ -921,6 +921,9 @@ Tous les changements visibles par les utilisateurs de Clips sont documentés ici
     markerShortcut: "Marqueur (⌥⇧M) · note ⌥⇧E · b-roll ⌥⇧B · reprise ⌥⇧N",
   },
   annotationsStrip: {
+    comment: "Commentaire",
+    resolvedChip: "Résolu",
+    moreComments: "+{{count}} autres commentaires",
     addKindAt: "Ajouter {{kind}} à {{time}}",
     changeType: "Changer le type",
     addMarkerAt: "Ajouter un marqueur à {{time}}",
