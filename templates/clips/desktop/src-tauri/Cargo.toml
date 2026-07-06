@@ -32,6 +32,7 @@ tauri = { version = "2", features = [
 ] }
 tauri-plugin-shell = "2"
 tauri-plugin-global-shortcut = "2"
+tauri-plugin-pilot = { git = "https://github.com/mpiton/tauri-pilot" }
 tauri-plugin-single-instance = "2"
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"

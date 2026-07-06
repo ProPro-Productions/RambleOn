@@ -69,7 +69,7 @@ pub fn run() {
             .unwrap_or_else(|| "Clips".to_string()),
     );
 
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
             // Second launch just focuses the popover of the already-running
             // instance. Prevents the "two tray icons" UX where clicks fight
@@ -208,7 +208,15 @@ pub fn run() {
         )
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_notification::init())
-        .plugin(shortcuts::build_shortcut_plugin().build())
+        .plugin(shortcuts::build_shortcut_plugin().build());
+
+    // tauri-pilot: debug-only automation bridge (Unix socket + JSON-RPC) so
+    // agents can drive and verify the tray app — DOM snapshots, clicks,
+    // screenshots, JS eval. Compiled out of release builds entirely.
+    #[cfg(debug_assertions)]
+    let builder = builder.plugin(tauri_plugin_pilot::init());
+
+    builder
         .manage(TrayAnchor::default())
         .manage(TrayMeetings::default())
         .manage(PopoverShownAt::default())

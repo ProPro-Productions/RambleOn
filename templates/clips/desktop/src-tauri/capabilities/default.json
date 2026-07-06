@@ -37,6 +37,7 @@
     "process:allow-restart",
     "notification:default",
     "fs:allow-video-write-recursive",
-    "fs:allow-video-read-recursive"
+    "fs:allow-video-read-recursive",
+    "pilot:default"
   ]
 }
