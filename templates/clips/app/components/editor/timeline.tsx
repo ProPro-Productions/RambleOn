@@ -1,5 +1,5 @@
 import { useT } from "@agent-native/core/client";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import {
   DropdownMenuItem,
@@ -64,6 +64,11 @@ export interface TimelineProps {
   getEditActions?: (ms: number) => TimelineActionItem[];
   /** Removes the split at a position — splits are selectable entities. */
   onRemoveSplit?: (ms: number) => void;
+  /**
+   * Moves a split to a new position — dragging a split IS moving the shared
+   * segment edge, automatically affecting the neighboring segment.
+   */
+  onMoveSplit?: (fromMs: number, toMs: number) => void;
   className?: string;
 }
 
@@ -101,11 +106,21 @@ export function Timeline({
   onDeleteAnnotation,
   getEditActions,
   onRemoveSplit,
+  onMoveSplit,
   className,
 }: TimelineProps) {
   const t = useT();
   const [menuTarget, setMenuTarget] = useState<TimelineMenuTarget | null>(null);
   const [menuPos, setMenuPos] = useState({ x: 0, y: 0 });
+  // Drag-a-split: ghost position while dragging, commit on release. A drag
+  // under the click threshold stays a click (seek), tracked via dragMovedRef
+  // because the click event fires after pointerup.
+  const [dragSplit, setDragSplit] = useState<{
+    fromMs: number;
+    ghostMs: number;
+  } | null>(null);
+  const dragStartXRef = useRef(0);
+  const dragMovedRef = useRef(false);
   const menuEnabled = Boolean(
     onAddAnnotationAt ||
     onToggleAnnotationResolved ||
@@ -184,18 +199,66 @@ export function Timeline({
 
         {/* Split markers */}
         {splitPoints.map((ms, i) => {
-          const x = (ms / Math.max(durationMs, 1)) * width;
+          const dragging = dragSplit?.fromMs === ms;
+          const x =
+            ((dragging ? dragSplit.ghostMs : ms) / Math.max(durationMs, 1)) *
+            width;
           return (
             <button
               key={`split-${i}-${ms}`}
               type="button"
               data-annotation-marker
-              className="absolute top-0 h-full w-[5px] -translate-x-1/2 cursor-pointer before:absolute before:inset-y-0 before:left-1/2 before:w-px before:-translate-x-1/2 before:bg-rose-500/80 hover:before:w-[3px]"
+              className={cn(
+                "absolute top-0 h-full w-[5px] -translate-x-1/2 before:absolute before:inset-y-0 before:left-1/2 before:w-px before:-translate-x-1/2 before:bg-rose-500/80 hover:before:w-[3px]",
+                onMoveSplit ? "cursor-col-resize" : "cursor-pointer",
+                dragging && "before:w-[3px] before:bg-rose-400",
+              )}
               style={{ left: x }}
-              title={`Split @ ${formatMs(ms)}`}
+              title={`Split @ ${formatMs(dragging ? dragSplit.ghostMs : ms)}`}
               onClick={(e) => {
                 e.stopPropagation();
+                // A completed drag also fires a click — swallow it once.
+                if (dragMovedRef.current) {
+                  dragMovedRef.current = false;
+                  return;
+                }
                 onSeek?.(ms);
+              }}
+              onPointerDown={(e) => {
+                if (!onMoveSplit || e.button !== 0) return;
+                e.stopPropagation();
+                dragStartXRef.current = e.clientX;
+                dragMovedRef.current = false;
+                e.currentTarget.setPointerCapture(e.pointerId);
+                setDragSplit({ fromMs: ms, ghostMs: ms });
+              }}
+              onPointerMove={(e) => {
+                if (!dragging) return;
+                if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
+                if (Math.abs(e.clientX - dragStartXRef.current) > 3) {
+                  dragMovedRef.current = true;
+                }
+                const ruler = e.currentTarget.parentElement;
+                if (!ruler) return;
+                const rect = ruler.getBoundingClientRect();
+                const px = e.clientX - rect.left;
+                const ghostMs = Math.max(
+                  0,
+                  Math.min(durationMs, (px / width) * durationMs),
+                );
+                setDragSplit({ fromMs: ms, ghostMs });
+              }}
+              onPointerUp={(e) => {
+                if (!dragging) return;
+                e.currentTarget.releasePointerCapture(e.pointerId);
+                if (dragMovedRef.current && onMoveSplit) {
+                  onMoveSplit(ms, Math.round(dragSplit.ghostMs));
+                }
+                setDragSplit(null);
+              }}
+              onPointerCancel={() => {
+                dragMovedRef.current = false;
+                setDragSplit(null);
               }}
               onContextMenu={(e) => {
                 if (!menuEnabled) return;

@@ -159,6 +159,7 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
   const removeSplitMutation = useActionMutation(
     "remove-recording-split" as any,
   );
+  const moveSplitMutation = useActionMutation("move-recording-split" as any);
   const splitMutation = useActionMutation("split-recording");
   const addMarkerAt = (ms: number, kind: string) =>
     addAnnotationMutation.mutate(
@@ -720,6 +721,13 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
                 }
                 onRemoveSplit={(atMs) =>
                   removeSplitMutation.mutate({ recordingId, atMs } as any)
+                }
+                onMoveSplit={(fromMs, toMs) =>
+                  moveSplitMutation.mutate({
+                    recordingId,
+                    fromMs,
+                    toMs,
+                  } as any)
                 }
                 onToggleAnnotationResolved={(a) =>
                   updateAnnotationMutation.mutate(
