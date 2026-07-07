@@ -366,11 +366,6 @@ export function Timeline({
                   onClickAnnotation?.(a);
                 }}
                 onPointerDown={(e) => {
-                  // eslint-disable-next-line no-console
-                  console.log("[ann-drag] down", {
-                    draggable,
-                    button: e.button,
-                  });
                   if (!draggable || e.button !== 0) return;
                   e.stopPropagation();
                   dragStartXRef.current = e.clientX;
@@ -397,11 +392,6 @@ export function Timeline({
                   setDragAnn({ id: a.id, ghostMs });
                 }}
                 onPointerUp={(e) => {
-                  // eslint-disable-next-line no-console
-                  console.log("[ann-drag] up", {
-                    draggingAnn,
-                    moved: annMovedRef.current,
-                  });
                   if (!draggingAnn) return;
                   e.currentTarget.releasePointerCapture(e.pointerId);
                   if (annMovedRef.current && onMoveAnnotation) {
