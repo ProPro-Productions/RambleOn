@@ -1121,6 +1121,7 @@ Alle sichtbaren Änderungen für Clips-Nutzer werden hier dokumentiert. Du kanns
     seekTo: "Zu {{time}} springen",
   },
   editorToolbar: {
+    clearSelection: "Auswahl aufheben",
     split: "Aufteilen",
     cutSegment: "Segment schneiden",
     removeSplit: "Teilung entfernen",

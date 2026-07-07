@@ -319,7 +319,13 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
   const [zoom, setZoom] = useState(1);
   const [viewportWidth, setViewportWidth] = useState(800);
   const [scrollLeft, setScrollLeft] = useState(0);
+  // Two selection kinds, deliberately distinct (Descript's model): a
+  // "segment" selection is a whole split-bounded segment (card highlight,
+  // segment actions), a "range" selection is an arbitrary span (violet span
+  // like Descript's purple, range actions — cut just this part). Adjusting
+  // a segment's span via the trim handles converts it into a range.
   const [selectionRange, setSelectionRange] = useState<{
+    type: "segment" | "range";
     startMs: number;
     endMs: number;
   } | null>(null);
@@ -337,6 +343,7 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
     y: number;
     target:
       | { type: "segment"; range: { startMs: number; endMs: number } }
+      | { type: "range"; range: { startMs: number; endMs: number } }
       | { type: "split"; ms: number };
   } | null>(null);
 
@@ -580,11 +587,13 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
         undo.mutate({ recordingId });
       } else if (e.key.toLowerCase() === "i") {
         setSelectionRange((r) => ({
+          type: "range",
           startMs: playheadMs,
           endMs: r?.endMs && r.endMs > playheadMs ? r.endMs : playheadMs + 1000,
         }));
       } else if (e.key.toLowerCase() === "o") {
         setSelectionRange((r) => ({
+          type: "range",
           startMs:
             r?.startMs && r.startMs < playheadMs
               ? r.startMs
@@ -631,6 +640,7 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
 
   // Default selection window so the TrimHandles have something to render.
   const effectiveSelection = selectionRange ?? {
+    type: "range" as const,
     startMs: Math.max(0, playheadMs - 1000),
     endMs: Math.min(durationMs || 1_000, playheadMs + 1000),
   };
@@ -702,7 +712,9 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
               annotations={timelineAnnotations}
               onSeek={seek}
               onTrimRange={callTrim}
-              onSelectionChange={(range) => setSelectionRange(range)}
+              onSelectionChange={(range) =>
+                setSelectionRange(range ? { type: "range", ...range } : null)
+              }
               onCreateSection={(range) =>
                 addAnnotationMutation.mutate(
                   {
@@ -727,7 +739,9 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
               }
               splitPoints={splitPoints}
               videoUrl={videoUrl}
-              onSelectSegmentAt={(ms) => setSelectionRange(segmentBoundsAt(ms))}
+              onSelectSegmentAt={(ms) =>
+                setSelectionRange({ type: "segment", ...segmentBoundsAt(ms) })
+              }
               className="flex-1"
             />
           </div>
@@ -852,9 +866,11 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
             className="relative min-w-0 overflow-hidden rounded-sm border border-border/70 bg-black/20"
             style={{ width: viewportWidth, height: TRACK_STRIP_HEIGHT }}
             onContextMenu={(e) => {
-              // Right-click a segment card: select it and offer segment
-              // actions. (This container is NOT translated, so the scroll
-              // offset must be added — unlike inside the ruler.)
+              // Right-click: an active free-range selection owns clicks
+              // inside its span (range actions); anywhere else selects the
+              // segment under the cursor and offers segment actions. (This
+              // container is NOT translated, so the scroll offset must be
+              // added — unlike inside the ruler.)
               e.preventDefault();
               const rect = e.currentTarget.getBoundingClientRect();
               const x = e.clientX - rect.left + scrollLeft;
@@ -862,8 +878,20 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
                 0,
                 Math.min(durationMs, (x / totalWidth) * durationMs),
               );
+              if (
+                selectionRange?.type === "range" &&
+                ms >= selectionRange.startMs &&
+                ms <= selectionRange.endMs
+              ) {
+                setStripMenu({
+                  x: e.clientX,
+                  y: e.clientY,
+                  target: { type: "range", range: selectionRange },
+                });
+                return;
+              }
               const range = segmentBoundsAt(ms);
-              setSelectionRange(range);
+              setSelectionRange({ type: "segment", ...range });
               setStripMenu({
                 x: e.clientX,
                 y: e.clientY,
@@ -915,6 +943,7 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
                 durationMs={durationMs}
                 excludedRanges={excludedRanges}
                 selectionRange={selectionRange}
+                selectionType={selectionRange?.type ?? "range"}
                 activityRanges={transcriptSegments}
                 onSeek={(ms) => {
                   // Clicking the audio representation selects the enclosing
@@ -922,7 +951,10 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
                   // above stays seek-only.
                   seek(ms);
                   if (splitPoints.length > 0) {
-                    setSelectionRange(segmentBoundsAt(ms));
+                    setSelectionRange({
+                      type: "segment",
+                      ...segmentBoundsAt(ms),
+                    });
                   }
                 }}
                 onScroll={(s) => setScrollLeft(s)}
@@ -941,7 +973,10 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
                   width={totalWidth}
                   height={TRACK_STRIP_HEIGHT}
                   value={effectiveSelection}
-                  onChange={setSelectionRange}
+                  onChange={(next) =>
+                    setSelectionRange({ type: "range", ...next })
+                  }
+                  tone={effectiveSelection.type}
                   durationMs={durationMs}
                 />
               </div>
@@ -1018,10 +1053,19 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
                     const segWidth =
                       ((seg.endMs - seg.startMs) / Math.max(durationMs, 1)) *
                       totalWidth;
+                    const isSelected =
+                      selectionRange?.type === "segment" &&
+                      Math.abs(selectionRange.startMs - seg.startMs) < 2 &&
+                      Math.abs(selectionRange.endMs - seg.endMs) < 2;
                     return (
                       <div
                         key={`seg-card-${i}`}
-                        className="absolute inset-y-0 rounded-md border border-border/60"
+                        className={cn(
+                          "absolute inset-y-0 rounded-md border",
+                          isSelected
+                            ? "border-ring border-2 bg-ring/10"
+                            : "border-border/60",
+                        )}
                         style={{ left: left + 2, width: segWidth - 4 }}
                       />
                     );
@@ -1134,7 +1178,53 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
                 if (!open) setStripMenu(null);
               }}
             >
-              {stripMenu.target.type === "segment" ? (
+              {stripMenu.target.type === "range" ? (
+                <>
+                  <DropdownMenuItem
+                    onSelect={() => {
+                      if (stripMenu.target.type !== "range") return;
+                      addAnnotationMutation.mutate(
+                        {
+                          recordingId,
+                          startMs: Math.round(stripMenu.target.range.startMs),
+                          endMs: Math.round(stripMenu.target.range.endMs),
+                          kind: "generic",
+                        } as any,
+                        { onSettled: () => refetchAnnotations() } as any,
+                      );
+                      setStripMenu(null);
+                    }}
+                  >
+                    <IconBracketsContain className="h-4 w-4" />
+                    {t("transcriptEditor.createSection")}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={() => {
+                      setSelectionRange(null);
+                      setStripMenu(null);
+                    }}
+                  >
+                    {t("editorToolbar.clearSelection")}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="text-destructive focus:text-destructive"
+                    onSelect={() => {
+                      if (stripMenu.target.type !== "range") return;
+                      trimMutation.mutate({
+                        recordingId,
+                        startMs: Math.round(stripMenu.target.range.startMs),
+                        endMs: Math.round(stripMenu.target.range.endMs),
+                      } as any);
+                      setSelectionRange(null);
+                      setStripMenu(null);
+                    }}
+                  >
+                    <IconCut className="h-4 w-4" />
+                    {t("editorToolbar.cutSelection")}
+                  </DropdownMenuItem>
+                </>
+              ) : stripMenu.target.type === "segment" ? (
                 <>
                   <DropdownMenuItem
                     onSelect={() => {

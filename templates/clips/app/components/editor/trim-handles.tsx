@@ -14,6 +14,9 @@ export interface TrimHandlesProps {
   /** Fires when the user releases the mouse after drag. */
   onCommit?: (value: { startMs: number; endMs: number }) => void;
   durationMs: number;
+  /** Visual tone: segment selections use the brand color, free ranges the
+   * Descript-style violet so the two selection kinds read differently. */
+  tone?: "segment" | "range";
   /** Scroll offset of the parent container so handles track with zoom. */
   className?: string;
 }
@@ -46,6 +49,7 @@ export function TrimHandles({
   onChange,
   onCommit,
   durationMs,
+  tone = "range",
   className,
 }: TrimHandlesProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -114,6 +118,13 @@ export function TrimHandles({
     };
   }, [dragMode, value, onChange, onCommit, durationMs, width]);
 
+  const RANGE_COLOR = "hsl(258 88% 66%)";
+  const color = tone === "range" ? RANGE_COLOR : getBrandColor();
+  const colorAlpha = (alpha: number) =>
+    tone === "range"
+      ? `hsl(258 88% 66% / ${alpha})`
+      : getBrandColorAlpha(alpha);
+
   const startX = (value.startMs / Math.max(durationMs, 1)) * width;
   const endX = (value.endMs / Math.max(durationMs, 1)) * width;
 
@@ -129,9 +140,9 @@ export function TrimHandles({
         style={{
           left: startX,
           width: Math.max(2, endX - startX),
-          background: getBrandColorAlpha(0.18),
-          borderTop: `1px solid ${getBrandColor()}`,
-          borderBottom: `1px solid ${getBrandColor()}`,
+          background: colorAlpha(0.18),
+          borderTop: `1px solid ${color}`,
+          borderBottom: `1px solid ${color}`,
         }}
         onPointerDown={startDrag("range")}
       >
@@ -150,7 +161,7 @@ export function TrimHandles({
         style={{
           left: startX - HANDLE_WIDTH / 2,
           width: HANDLE_WIDTH,
-          background: getBrandColor(),
+          background: color,
           borderRadius: "2px 0 0 2px",
         }}
         onPointerDown={startDrag("start")}
@@ -164,7 +175,7 @@ export function TrimHandles({
         style={{
           left: endX - HANDLE_WIDTH / 2,
           width: HANDLE_WIDTH,
-          background: getBrandColor(),
+          background: color,
           borderRadius: "0 2px 2px 0",
         }}
         onPointerDown={startDrag("end")}
