@@ -1092,6 +1092,8 @@ const messages = {
     seekTo: "Seek to {{time}} (مترجم)",
   },
   editorToolbar: {
+    selectionSegment: "مقطع",
+    selectionRange: "تحديد",
     clearSelection: "مسح التحديد",
     split: "تقسيم",
     cutSegment: "قص المقطع",

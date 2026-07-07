@@ -1048,6 +1048,8 @@ const messages = {
     seekTo: "跳到 {{time}}",
   },
   editorToolbar: {
+    selectionSegment: "分段",
+    selectionRange: "選取範圍",
     clearSelection: "清除選取",
     split: "分割",
     cutSegment: "剪下分段",

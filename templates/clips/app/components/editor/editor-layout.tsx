@@ -1325,7 +1325,18 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
             </span>
             <span className="flex items-center gap-1">
               <span className="truncate text-right">
-                speed {playbackSpeed}x · selection{" "}
+                speed {playbackSpeed}x ·{" "}
+                <span
+                  className={cn(
+                    effectiveSelection.type === "segment"
+                      ? "text-ring"
+                      : "text-violet-400",
+                  )}
+                >
+                  {effectiveSelection.type === "segment"
+                    ? t("editorToolbar.selectionSegment")
+                    : t("editorToolbar.selectionRange")}
+                </span>{" "}
                 {formatMs(effectiveSelection.startMs)}–
                 {formatMs(effectiveSelection.endMs)}
               </span>

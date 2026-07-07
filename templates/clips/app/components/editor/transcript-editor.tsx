@@ -213,12 +213,34 @@ export function TranscriptEditor({
     }
   };
 
+  // Where is the caret, in recording time? The anchor segment provides the
+  // span; the character offset within it interpolates to a finer position —
+  // so "/" splits at the clicked word, not just the segment start.
+  const resolveCaretMs = (): number | null => {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return null;
+    const el = findSegmentElement(sel.anchorNode);
+    if (!el || !rootRef.current?.contains(el)) return null;
+    const startMs = Number(el.dataset.startMs ?? Number.NaN);
+    const endMs = Number(el.dataset.endMs ?? Number.NaN);
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) return null;
+    const text = el.textContent ?? "";
+    const offset =
+      sel.anchorNode && sel.anchorNode.nodeType === Node.TEXT_NODE
+        ? sel.anchorOffset
+        : 0;
+    const frac =
+      text.length > 0 ? Math.min(1, Math.max(0, offset / text.length)) : 0;
+    return Math.round(startMs + frac * (endMs - startMs));
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    // Descript's slash-to-split, transcript-first: click a word (which seeks
-    // there), then type "/" to split the segment at that spot.
+    // Descript's slash-to-split, transcript-first: click a word, then type
+    // "/" to split there. The caret position decides (interpolated within
+    // the segment); the playhead is only the fallback when no caret exists.
     if (e.key === "/" && onSplitAt) {
       e.preventDefault();
-      onSplitAt(Math.round(currentMs));
+      onSplitAt(resolveCaretMs() ?? Math.round(currentMs));
       return;
     }
     if (
