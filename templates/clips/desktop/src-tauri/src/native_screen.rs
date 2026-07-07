@@ -736,6 +736,31 @@ pub async fn native_fullscreen_recording_begin(
         session.started_at = now;
         session.current_segment_started_at = now;
         session.pending_recording_output = false;
+        let sink_path = session.path.clone();
+        drop(guard);
+
+        // Sink watchdog: a capture can "run" without ever writing a file
+        // (e.g. the recording output silently failing after attach) — which
+        // once cost a full recording, surfaced only at stop as "native
+        // recording file missing". Verify the file materializes shortly
+        // after begin and shout immediately if it doesn't, so the user can
+        // re-record seconds in instead of minutes later.
+        {
+            let app = app.clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(Duration::from_millis(2_500));
+                if std::fs::metadata(&sink_path).is_err() {
+                    eprintln!(
+                        "[clips-tray] SINK WATCHDOG: no recording file on disk 2.5s after begin: {}",
+                        sink_path.display()
+                    );
+                    let _ = app.emit(
+                        "clips:recording-warning",
+                        "Recording sink missing — the capture is not writing to disk. Stop and re-record.",
+                    );
+                }
+            });
+        }
 
         Ok(NativeFullscreenStartInfo {
             recording_id,
