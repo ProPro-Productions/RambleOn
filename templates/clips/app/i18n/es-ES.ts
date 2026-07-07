@@ -1112,6 +1112,16 @@ Todos los cambios visibles para los usuarios de Clips se documentan aquí. Puede
     defaultTitle: "Capítulo {{count}}",
     seekTo: "Ir a {{time}}",
   },
+  editVersions: {
+    review: "Revisar",
+    accept: "Aceptar versión",
+    reject: "Rechazar",
+    accepted: "Versión aplicada; ediciones anteriores archivadas",
+    rejected: "Versión rechazada",
+    reviewFailed: "Error al revisar",
+    pendingFrom: "corte propuesto por {{author}} pendiente de tu revisión",
+    editor: "un editor",
+  },
   editorToolbar: {
     selectionSegment: "segmento",
     selectionRange: "selección",

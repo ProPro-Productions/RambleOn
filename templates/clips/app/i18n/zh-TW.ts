@@ -1047,6 +1047,16 @@ const messages = {
     defaultTitle: "章節 {{count}}",
     seekTo: "跳到 {{time}}",
   },
+  editVersions: {
+    review: "審閱",
+    accept: "接受版本",
+    reject: "拒絕",
+    accepted: "已套用版本，先前的剪輯已封存",
+    rejected: "已拒絕版本",
+    reviewFailed: "審閱失敗",
+    pendingFrom: "{{author}} 提議的剪輯等待您審閱",
+    editor: "編輯",
+  },
   editorToolbar: {
     selectionSegment: "分段",
     selectionRange: "選取範圍",

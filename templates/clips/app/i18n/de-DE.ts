@@ -1120,6 +1120,17 @@ Alle sichtbaren Änderungen für Clips-Nutzer werden hier dokumentiert. Du kanns
     defaultTitle: "Kapitel {{count}}",
     seekTo: "Zu {{time}} springen",
   },
+  editVersions: {
+    review: "Überprüfen",
+    accept: "Version übernehmen",
+    reject: "Ablehnen",
+    accepted: "Version übernommen — vorherige Bearbeitung archiviert",
+    rejected: "Version abgelehnt",
+    reviewFailed: "Überprüfung fehlgeschlagen",
+    pendingFrom:
+      "vorgeschlagener Schnitt von {{author}} wartet auf deine Überprüfung",
+    editor: "einem Editor",
+  },
   editorToolbar: {
     selectionSegment: "Segment",
     selectionRange: "Auswahl",

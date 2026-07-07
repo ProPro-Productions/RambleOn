@@ -1091,6 +1091,16 @@ const messages = {
     defaultTitle: "Chapter {{count}} (مترجم)",
     seekTo: "Seek to {{time}} (مترجم)",
   },
+  editVersions: {
+    review: "مراجعة",
+    accept: "قبول النسخة",
+    reject: "رفض",
+    accepted: "تم تطبيق النسخة — أُرشفت التعديلات السابقة",
+    rejected: "رُفضت النسخة",
+    reviewFailed: "فشلت المراجعة",
+    pendingFrom: "قصّ مقترح من {{author}} بانتظار مراجعتك",
+    editor: "محرر",
+  },
   editorToolbar: {
     selectionSegment: "مقطع",
     selectionRange: "تحديد",

@@ -1092,6 +1092,16 @@ Clips의 모든 사용자 대상 변경 사항은 여기에 기록됩니다. 명
     defaultTitle: "챕터 {{count}}",
     seekTo: "{{time}}(으)로 이동",
   },
+  editVersions: {
+    review: "검토",
+    accept: "버전 수락",
+    reject: "거절",
+    accepted: "버전 적용됨 — 이전 편집은 보관됨",
+    rejected: "버전 거절됨",
+    reviewFailed: "검토 실패",
+    pendingFrom: "{{author}}이(가) 제안한 편집이 검토를 기다립니다",
+    editor: "편집자",
+  },
   editorToolbar: {
     selectionSegment: "세그먼트",
     selectionRange: "선택 영역",

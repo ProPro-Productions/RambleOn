@@ -1114,6 +1114,17 @@ Tous les changements visibles par les utilisateurs de Clips sont documentés ici
     defaultTitle: "Chapitre {{count}}",
     seekTo: "Aller à {{time}}",
   },
+  editVersions: {
+    review: "Vérifier",
+    accept: "Accepter la version",
+    reject: "Rejeter",
+    accepted: "Version appliquée — montage précédent archivé",
+    rejected: "Version rejetée",
+    reviewFailed: "Échec de la vérification",
+    pendingFrom:
+      "montage proposé par {{author}} en attente de votre vérification",
+    editor: "un monteur",
+  },
   editorToolbar: {
     selectionSegment: "segment",
     selectionRange: "sélection",

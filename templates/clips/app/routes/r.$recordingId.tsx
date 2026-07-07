@@ -44,6 +44,7 @@ import { EditorLayout } from "@/components/editor/editor-layout";
 import { AnnotationsStrip } from "@/components/player/annotations-strip";
 import { CommentsPanel } from "@/components/player/comments-panel";
 import { RecordingOptionsMenu } from "@/components/player/delete-recording-menu";
+import { EditVersionReview } from "@/components/player/edit-version-review";
 import { InsightsPanel } from "@/components/player/insights-panel";
 import { ReactionsTray } from "@/components/player/reactions-tray";
 import { SettingsPanel } from "@/components/player/settings-panel";
@@ -1201,6 +1202,10 @@ export default function RecordingPage() {
             <EditorLayout recordingId={recording.id} className="flex-1" />
           ) : (
             <>
+              {/* Pending edit versions (AI or human editors) wait here for
+                  the owner's accept/reject — the hand-back half of the
+                  one-take workflow. */}
+              <EditVersionReview recordingId={recording.id} canEdit={canEdit} />
               <div className="flex-1 min-h-0 relative">
                 <VideoPlayer
                   ref={playerRef}

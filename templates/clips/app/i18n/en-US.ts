@@ -1090,6 +1090,16 @@ All notable user-facing changes to Clips are documented here. Open it any time f
     defaultTitle: "Chapter {{count}}",
     seekTo: "Seek to {{time}}",
   },
+  editVersions: {
+    review: "Review",
+    accept: "Accept version",
+    reject: "Reject",
+    accepted: "Version applied — previous edits archived",
+    rejected: "Version rejected",
+    reviewFailed: "Review failed",
+    pendingFrom: "proposed cut from {{author}} awaiting your review",
+    editor: "an editor",
+  },
   editorToolbar: {
     selectionSegment: "segment",
     selectionRange: "selection",

@@ -1109,6 +1109,16 @@ Todas as mudanças visíveis para usuários do Clips são documentadas aqui. Voc
     defaultTitle: "Capítulo {{count}}",
     seekTo: "Ir para {{time}}",
   },
+  editVersions: {
+    review: "Revisar",
+    accept: "Aceitar versão",
+    reject: "Rejeitar",
+    accepted: "Versão aplicada — edições anteriores arquivadas",
+    rejected: "Versão rejeitada",
+    reviewFailed: "Falha na revisão",
+    pendingFrom: "corte proposto por {{author}} aguardando sua revisão",
+    editor: "um editor",
+  },
   editorToolbar: {
     selectionSegment: "segmento",
     selectionRange: "seleção",
