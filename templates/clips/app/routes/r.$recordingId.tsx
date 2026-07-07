@@ -23,7 +23,8 @@ import {
   IconArrowLeft,
   IconChevronDown,
   IconCalendar,
-  IconScissors,
+  IconCheck,
+  IconEdit,
   IconAlertTriangle,
   IconHelpCircle,
   IconClipboardCopy,
@@ -1016,7 +1017,11 @@ export default function RecordingPage() {
               className="gap-1.5"
               onClick={() => setEditing((v) => !v)}
             >
-              <IconScissors className="h-4 w-4" />
+              {editing ? (
+                <IconCheck className="h-4 w-4" />
+              ) : (
+                <IconEdit className="h-4 w-4" />
+              )}
               {editing ? t("recordingPage.done") : t("recordingPage.edit")}
             </Button>
           ) : null}

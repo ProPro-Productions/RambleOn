@@ -375,18 +375,35 @@ export function Timeline({
           );
         })}
 
-        {/* Playhead */}
+        {/* Playhead — a pointer cap + stem, deliberately NOT the dot+needle
+            language of annotation markers: the playhead is an instrument,
+            markers are content, and they must read differently at a glance
+            (same shape family as the full editor's SVG playhead). */}
         <div
-          className="absolute top-0 h-full pointer-events-none"
-          style={{
-            left: playheadX - 1,
-            width: 2,
-            background: getBrandColor(),
-          }}
+          className="pointer-events-none absolute top-0 h-full"
+          style={{ left: playheadX }}
         >
+          <svg
+            width="13"
+            height="14"
+            viewBox="0 0 13 14"
+            className="absolute top-0 -translate-x-1/2"
+            style={{ left: 0 }}
+          >
+            <path
+              d="M1 1h11v7l-5.5 5L1 8z"
+              fill={getBrandColor()}
+              stroke="rgba(0,0,0,0.4)"
+              strokeWidth="1"
+            />
+          </svg>
           <div
-            className="absolute top-0 -left-[3px] w-2 h-2 rounded-full"
-            style={{ background: getBrandColor() }}
+            className="absolute top-0 h-full"
+            style={{
+              left: -1,
+              width: 2,
+              background: getBrandColor(),
+            }}
           />
         </div>
       </div>

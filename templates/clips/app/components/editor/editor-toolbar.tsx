@@ -8,7 +8,7 @@ import {
   IconZoomOut,
   IconPlayerPlay,
   IconPlayerPause,
-  IconScissors,
+  IconEdit,
   IconPhotoEdit,
   IconBookmarks,
   IconPuzzle,
@@ -16,7 +16,6 @@ import {
   IconLoader2,
   IconMovie,
   IconTrash,
-  IconBolt,
 } from "@tabler/icons-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -51,7 +50,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { OpenInVideoProjectDialog } from "@/components/video-projects/open-in-video-project-dialog";
-import { annotationColorClass } from "@/lib/annotation-kinds";
 import {
   exportMp4,
   LONG_EXPORT_THRESHOLD_MS,
@@ -66,7 +64,6 @@ import {
 import { cn } from "@/lib/utils";
 
 import { IconSplitSegment } from "./split-icon";
-import { buildTimelineActions } from "./timeline-actions";
 
 export interface EditorToolbarProps {
   recordingId: string;
@@ -211,28 +208,6 @@ export function EditorToolbar({
     }
   };
 
-  // Context-aware Actions dropdown — same registry the timeline's
-  // right-click menu consumes, anchored at the playhead.
-  const timelineActions = buildTimelineActions({
-    atMs: playheadMs,
-    durationMs,
-    selectionRange,
-    t,
-    formatTime: formatMs,
-    handlers: {
-      splitAt: () => void handleSplit(),
-      trimRange: (startMs, endMs) => {
-        void trim
-          .mutateAsync({ recordingId, startMs, endMs })
-          .then(() => toast.success(t("editorToolbar.selectionCut")))
-          .catch((err: any) =>
-            toast.error(err?.message ?? t("editorToolbar.trimFailed")),
-          );
-      },
-      addMarker: (ms, kind) => onAddMarker?.(ms, kind),
-    },
-  }).filter((a) => (a.id.startsWith("marker-") ? !!onAddMarker : true));
-
   const runExport = async () => {
     if (!video.videoUrl) {
       toast.error(t("editorToolbar.videoNotReady"));
@@ -301,43 +276,10 @@ export function EditorToolbar({
       </Tooltip>
       <Separator orientation="vertical" className="mx-1 h-6" />
 
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button size="sm" variant="ghost" className="gap-1">
-            <IconBolt className="h-4 w-4" />
-            <span className="hidden xl:inline">
-              {t("editorToolbar.actions")}
-            </span>
-            <IconChevronDown className="h-3 w-3 opacity-60" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start">
-          {timelineActions.map((action) => (
-            <DropdownMenuItem
-              key={action.id}
-              disabled={action.disabled}
-              onSelect={() => action.run()}
-              className={
-                action.destructive
-                  ? "text-destructive focus:text-destructive"
-                  : undefined
-              }
-            >
-              {action.markerKind ? (
-                <span
-                  className={cn(
-                    "me-2 inline-block h-2 w-2 rounded-full",
-                    annotationColorClass(action.markerKind),
-                  )}
-                />
-              ) : null}
-              {action.label}
-            </DropdownMenuItem>
-          ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
-      <Separator orientation="vertical" className="mx-1 h-6" />
-
+      {/* The Actions dropdown used to live here — removed by request: the
+          registry actions apply at a position, and a toolbar menu gives
+          them no positional context. The same actions remain on the
+          timeline's right-click menus, anchored where you click. */}
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
@@ -448,7 +390,7 @@ export function EditorToolbar({
                 onClick={handleTrimSelection}
                 disabled={trim.isPending}
               >
-                <IconScissors className="mr-1 h-4 w-4" />
+                <IconCut className="mr-1 h-4 w-4" />
                 {t("editorToolbar.cutSelection")}
               </Button>
             </TooltipTrigger>
@@ -466,7 +408,7 @@ export function EditorToolbar({
             variant={chaptersOpen ? "secondary" : "ghost"}
             className="gap-1.5"
           >
-            <IconScissors className="h-4 w-4" />
+            <IconEdit className="h-4 w-4" />
             {t("editorToolbar.edit")}
             <IconChevronDown className="h-3.5 w-3.5 opacity-70" />
           </Button>
@@ -485,14 +427,14 @@ export function EditorToolbar({
             disabled={trim.isPending || playheadMs < 500}
             onSelect={handleTrimStart}
           >
-            <IconScissors className="mr-2 h-4 w-4" />
+            <IconCut className="mr-2 h-4 w-4" />
             {t("editorToolbar.cutBeforePlayhead")}
           </DropdownMenuItem>
           <DropdownMenuItem
             disabled={trim.isPending || durationMs - playheadMs < 500}
             onSelect={handleTrimEnd}
           >
-            <IconScissors className="mr-2 h-4 w-4" />
+            <IconCut className="mr-2 h-4 w-4" />
             {t("editorToolbar.cutAfterPlayhead")}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
