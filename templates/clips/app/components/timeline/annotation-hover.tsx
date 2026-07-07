@@ -138,6 +138,7 @@ export function AnnotationHoverCard({
       <HoverCardTrigger asChild>{children}</HoverCardTrigger>
       <HoverCardContent
         side={side}
+        sideOffset={10}
         className="w-72 space-y-2 p-3 text-left"
         collisionPadding={8}
       >

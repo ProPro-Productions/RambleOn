@@ -840,6 +840,20 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
                     toMs,
                   } as any)
                 }
+                onMoveAnnotation={(a, toMs) =>
+                  updateAnnotationMutation.mutate(
+                    {
+                      id: a.id,
+                      startMs: Math.round(toMs),
+                      ...(a.endMs != null
+                        ? {
+                            endMs: Math.round(a.endMs + (toMs - a.startMs)),
+                          }
+                        : {}),
+                    } as any,
+                    { onSettled: () => refetchAnnotations() } as any,
+                  )
+                }
                 onToggleAnnotationResolved={(a) =>
                   updateAnnotationMutation.mutate(
                     { id: a.id, resolved: !a.resolved } as any,

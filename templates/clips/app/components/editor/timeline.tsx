@@ -76,6 +76,8 @@ export interface TimelineProps {
    * segment edge, automatically affecting the neighboring segment.
    */
   onMoveSplit?: (fromMs: number, toMs: number) => void;
+  /** Drags a marker to a new time; sections move as a whole. */
+  onMoveAnnotation?: (annotation: TimelineAnnotation, toMs: number) => void;
   className?: string;
 }
 
@@ -113,6 +115,7 @@ export function Timeline({
   getEditActions,
   onRemoveSplit,
   onMoveSplit,
+  onMoveAnnotation,
   className,
 }: TimelineProps) {
   const t = useT();
@@ -127,6 +130,11 @@ export function Timeline({
   } | null>(null);
   const dragStartXRef = useRef(0);
   const dragMovedRef = useRef(false);
+  const [dragAnn, setDragAnn] = useState<{
+    id: string;
+    ghostMs: number;
+  } | null>(null);
+  const annMovedRef = useRef(false);
   const menuEnabled = Boolean(
     onAddAnnotationAt ||
     onToggleAnnotationResolved ||
@@ -306,9 +314,13 @@ export function Timeline({
         {annotations
           .filter((a) => a.endMs !== null)
           .map((a) => {
-            const xStart = (a.startMs / Math.max(durationMs, 1)) * width;
+            const delta =
+              dragAnn?.id === a.id ? dragAnn.ghostMs - a.startMs : 0;
+            const xStart =
+              ((a.startMs + delta) / Math.max(durationMs, 1)) * width;
             const xEnd =
-              (Math.min(durationMs, a.endMs ?? 0) / Math.max(durationMs, 1)) *
+              (Math.min(durationMs, (a.endMs ?? 0) + delta) /
+                Math.max(durationMs, 1)) *
               width;
             return (
               <div
@@ -325,9 +337,13 @@ export function Timeline({
 
         {/* Annotation layer needles — hover reveals everything attached to
             the timestamp (note, author, comment thread) via the hover card
-            shared with the full editor's overlay. */}
+            shared with the full editor's overlay. Markers drag to move
+            (sections move as a whole); comment markers are read-only. */}
         {annotations.map((a) => {
-          const x = (a.startMs / Math.max(durationMs, 1)) * width;
+          const draggable = Boolean(onMoveAnnotation) && a.entity !== "comment";
+          const draggingAnn = dragAnn?.id === a.id;
+          const shownMs = draggingAnn ? dragAnn.ghostMs : a.startMs;
+          const x = (shownMs / Math.max(durationMs, 1)) * width;
           return (
             <AnnotationHoverCard
               key={`ann-${a.id}`}
@@ -336,14 +352,66 @@ export function Timeline({
                 entity: a.entity ?? "annotation",
                 comments: a.comments ?? [],
               }}
-              timeText={formatMs(a.startMs)}
+              timeText={formatMs(shownMs)}
             >
               <button
                 type="button"
                 data-annotation-marker
                 onClick={(e) => {
                   e.stopPropagation();
+                  if (annMovedRef.current) {
+                    annMovedRef.current = false;
+                    return;
+                  }
                   onClickAnnotation?.(a);
+                }}
+                onPointerDown={(e) => {
+                  // eslint-disable-next-line no-console
+                  console.log("[ann-drag] down", {
+                    draggable,
+                    button: e.button,
+                  });
+                  if (!draggable || e.button !== 0) return;
+                  e.stopPropagation();
+                  dragStartXRef.current = e.clientX;
+                  annMovedRef.current = false;
+                  e.currentTarget.setPointerCapture(e.pointerId);
+                  setDragAnn({ id: a.id, ghostMs: a.startMs });
+                }}
+                onPointerMove={(e) => {
+                  if (!draggingAnn) return;
+                  if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
+                  if (Math.abs(e.clientX - dragStartXRef.current) > 3) {
+                    annMovedRef.current = true;
+                  }
+                  const ruler = e.currentTarget.parentElement;
+                  if (!ruler) return;
+                  const rect = ruler.getBoundingClientRect();
+                  const ghostMs = Math.max(
+                    0,
+                    Math.min(
+                      durationMs,
+                      ((e.clientX - rect.left) / width) * durationMs,
+                    ),
+                  );
+                  setDragAnn({ id: a.id, ghostMs });
+                }}
+                onPointerUp={(e) => {
+                  // eslint-disable-next-line no-console
+                  console.log("[ann-drag] up", {
+                    draggingAnn,
+                    moved: annMovedRef.current,
+                  });
+                  if (!draggingAnn) return;
+                  e.currentTarget.releasePointerCapture(e.pointerId);
+                  if (annMovedRef.current && onMoveAnnotation) {
+                    onMoveAnnotation(a, Math.round(dragAnn.ghostMs));
+                  }
+                  setDragAnn(null);
+                }}
+                onPointerCancel={() => {
+                  annMovedRef.current = false;
+                  setDragAnn(null);
                 }}
                 onContextMenu={(e) => {
                   if (!menuEnabled) return;
@@ -357,6 +425,7 @@ export function Timeline({
                 }}
                 className={cn(
                   "absolute top-0 flex -translate-x-1/2 flex-col items-center",
+                  draggable ? "cursor-grab active:cursor-grabbing" : undefined,
                   a.resolved && "opacity-40",
                 )}
                 style={{ left: x, height: RULER_HEIGHT }}
