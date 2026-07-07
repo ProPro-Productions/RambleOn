@@ -65,6 +65,54 @@ Produce a plan with three phases, each item carrying its anchor timecodes:
    multi-source work), color/sound work, anything taste-heavy. Write this
    phase so an editor who has never spoken to the creator can act on it.
 
+## Meta-speech: what's part of the video and what isn't
+
+Creators talk to three audiences in one take: the eventual viewer, the
+editor/AI ("you can cut this part", "add a zoom here"), and themselves
+(thinking out loud, reacting to mistakes). Only the first belongs in the
+cut. Classify every transcript span:
+
+- **Aside to editor/AI** — direct address about the video itself
+  ("cut this", "I'll redo that later", "add b-roll here", "note to self").
+  These become cut candidates AND often carry an instruction: extract the
+  instruction into the plan before cutting the span.
+- **Self-talk / incident** — reacting to a crash, a knock on the door,
+  losing the thread ("wait, where was I", long um-strings, reading
+  something silently). Cut candidates.
+- **Return-to-script moment** — the boundary where the recorder resumes
+  the video's actual purpose: topic snaps back to the last on-script
+  sentence, delivery re-energizes, or they literally restate the last
+  point. The aside span ends just BEFORE the restated content begins, so
+  the cut never eats the good take's lead-in.
+
+Method: read the transcript in order and track the video's declared purpose
+(title, opening sentences). For each span, ask "would the intended viewer
+be confused or bored by this?" and "is this addressed to someone other
+than the viewer?". Quote each detected aside with timecodes in the plan;
+put unambiguous ones (explicit "cut this" requests) in phase 1, tonal
+judgment calls in phase 2.
+
+## Multiple takes: detect, compare, recommend
+
+Recorders retry explanations without pressing anything. Find the retries
+even when no `retake` marker exists:
+
+- **Near-duplicate spans**: two or more passages that open with the same
+  phrase or explain the same point with overlapping vocabulary (compare
+  sentence openers and key noun phrases across the transcript).
+- **Restart tells**: "let me try that again", "okay, so—" after a trailing
+  break, an abrupt mid-sentence stop followed by a fresh start of the same
+  sentence.
+
+For each take group, list every take with timecodes and a one-line quality
+read, then RECOMMEND one using: completeness (covers the whole point),
+fluency (fewest fillers/restarts), and delivery confidence (steady pace,
+no trailing doubt). The recommended take stays; the others become cut
+candidates — phase 1 when the takes are unambiguous duplicates, phase 2
+when they differ in substance (quote what each version uniquely covers so
+the creator can choose). Never merge two takes into a frankencut without
+explicit approval.
+
 Store the plan on the recording as a whole-video annotation:
 `add-annotation` with `kind=edit-plan`, `authorKind=ai`, `source=ai`,
 `label` = short plan title, `body` = the full markdown plan. Update the same
