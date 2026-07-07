@@ -789,7 +789,7 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
           className="relative min-w-0 shrink-0 space-y-1 overflow-hidden bg-card/30 p-2"
         >
           <div
-            className="min-w-0 overflow-hidden rounded-sm border border-border/70"
+            className="shadow-3d-sm min-w-0 overflow-hidden rounded-md border border-border/70"
             style={{ width: viewportWidth }}
           >
             <div
@@ -863,7 +863,7 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
           </div>
 
           <div
-            className="relative min-w-0 overflow-hidden rounded-sm border border-border/70 bg-black/20"
+            className="shadow-3d-inset-well-deep relative min-w-0 overflow-hidden rounded-lg bg-background/60"
             style={{ width: viewportWidth, height: TRACK_STRIP_HEIGHT }}
             onContextMenu={(e) => {
               // Right-click: an active free-range selection owns clicks
