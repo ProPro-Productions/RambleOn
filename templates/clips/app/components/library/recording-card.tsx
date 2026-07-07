@@ -182,9 +182,10 @@ export function RecordingCard({
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       className={cn(
+        // Plastic 3D destination-card pattern: raised card, hover lifts.
         "group relative flex flex-col rounded-lg border bg-card overflow-hidden cursor-pointer",
         "border-border/80 hover:border-primary/40",
-        "shadow-[0_1px_2px_rgba(15,23,42,0.04)] hover:shadow-md",
+        "shadow-3d-card hover:shadow-3d-card-hover hover:-translate-y-px transition-all duration-200",
         selected && "ring-2 ring-primary border-primary",
       )}
     >
