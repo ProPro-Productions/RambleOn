@@ -85,6 +85,7 @@ import { computePeaks, type WaveformPeaks } from "@/lib/waveform-peaks";
 import { ChaptersEditor } from "./chapters-editor";
 import { CoordinateMenu } from "./coordinate-menu";
 import { EditorToolbar } from "./editor-toolbar";
+import { setFrameCaptureSuspended } from "./frame-store";
 import { StitchManager } from "./stitch-manager";
 import { ThumbnailPicker } from "./thumbnail-picker";
 import { Timeline } from "./timeline";
@@ -435,15 +436,18 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
     return () => el.removeEventListener("wheel", onWheel);
   }, [zoomAround]);
 
-  // Sync the <video> to play state.
+  // Sync the <video> to play state — and suspend preview-frame capture
+  // while playing so it never competes with playback for bandwidth/decoder.
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
+    setFrameCaptureSuspended(playing);
     if (playing) {
       v.play().catch(() => setPlaying(false));
     } else {
       v.pause();
     }
+    return () => setFrameCaptureSuspended(false);
   }, [playing]);
 
   // Load the clip's default speed (or the user's saved override) when a new

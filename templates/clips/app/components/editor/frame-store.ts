@@ -127,6 +127,27 @@ export interface CaptureTask {
 }
 
 /**
+ * Playback gate: capturing frames competes with the main <video> for
+ * bandwidth and decoder time, which audibly stutters playback on clips
+ * whose frames aren't cached yet. The editor suspends capture while the
+ * recording plays; workers pause between seeks until playback stops.
+ */
+let captureSuspended = false;
+const captureResumeWaiters: Array<() => void> = [];
+
+export function setFrameCaptureSuspended(suspended: boolean): void {
+  captureSuspended = suspended;
+  if (!suspended) {
+    while (captureResumeWaiters.length > 0) captureResumeWaiters.shift()?.();
+  }
+}
+
+function whenCaptureAllowed(): Promise<void> {
+  if (!captureSuspended) return Promise.resolve();
+  return new Promise((resolve) => captureResumeWaiters.push(resolve));
+}
+
+/**
  * Hidden tabs defer media loading entirely (seeks never complete) and a
  * pool of stalled <video> elements only burdens the renderer — wait until
  * the tab is visible before touching video at all.
@@ -192,6 +213,8 @@ export async function captureFrames({
           );
         });
         for (const task of shard) {
+          if (isCancelled()) return;
+          await whenCaptureAllowed();
           if (isCancelled()) return;
           await new Promise<void>((resolve, reject) => {
             const onSeeked = () => {

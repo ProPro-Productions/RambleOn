@@ -213,24 +213,48 @@ export function TranscriptEditor({
     }
   };
 
-  // Where is the caret, in recording time? The anchor segment provides the
-  // span; the character offset within it interpolates to a finer position —
-  // so "/" splits at the clicked word, not just the segment start.
-  const resolveCaretMs = (): number | null => {
-    const sel = window.getSelection();
-    if (!sel || sel.rangeCount === 0) return null;
-    const el = findSegmentElement(sel.anchorNode);
+  // Where did the user last point, in recording time? Selection anchors are
+  // unreliable here (Chrome collapses the caret to the paragraph start
+  // inside this contentEditable), so the source of truth is the CLICK
+  // COORDINATES: caretRangeFromPoint gives the exact text node + character
+  // offset under the pointer, interpolated across the segment's time span.
+  const lastCaretMsRef = useRef<number | null>(null);
+
+  const msFromTextPoint = (clientX: number, clientY: number): number | null => {
+    type CaretDoc = Document & {
+      caretRangeFromPoint?: (x: number, y: number) => Range | null;
+      caretPositionFromPoint?: (
+        x: number,
+        y: number,
+      ) => { offsetNode: Node; offset: number } | null;
+    };
+    const doc = document as CaretDoc;
+    let node: Node | null = null;
+    let offset = 0;
+    if (doc.caretRangeFromPoint) {
+      const range = doc.caretRangeFromPoint(clientX, clientY);
+      if (range) {
+        node = range.startContainer;
+        offset = range.startOffset;
+      }
+    } else if (doc.caretPositionFromPoint) {
+      const pos = doc.caretPositionFromPoint(clientX, clientY);
+      if (pos) {
+        node = pos.offsetNode;
+        offset = pos.offset;
+      }
+    }
+    if (!node) return null;
+    const el = findSegmentElement(node);
     if (!el || !rootRef.current?.contains(el)) return null;
     const startMs = Number(el.dataset.startMs ?? Number.NaN);
     const endMs = Number(el.dataset.endMs ?? Number.NaN);
     if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) return null;
     const text = el.textContent ?? "";
-    const offset =
-      sel.anchorNode && sel.anchorNode.nodeType === Node.TEXT_NODE
-        ? sel.anchorOffset
-        : 0;
     const frac =
-      text.length > 0 ? Math.min(1, Math.max(0, offset / text.length)) : 0;
+      node.nodeType === Node.TEXT_NODE && text.length > 0
+        ? Math.min(1, Math.max(0, offset / text.length))
+        : 0;
     return Math.round(startMs + frac * (endMs - startMs));
   };
 
@@ -240,7 +264,7 @@ export function TranscriptEditor({
     // the segment); the playhead is only the fallback when no caret exists.
     if (e.key === "/" && onSplitAt) {
       e.preventDefault();
-      onSplitAt(resolveCaretMs() ?? Math.round(currentMs));
+      onSplitAt(lastCaretMsRef.current ?? Math.round(currentMs));
       return;
     }
     if (
@@ -337,6 +361,7 @@ export function TranscriptEditor({
             <TooltipTrigger asChild>
               <button
                 type="button"
+                contentEditable={false}
                 onClick={(e) => {
                   e.stopPropagation();
                   onSeek?.(m.startMs);
@@ -374,6 +399,7 @@ export function TranscriptEditor({
             <TooltipTrigger asChild>
               <button
                 type="button"
+                contentEditable={false}
                 onClick={(e) => {
                   e.stopPropagation();
                   onSeek?.(ms);
@@ -432,7 +458,11 @@ export function TranscriptEditor({
             <span
               data-start-ms={s.startMs}
               data-end-ms={s.endMs}
-              onClick={() => onSeek?.(s.startMs)}
+              onClick={(e) => {
+                const ms = msFromTextPoint(e.clientX, e.clientY);
+                lastCaretMsRef.current = ms;
+                onSeek?.(ms ?? s.startMs);
+              }}
               className={cn(
                 "inline cursor-pointer px-0.5 rounded",
                 active && "bg-primary/20 text-foreground",
@@ -479,13 +509,25 @@ export function TranscriptEditor({
         </div>
       </div>
 
+      {/* contentEditable purely for the CARET: clicking a word places a
+          real blinking caret (plain text nodes don't get one in Chrome), so
+          "/" splits exactly where you clicked. Every actual edit is
+          suppressed — the document is a view over the recording, edited
+          through actions, never through typing. */}
       <div
         ref={rootRef}
+        contentEditable
+        suppressContentEditableWarning
+        spellCheck={false}
+        onBeforeInput={(e) => e.preventDefault()}
+        onPaste={(e) => e.preventDefault()}
+        onDrop={(e) => e.preventDefault()}
+        onCut={(e) => e.preventDefault()}
         onMouseUp={handleMouseUp}
         onKeyDown={handleKeyDown}
         onContextMenu={handleContextMenu}
         tabIndex={0}
-        className="relative flex-1 overflow-auto p-3 text-[14px] leading-relaxed outline-none"
+        className="relative flex-1 overflow-auto p-3 text-[14px] leading-relaxed caret-primary outline-none"
       >
         {selection && toolbarPos ? (
           <div

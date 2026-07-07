@@ -456,10 +456,14 @@ export function Timeline({
               strokeWidth="1"
             />
           </svg>
+          {/* Stem starts under the cap's top edge so no line pokes out
+              above the pointer head. */}
           <div
-            className="absolute top-0 h-full"
+            className="absolute"
             style={{
               left: -1,
+              top: 2,
+              height: "calc(100% - 2px)",
               width: 2,
               background: getBrandColor(),
             }}
