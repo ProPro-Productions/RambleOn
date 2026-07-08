@@ -1,5 +1,10 @@
 import { useActionMutation, useT } from "@agent-native/core/client";
-import { IconDots, IconDownload, IconTrash } from "@tabler/icons-react";
+import {
+  IconDots,
+  IconDownload,
+  IconHistory,
+  IconTrash,
+} from "@tabler/icons-react";
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
 
@@ -34,6 +39,7 @@ interface RecordingOptionsMenuProps extends DeleteRecordingMenuProps {
   downloadLabel?: string;
   downloadingLabel?: string;
   onDownload?: () => void;
+  onOpenEditHistory?: () => void;
 }
 
 export function RecordingOptionsMenu({
@@ -45,11 +51,13 @@ export function RecordingOptionsMenu({
   downloadLabel,
   downloadingLabel,
   onDownload,
+  onOpenEditHistory,
 }: RecordingOptionsMenuProps) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const showDownload = canDownload && Boolean(onDownload);
   const showDelete = canDelete;
+  const showHistory = Boolean(onOpenEditHistory);
   const trashRecording = useActionMutation<any, { id: string }>(
     "trash-recording",
     {
@@ -68,7 +76,7 @@ export function RecordingOptionsMenu({
     trashRecording.mutate({ id: recordingId });
   }, [recordingId, trashRecording]);
 
-  if (!showDownload && !showDelete) return null;
+  if (!showDownload && !showDelete && !showHistory) return null;
 
   return (
     <AlertDialog
@@ -100,7 +108,15 @@ export function RecordingOptionsMenu({
                 : (downloadLabel ?? t("sharePage.downloadMp4"))}
             </DropdownMenuItem>
           ) : null}
-          {showDownload && showDelete ? <DropdownMenuSeparator /> : null}
+          {showHistory ? (
+            <DropdownMenuItem onSelect={() => onOpenEditHistory?.()}>
+              <IconHistory className="me-2 h-4 w-4" />
+              {t("editVersions.history")}
+            </DropdownMenuItem>
+          ) : null}
+          {(showDownload || showHistory) && showDelete ? (
+            <DropdownMenuSeparator />
+          ) : null}
           {showDelete ? (
             <DropdownMenuItem
               onSelect={(event) => {

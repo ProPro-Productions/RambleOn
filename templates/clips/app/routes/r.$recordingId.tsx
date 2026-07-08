@@ -44,7 +44,10 @@ import { EditorLayout } from "@/components/editor/editor-layout";
 import { AnnotationsStrip } from "@/components/player/annotations-strip";
 import { CommentsPanel } from "@/components/player/comments-panel";
 import { RecordingOptionsMenu } from "@/components/player/delete-recording-menu";
-import { EditVersionReview } from "@/components/player/edit-version-review";
+import {
+  EditVersionReview,
+  type EditVersionPreview,
+} from "@/components/player/edit-version-review";
 import { InsightsPanel } from "@/components/player/insights-panel";
 import { ReactionsTray } from "@/components/player/reactions-tray";
 import { SettingsPanel } from "@/components/player/settings-panel";
@@ -226,6 +229,19 @@ export default function RecordingPage() {
   const [currentMs, setCurrentMs] = useState(0);
   const [commentOpen, setCommentOpen] = useState(false);
   const [commentAtMs, setCommentAtMs] = useState(0);
+  const [editHistoryOpen, setEditHistoryOpen] = useState(false);
+  const [editPreview, setEditPreview] = useState<EditVersionPreview | null>(
+    null,
+  );
+  // A version preview is scoped to the player view of one recording: leaving
+  // for another clip or entering the editor drops back to the live edits.
+  useEffect(() => {
+    setEditPreview(null);
+    setEditHistoryOpen(false);
+  }, [recordingId]);
+  useEffect(() => {
+    if (editing) setEditPreview(null);
+  }, [editing]);
   const isCompactLayout = useIsCompactRecordingLayout();
   // Resolve the playback position for reactions/comments. Native <video> exposes
   // a live `currentTime`; Loom embeds render in a cross-origin iframe with no
@@ -1178,7 +1194,7 @@ export default function RecordingPage() {
             </Button>
           </ShareRecordingPopover>
 
-          {canDelete || canDownloadRecording ? (
+          {canDelete || canDownloadRecording || canEdit ? (
             <RecordingOptionsMenu
               recordingId={recording.id}
               canDelete={canDelete}
@@ -1188,6 +1204,9 @@ export default function RecordingPage() {
                 void downloadRecording();
               }}
               onDeleted={() => navigate("/library", { replace: true })}
+              onOpenEditHistory={
+                canEdit ? () => setEditHistoryOpen(true) : undefined
+              }
             />
           ) : null}
         </header>
@@ -1205,7 +1224,14 @@ export default function RecordingPage() {
               {/* Pending edit versions (AI or human editors) wait here for
                   the owner's accept/reject — the hand-back half of the
                   one-take workflow. */}
-              <EditVersionReview recordingId={recording.id} canEdit={canEdit} />
+              <EditVersionReview
+                recordingId={recording.id}
+                canEdit={canEdit}
+                historyOpen={editHistoryOpen}
+                onHistoryOpenChange={setEditHistoryOpen}
+                preview={editPreview}
+                onPreviewChange={setEditPreview}
+              />
               <div className="flex-1 min-h-0 relative">
                 <VideoPlayer
                   ref={playerRef}
@@ -1213,7 +1239,7 @@ export default function RecordingPage() {
                   videoUrl={recording.videoUrl}
                   embedProvider={isLoomEmbedBacked ? "loom" : null}
                   durationMs={recording.durationMs}
-                  editsJson={recording.editsJson}
+                  editsJson={editPreview?.editsJson ?? recording.editsJson}
                   thumbnailUrl={recording.thumbnailUrl}
                   role={role}
                   defaultSpeed={

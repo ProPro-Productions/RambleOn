@@ -38,8 +38,13 @@ automatic snapshots of the edits that an accepted version replaced.
   recording's `currentEditsJson` for diffing.
 - `review-edit-version` — owner/admin only. `decision=accept` applies the
   version to the recording and archives the previous non-empty edits as a
-  `superseded` version (so accept is reversible by re-accepting the
-  snapshot); `decision=reject` flips status only.
+  `superseded` version (so accept is reversible by restoring the snapshot);
+  `decision=reject` flips status only.
+- `restore-edit-version` — owner/admin only. Brings a non-proposed version
+  (superseded snapshot, rejected proposal, or older accepted cut) back as
+  the live edits, archiving the current edits as `superseded` first and
+  marking the restored version `accepted`. No-ops when the version already
+  matches the live edits.
 
 ## Rules
 
@@ -50,5 +55,8 @@ automatic snapshots of the edits that an accepted version replaced.
 - AI edit synthesis (M5) must land its output as a proposed version whenever
   the change is more than trivial — never by mutating `recordings.edits_json`
   directly.
-- UI for version review is still to come; until then the agent chat is the
-  review surface (list → get → watch via player with proposed edits → review).
+- The recording page is the review surface: a banner appears on `/r/:id`
+  while a proposal is pending; "Preview cut" plays the version's edits in
+  the player before deciding, and the options menu's "Edit history" dialog
+  browses every version with per-version preview and restore. When guiding
+  a user, send them to the recording page rather than reciting editsJson.
