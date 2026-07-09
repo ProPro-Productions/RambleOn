@@ -540,7 +540,8 @@ fn start_native_session_locked(
             }
             if include_audio && has_specific_mic {
                 return Err(format!(
-                    "ScreenCaptureKit recording failed before it could use the selected microphone ({sck_err}). Clips did not fall back to macOS screencapture because that would ignore your selected input."
+                    "ScreenCaptureKit recording failed before it could use the selected microphone ({sck_err}). {} did not fall back to macOS screencapture because that would ignore your selected input.",
+                    crate::product_name()
                 ));
             }
             eprintln!(
@@ -817,9 +818,15 @@ pub async fn native_fullscreen_recording_stop_and_upload(
                 write_saved_recording_metadata(&app, &saved)?;
                 emit_native_upload_progress(&app, "failed", "Upload paused", None, None);
                 let suffix = if saved.corrupt {
-                    "The local file is incomplete and cannot be recovered. Discard it from the Clips menu and record again."
+                    format!(
+                        "The local file is incomplete and cannot be recovered. Discard it from the {} menu and record again.",
+                        crate::product_name()
+                    )
                 } else {
-                    "The clip was saved locally and can be retried from the Clips menu."
+                    format!(
+                        "The clip was saved locally and can be retried from the {} menu.",
+                        crate::product_name()
+                    )
                 };
                 return Err(format!("{stop_err}. {suffix}"));
             }
@@ -856,7 +863,8 @@ pub async fn native_fullscreen_recording_stop_and_upload(
     if multi_segment {
         if let Err(merge_err) = consolidate_outcome {
             return Err(format!(
-                "{merge_err}. The clip segments were saved locally and can be retried from the Clips menu."
+                "{merge_err}. The clip segments were saved locally and can be retried from the {} menu.",
+                crate::product_name()
             ));
         }
     }
@@ -889,7 +897,8 @@ pub async fn native_fullscreen_recording_stop_and_upload(
             let _ = write_saved_recording_metadata(&app, &saved);
             emit_native_upload_progress(&app, "failed", "Upload paused", None, None);
             Err(format!(
-                "{err}. The clip was saved locally and can be retried from the Clips menu."
+                "{err}. The clip was saved locally and can be retried from the {} menu.",
+                crate::product_name()
             ))
         }
     }

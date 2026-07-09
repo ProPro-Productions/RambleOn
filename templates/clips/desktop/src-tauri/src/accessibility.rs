@@ -448,6 +448,14 @@ pub(crate) mod macos {
     }
 
     fn is_ignored_window_owner(owner: &str) -> bool {
+        // Branded builds run under their configured product name rather than
+        // the upstream names in IGNORED_WINDOW_OWNERS.
+        let product = crate::product_name();
+        if owner.eq_ignore_ascii_case(product)
+            || owner.eq_ignore_ascii_case(&format!("{product} Dev"))
+        {
+            return true;
+        }
         IGNORED_WINDOW_OWNERS
             .iter()
             .any(|ignored| owner.eq_ignore_ascii_case(ignored))

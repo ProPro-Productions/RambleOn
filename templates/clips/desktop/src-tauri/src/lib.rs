@@ -46,9 +46,28 @@ use util::{
 // should replace with their real icon.
 pub(crate) const TRAY_PNG: &[u8] = include_bytes!("../icons/tray.png");
 
+// Product name from tauri.conf.json (`productName`), captured once at startup.
+// Branded builds (e.g. `tauri build --config tauri.rambleon.conf.json`) rename
+// the user-facing strings that live on the Rust side — tray menu, autostart
+// login item, recording error messages — without any source rename.
+static PRODUCT_NAME: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+pub(crate) fn product_name() -> &'static str {
+    PRODUCT_NAME.get().map(String::as_str).unwrap_or("Clips")
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     sentry_report::init();
+
+    let context = tauri::generate_context!();
+    let _ = PRODUCT_NAME.set(
+        context
+            .config()
+            .product_name
+            .clone()
+            .unwrap_or_else(|| "Clips".to_string()),
+    );
 
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
@@ -181,7 +200,7 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(
             tauri_plugin_autostart::Builder::new()
-                .app_name("Clips")
+                .app_name(product_name())
                 // Tag login-launched processes so startup can stay quiet in the
                 // tray, while a manual launch auto-opens the popover.
                 .args(["--autostart"])
@@ -347,7 +366,7 @@ pub fn run() {
 
             Ok(())
         })
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("error while building tauri application")
         .run(|_app_handle, _event| {
             // macOS: clicking the Dock icon ("reopen") toggles the popover.

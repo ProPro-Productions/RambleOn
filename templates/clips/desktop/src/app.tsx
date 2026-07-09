@@ -564,6 +564,38 @@ export function App() {
   const [serverUrl, setServerUrl] = useState<string>(() =>
     loadString(STORAGE_KEY, DEFAULT_URL).replace(/\/+$/, ""),
   );
+
+  // Dev builds: the local Clips server may be on 8094 (the workspace dev
+  // runner's assigned port from shared-app-config) or 8080 (plain
+  // `pnpm dev` inside templates/clips). Until the user saves a URL in
+  // Settings, probe both and adopt whichever is actually serving —
+  // re-checked on every launch, never persisted.
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    if (loadString(STORAGE_KEY, "") !== "") return;
+    let cancelled = false;
+    (async () => {
+      for (const candidate of [
+        "http://localhost:8094",
+        "http://localhost:8080",
+      ]) {
+        try {
+          await fetch(`${candidate}/_agent-native/auth/session`, {
+            signal: AbortSignal.timeout(1500),
+            credentials: "include",
+          });
+          // Any HTTP response means a server is listening there.
+          if (!cancelled) setServerUrl(candidate);
+          return;
+        } catch {
+          // Port not serving — try the next candidate.
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const [mode, setMode] = useState<CaptureMode>(
     () => loadString(MODE_KEY, "screen-camera") as CaptureMode,
   );
@@ -2176,12 +2208,16 @@ export function App() {
   // secondary link via signInExternal().
   if (authStatus === "anon") {
     return (
-      <div className="app" ref={appRef}>
-        <Header
-          mode={mode}
-          onModeChange={setMode}
-          submitterEmail={signedInAs}
-        />
+      <div className="app app-signin" ref={appRef}>
+        <button
+          type="button"
+          className="icon-button signin-close"
+          onClick={hidePopover}
+          aria-label="Close"
+          title="Close"
+        >
+          <CloseIcon />
+        </button>
         <UpdateBanner />
         {signInPending ? (
           <div className="signin-pending">
@@ -2215,14 +2251,24 @@ export function App() {
                 await checkAuth();
               }}
               onUseBrowser={signInExternal}
+              onSignUp={() => {
+                openExternal(`${serverUrl.replace(/\/+$/, "")}/signup`).catch(
+                  (err) => {
+                    console.error("[clips-tray] open signup failed:", err);
+                  },
+                );
+              }}
             />
           </>
         )}
-        <div className="footer">
-          <a className="footer-link" onClick={() => setShowSettings(true)}>
-            Settings
-          </a>
-        </div>
+        <button
+          type="button"
+          className="signin-settings"
+          onClick={() => setShowSettings(true)}
+        >
+          <SettingsIcon />
+          Settings
+        </button>
       </div>
     );
   }
@@ -2912,10 +2958,12 @@ function SignInForm({
   serverUrl,
   onSignedIn,
   onUseBrowser,
+  onSignUp,
 }: {
   serverUrl: string;
   onSignedIn: () => Promise<void> | void;
   onUseBrowser: () => void;
+  onSignUp: () => void;
 }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -3000,6 +3048,14 @@ function SignInForm({
       >
         <GoogleIcon />
         Continue with Google
+      </button>
+      <button
+        type="button"
+        className="signin-signup"
+        onClick={onSignUp}
+        title="Opens your default browser to create a Clips account"
+      >
+        New to Clips? <span className="signin-signup-cta">Sign up</span>
       </button>
     </form>
   );

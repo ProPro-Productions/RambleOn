@@ -64,8 +64,9 @@ patterns live in `.agents/skills/`.
   URLs, which would navigate the preview iframe to the app itself.
 - To refine an existing design, make the smallest change: read it with
   `get-design-snapshot`, then use `edit-design` (search/replace). Reserve
-  `generate-design` for new files or large structural rewrites; never resend
-  files you aren't changing.
+  `generate-design` for new files. For broad rewrites of an existing selected
+  file, use `edit-design` with `mode: "replace-file"` and the exact `fileId`;
+  never resend files you aren't changing.
 - When the user asks to add tweak controls, preserve existing useful tweaks,
   add or update the requested `tweaks` definitions, and make sure each control
   is backed by a CSS custom property the rendered file actually uses. If source
@@ -133,8 +134,11 @@ patterns live in `.agents/skills/`.
   write-back remains a localhost/fusion follow-up capability.
 - For multi-variant work, use `present-design-variants` so every candidate is
   saved as a normal overview-board screen and the user gets one inline chat
-  button per screen name. After the user picks, delete the unchosen variant
-  screens before continuing from the kept screen.
+  button per screen name. Keep each variant compact: prefer concise labels,
+  descriptions, accent colors, and feature bullets, and omit full HTML when it
+  would make the tool input too large. The action can render representative
+  screens from direction data. After the user picks, delete the unchosen
+  variant screens before continuing from the kept screen.
 - Use framework sharing actions for design and design-system visibility/grants.
 - `/visual-edit` is a public entry route and public `/design/:id` links may
   render read-only public designs without a session. Do not open anonymous write
@@ -187,6 +191,24 @@ patterns live in `.agents/skills/`.
   mode can list and resolve local routes now, but file reads/writes remain a
   bridge contract until explicit permission controls are hardened.
 
+## Code Workspace
+
+- The editor left rail has a wide `code` workspace panel. Open it with
+  `navigate --view editor --designId <id> --leftPanel code` and optionally pass
+  `fileId`, `filename`, or `screen` to focus a file.
+- Use `list-source-files` to inspect the source workspace. For the MVP the
+  backend is `virtual-inline` over SQL-backed `design_files`, exposed as
+  `designfs://<designId>/`.
+- Use `read-source-file` for file contents and preserve its `versionHash` before
+  writing. Do not return full file content from `view-screen`; it reports only
+  active code file metadata and dirty state.
+- Use `preview-source-edit` to show a diff without saving, then
+  `apply-source-edit` with the prior `versionHash` to save either a full replace
+  or exact replace. These actions update the same inline file state as the UI.
+- Use `resolve-selection-source` when the user has a canvas element selected and
+  you need the best matching inline file location/snippet. Localhost/container
+  source reads and writes remain future backend work.
+
 ## Localhost Source Actions
 
 - `connect-localhost`: registers or refreshes a localhost source connection
@@ -217,10 +239,14 @@ patterns live in `.agents/skills/`.
   register that manifest with `connect-localhost`, call `add-localhost-screens`,
   and open the editor in overview mode.
 - For human-in-the-loop UI exploration, create a design shell, call
-  `present-design-variants` with 2-5 complete HTML directions (three by
-  default), wait for the user to pick one in chat, delete the other generated
-  variant screens with `delete-file`, then use `get-design-snapshot` and
-  `generate-design` or `edit-design` for follow-up refinements.
+  `present-design-variants` with 2-5 concise directions (three by default),
+  wait for the user to pick one in chat, delete each other generated variant
+  screen with `delete-file` at most once, call `get-design-snapshot` exactly
+  once with the selected screen's `fileId`, then call `edit-design` exactly once
+  on that same `fileId` for follow-up refinement. Use `mode: "replace-file"`
+  when expanding the representative placeholder into the full chosen direction.
+  Do not repeat delete/snapshot cycles, and do not call `generate-design` after
+  a variant pick.
 - If inline chat choice buttons are unavailable, the user can tell you the
   preferred screen name. Do not show a separate variant picker or ask them to
   paste a copyable handoff summary.

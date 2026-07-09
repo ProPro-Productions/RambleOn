@@ -5,6 +5,8 @@ import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
+import { rambleOnBranding } from "../branding";
+
 const root = dirname(fileURLToPath(import.meta.url));
 const packageJson = JSON.parse(
   readFileSync(resolve(root, "package.json"), "utf8"),
@@ -77,7 +79,7 @@ function resolveSentryEnvironment(): string {
 //   still picks up `.rs` / `tauri.conf.json` / `capabilities/*.json`
 //   changes and rebuilds the app.
 export default defineConfig({
-  plugins: [react()],
+  plugins: [rambleOnBranding(), react()],
   clearScreen: false,
   define: {
     __CLIPS_DESKTOP_SENTRY_DSN__: JSON.stringify(resolveSentryDsn()),
