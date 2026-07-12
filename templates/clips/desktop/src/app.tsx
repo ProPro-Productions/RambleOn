@@ -2695,7 +2695,7 @@ function PendingUploadRow({
               ? `${details.join(" · ")} · your clip is safe locally`
               : retrying
                 ? `${details.join(" · ")} · progress opens in your browser`
-                : `${details.join(" · ")}${errorText ? ` · ${errorText}` : ""}`}
+                : `${details.join(" · ")}${errorText ? ` · ${errorText}` : " · upload didn't finish — kept as a backup"}`}
         </div>
         {storageSetupFailure ? (
           <Tooltip>
@@ -2721,8 +2721,8 @@ function PendingUploadRow({
             className="pending-upload-folder"
             disabled={actionsDisabled}
             onClick={() => onOpenFolder(upload)}
-            aria-label="Open saved local clip folder"
-            title="Open saved local clip folder"
+            aria-label="Open the backup's folder"
+            title="Open the backup's folder"
           >
             <IconFolderOpen size={14} stroke={2} />
           </button>
@@ -2733,8 +2733,8 @@ function PendingUploadRow({
             className="pending-upload-folder"
             disabled={actionsDisabled}
             onClick={() => onExport(upload)}
-            aria-label="Download saved local clip"
-            title="Download saved local clip"
+            aria-label="Save a copy of this backup to a file"
+            title="Save a copy of this backup to a file"
           >
             <IconDownload size={14} stroke={2} />
           </button>
@@ -2777,8 +2777,8 @@ function PendingUploadRow({
               className="pending-upload-discard"
               disabled={actionsDisabled}
               onClick={() => onDiscard(upload)}
-              aria-label="Discard saved local clip"
-              title="Discard saved local clip"
+              aria-label="Discard this backup"
+              title="Discard this backup"
             >
               <IconTrash size={14} stroke={2} />
             </button>
