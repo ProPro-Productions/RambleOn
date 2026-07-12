@@ -53,6 +53,7 @@ list-events · check-availability · create-event
 Local File Mode
 MCP
 MCP gateway
+Meetings · Clips
 MP4 / WebM
 Native harness loop
 needs NOTIFICATIONS_WEBHOOK_URL

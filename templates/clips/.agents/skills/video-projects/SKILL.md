@@ -113,12 +113,15 @@ Lambda transport was replaced; no site deploys, no AWS. Notes:
   `<Html5Audio>`.
 - Fonts are collected per-composition via `/api/editor-fonts` (never import
   the multi-MB fonts database in the browser — it throws by design).
-- The Export button lives in the composition inspector (nothing selected).
-  Output is a local Blob: Download saves the file; **Save to library**
-  (`app/video-editor/clips/save-to-library-button.tsx`) uploads it through
-  `/_agent-native/file-upload` and calls `save-video-project-export`, which
-  creates a ready `recordings` row — sharing/embeds/comments/transcription
-  work on exports for free.
+- The whole export flow lives in one dialog
+  (`app/video-editor/clips/export-dialog.tsx`), opened from the prominent
+  Export button in the top action row (plus a second entry point in the
+  composition inspector): format choice → cancelable progress → inline
+  preview of the result with labeled **Save to library** / **Download**
+  buttons. Save uploads through `/_agent-native/file-upload` and calls
+  `save-video-project-export`, which creates a ready `recordings` row —
+  sharing/embeds/comments/transcription work on exports for free. The
+  render core is `app/video-editor/clips/render-composition.ts`.
 - Rendering is single-threaded in the user's tab (keep it open; background
   tabs throttle) and needs WebCodecs (`canRenderMediaOnWeb` gates with a
   clear error). Remotion Lambda remains a possible hosted fast-path later.

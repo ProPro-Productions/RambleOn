@@ -58,7 +58,15 @@ export default defineConfig({
   // Clips' assigned dev port from shared-app-config/templates.ts (devPort).
   // Keeping plain `pnpm dev` on the same port as the workspace dev runner
   // means the desktop app's dev default URL works in both flows.
-  server: { port: 8094 },
+  server: {
+    port: 8094,
+    // The full video editor is a ~480-module lazy chunk; pre-transform it at
+    // dev-server start so opening /video-projects/:id doesn't pay a cold
+    // multi-second compile on first click.
+    warmup: {
+      clientFiles: ["./app/components/video-projects/video-project-editor.tsx"],
+    },
+  },
   plugins: [
     rambleOnBranding(),
     ...reactRouterPlugins(),

@@ -27,8 +27,10 @@ export default defineAction({
       .number()
       .int()
       .min(0)
-      .default(0)
-      .describe("Video time (ms) the comment is attached to"),
+      .optional()
+      .describe(
+        "Video time (ms) the comment is attached to. Defaults to 0, or to the annotation's start time when annotationId is set.",
+      ),
     threadId: z
       .string()
       .optional()
@@ -41,6 +43,12 @@ export default defineAction({
       .string()
       .optional()
       .describe("Display name for the author (falls back to email local part)"),
+    annotationId: z
+      .string()
+      .optional()
+      .describe(
+        "Attach the comment to an annotation (timestamp marker or section). When set and videoTimestampMs is omitted, the comment inherits the annotation's start time.",
+      ),
   }),
   run: async (args) => {
     // Viewer access is required (public/org recordings allow viewers to comment).
@@ -66,6 +74,28 @@ export default defineAction({
 
     if (!rec) throw new Error(`Recording not found: ${args.recordingId}`);
 
+    // When anchoring to an annotation, verify it exists on this recording and
+    // let the comment inherit its start time unless one was given explicitly.
+    let videoTimestampMs = args.videoTimestampMs ?? 0;
+    if (args.annotationId) {
+      const [annotation] = await db
+        .select({
+          recordingId: schema.recordingAnnotations.recordingId,
+          startMs: schema.recordingAnnotations.startMs,
+        })
+        .from(schema.recordingAnnotations)
+        .where(eq(schema.recordingAnnotations.id, args.annotationId))
+        .limit(1);
+      if (!annotation || annotation.recordingId !== args.recordingId) {
+        throw new Error(
+          `Annotation ${args.annotationId} not found on recording ${args.recordingId}`,
+        );
+      }
+      if (args.videoTimestampMs === undefined) {
+        videoTimestampMs = annotation.startMs ?? 0;
+      }
+    }
+
     await db.insert(schema.recordingComments).values({
       id,
       recordingId: args.recordingId,
@@ -75,7 +105,8 @@ export default defineAction({
       authorEmail,
       authorName: args.authorName ?? null,
       content: args.content,
-      videoTimestampMs: args.videoTimestampMs,
+      videoTimestampMs,
+      annotationId: args.annotationId ?? null,
       createdAt: now,
       updatedAt: now,
     });
@@ -83,7 +114,7 @@ export default defineAction({
     await writeAppState("refresh-signal", { ts: Date.now() });
 
     console.log(
-      `Added comment to recording ${args.recordingId} @ ${args.videoTimestampMs}ms (thread: ${threadId})`,
+      `Added comment to recording ${args.recordingId} @ ${videoTimestampMs}ms (thread: ${threadId})`,
     );
 
     return { id, threadId };

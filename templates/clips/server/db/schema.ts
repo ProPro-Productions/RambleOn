@@ -305,8 +305,45 @@ export const recordingComments = table("recording_comments", {
   authorName: text("author_name"),
   content: text("content").notNull(),
   videoTimestampMs: integer("video_timestamp_ms").notNull().default(0),
+  // Optional link to a clips_annotations row — lets a comment thread hang off
+  // a timestamp marker or section instead of a bare point in time.
+  annotationId: text("annotation_id"),
   // JSON map of emoji -> [emails]
   emojiReactionsJson: text("emoji_reactions_json").notNull().default("{}"),
+  resolved: integer("resolved", { mode: "boolean" }).notNull().default(false),
+  createdAt: text("created_at").notNull().default(now()),
+  updatedAt: text("updated_at").notNull().default(now()),
+});
+
+// -----------------------------------------------------------------------------
+// Annotations — the unified time-anchored layer for editorial intent.
+// One entity covers timestamps (point anchor), sections (range anchor), and
+// whole-video notes (no anchor). Semantic `kind` says what the marker means
+// (editor-note / b-roll / retake / generic); `groups_json` holds flat,
+// non-hierarchical group tags for sections. Splits stay edit-state in
+// editsJson / project items; chapters stay their own viewer-facing concept.
+// Access is scoped through the parent recording (like transcripts/comments),
+// not ownableColumns.
+// -----------------------------------------------------------------------------
+
+export const recordingAnnotations = table("clips_annotations", {
+  id: text("id").primaryKey(),
+  recordingId: text("recording_id").notNull(),
+  organizationId: text("organization_id"),
+  // Anchor: both null = whole video; startMs only = point; both = section.
+  startMs: integer("start_ms"),
+  endMs: integer("end_ms"),
+  kind: text("kind").notNull().default("generic"),
+  label: text("label"),
+  body: text("body"),
+  authorEmail: text("author_email"),
+  authorName: text("author_name"),
+  // "user" or "ai" — who authored the editorial intent.
+  authorKind: text("author_kind").notNull().default("user"),
+  // How it was created: manual | shortcut | voice | ai | import.
+  source: text("source").notNull().default("manual"),
+  // JSON string[] of group tags (flat, tag-like — not hierarchical).
+  groupsJson: text("groups_json").notNull().default("[]"),
   resolved: integer("resolved", { mode: "boolean" }).notNull().default(false),
   createdAt: text("created_at").notNull().default(now()),
   updatedAt: text("updated_at").notNull().default(now()),

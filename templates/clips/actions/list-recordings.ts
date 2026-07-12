@@ -9,7 +9,6 @@ import {
   inArray,
   isNull,
   isNotNull,
-  notInArray,
   sql,
 } from "drizzle-orm";
 import { z } from "zod";
@@ -95,11 +94,14 @@ export default defineAction({
       // is meetings.recordingId (no meetingId column on recordings), so exclude
       // any recording referenced by a meeting. The subquery filters out NULLs
       // so NOT IN doesn't collapse to an empty result under SQL NULL semantics.
-      const meetingRecordingIds = db
-        .select({ id: schema.meetings.recordingId })
-        .from(schema.meetings)
-        .where(isNotNull(schema.meetings.recordingId));
-      whereClauses.push(notInArray(schema.recordings.id, meetingRecordingIds));
+      // Written as a sql template instead of notInArray(<select builder>): the
+      // CLI action runner resolves drizzle-orm as a second module instance
+      // (ESM/CJS dual package), and serializing a foreign-instance query
+      // builder recurses until the stack overflows. Plain sql chunks with
+      // schema refs serialize fine in both paths.
+      whereClauses.push(
+        sql`${schema.recordings.id} NOT IN (SELECT ${schema.meetings.recordingId} FROM ${schema.meetings} WHERE ${schema.meetings.recordingId} IS NOT NULL)`,
+      );
     }
 
     // Lifecycle view filters

@@ -235,6 +235,14 @@ const SCREEN_CAPTURE_MAX_HEIGHT = 1080;
 // Dial down here if file sizes become a concern for a deployment.
 const RECORDING_VIDEO_BITRATE_BPS = 8_000_000;
 const RECORDING_AUDIO_BITRATE_BPS = 128_000;
+// Without an explicit interval, Chrome's realtime encoder emits keyframes only
+// on visual change — a mostly-static screen recording can go 30+ seconds
+// between keyframes. Sequential playback tolerates that, but the video-project
+// editor decodes frames by timestamp (WebCodecs) and must rewind to the
+// previous keyframe for every repositioned read, which shows up as heavy
+// timeline stutter. Never set videoKeyFrameIntervalCount alongside this: the
+// spec throws NotSupportedError when both are present.
+const RECORDING_KEYFRAME_INTERVAL_MS = 3_000;
 type CaptureSource = "screen" | "camera" | "microphone" | "unknown";
 
 const VOICE_FOCUSED_AUDIO_CONSTRAINTS: MediaTrackConstraints = {
@@ -384,6 +392,14 @@ function mediaRecorderOptions(
   if (includeBitrateBudget) {
     options.videoBitsPerSecond = RECORDING_VIDEO_BITRATE_BPS;
     options.audioBitsPerSecond = RECORDING_AUDIO_BITRATE_BPS;
+    // Unknown dictionary members are ignored, so browsers without keyframe
+    // configurability still record; grouped with the bitrate budget so the
+    // constructor fallback loop retries without it if a browser objects.
+    (
+      options as MediaRecorderOptions & {
+        videoKeyFrameIntervalDuration?: number;
+      }
+    ).videoKeyFrameIntervalDuration = RECORDING_KEYFRAME_INTERVAL_MS;
   }
   return Object.keys(options).length > 0 ? options : undefined;
 }

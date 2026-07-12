@@ -45,6 +45,18 @@ Detailed media, meeting, dictation, editing, and sharing rules live in
 - Hosted/shared recording uploads require configured storage. Do not preserve
   video bytes in SQL as a production fallback; only local SQLite/dev flows may
   keep scratch chunks while a user connects Builder.io or S3-compatible storage.
+- Annotations are the unified time-anchored layer for editorial intent on a
+  recording: whole-video notes (no anchor), point timestamps (`startMs`), and
+  sections (`startMs`+`endMs`), with semantic kinds (`editor-note`, `b-roll`,
+  `retake`, `generic`, custom kebab-case) and flat group tags. Use
+  `add-annotation` / `list-annotations` / `update-annotation` /
+  `delete-annotation`. `list-annotations` also returns the recording's comments
+  mapped into the same shape (entity `"comment"`) so one call gives the full
+  timeline-anchored picture. Attach a discussion thread to a marker or section
+  with `add-comment --annotationId=<id>`. Inline timecodes like `12:44` in
+  comment/annotation text stay plain text; UIs linkify them at render time
+  (shared parser: `app/lib/timecodes.ts`). Read the `annotations` skill before
+  deeper work.
 - Use `view-screen` when the active recording, transcript segment, meeting, or
   share context is unclear.
 - Calendar-sourced meeting actions are shortcuts, but do not add raw
@@ -158,6 +170,7 @@ Read the relevant skill before deeper work:
 - `video-editing` and `ai-video-tools` for edits, cleanup, titles, and summaries.
 - `video-projects` for the full multi-track editor (compositions, imports,
   project persistence, editor asset uploads).
+- `annotations` for the unified timestamp/section/comment annotation layer.
 - `video-sharing` for public links, passwords, expiry, embeds, and grants.
 - `meetings` and `dictate` for calendar-sourced meetings and dictation flows.
 - `actions`, `security`, `frontend-design`, and `shadcn-ui` as needed.
