@@ -119,6 +119,7 @@ export async function restartTranscriptionEngine(
   engine: TranscriptionEngine,
   mic?: MicSelection,
   captureSystem: boolean = true,
+  voiceProcessing: boolean = false,
 ): Promise<void> {
   if (engine === "whisper") {
     await invoke("audio_transcription_start", {
@@ -127,12 +128,20 @@ export async function restartTranscriptionEngine(
       micDeviceId: mic?.deviceId || null,
       micDeviceLabel: mic?.label || null,
       captureSystem,
+      voiceProcessing,
+      owner: "meeting",
     });
   } else {
+    // This module is meetings-only (see file header) — always pass
+    // owner: "meeting" so a Fn/dictation press can't silently evict a
+    // meeting's native-speech fallback session (Rust-side priority rule
+    // in native_speech.rs). Dictation's own caller (voice-dictation.ts)
+    // omits `owner` and gets the "dictation" default.
     await invoke("native_speech_start", {
       locale: browserLocale(),
       micDeviceId: mic?.deviceId || null,
       micDeviceLabel: mic?.label || null,
+      owner: "meeting",
     });
   }
 }
@@ -141,10 +150,23 @@ export async function startTranscriptionEngine(opts: {
   mic?: MicSelection;
   /** Capture + transcribe system audio (whisper). Default true. */
   captureSystem?: boolean;
+  /**
+   * Enable Apple's voice-processing input mode for the Whisper mic tap.
+   * Meeting and recording capture leave this off at the renderer boundary.
+   * The native meeting runtime may allocate VoiceProcessingIO in bypass mode
+   * only when combined ScreenCaptureKit capture is unavailable or fails.
+   */
+  voiceProcessing?: boolean;
 }): Promise<TranscriptionEngine> {
   const captureSystem = opts.captureSystem ?? true;
+  const voiceProcessing = opts.voiceProcessing ?? false;
   try {
-    await restartTranscriptionEngine("whisper", opts.mic, captureSystem);
+    await restartTranscriptionEngine(
+      "whisper",
+      opts.mic,
+      captureSystem,
+      voiceProcessing,
+    );
     return "whisper";
   } catch (err) {
     console.warn(
@@ -163,6 +185,13 @@ export async function stopTranscriptionEngine(
   await invoke(
     engine === "whisper" ? "audio_transcription_stop" : "native_speech_stop",
   );
+}
+
+export async function resetTranscriptionTimeline(
+  engine: TranscriptionEngine,
+): Promise<void> {
+  if (engine !== "whisper") return;
+  await invoke("audio_transcription_reset_timeline");
 }
 
 // ---------------------------------------------------------------------------

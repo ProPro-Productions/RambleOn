@@ -1,5 +1,4 @@
 import {
-  IconArrowLeft,
   IconArrowBackUp,
   IconChevronRight,
   IconCode,
@@ -35,6 +34,7 @@ import {
 } from "../components/ui/tooltip.js";
 import { PromptComposer } from "../composer/PromptComposer.js";
 import { isEmbedMcpChatBridgeActive } from "../embed-auth.js";
+import { useT } from "../i18n.js";
 import { ShareButton } from "../sharing/ShareButton.js";
 import {
   deleteOrHideExtension,
@@ -45,6 +45,7 @@ import {
   extensionLoadErrorStatus,
   shouldRetryExtensionLoad,
 } from "./extension-load-error.js";
+import { ExtensionQueryErrorState } from "./ExtensionQueryErrorState.js";
 import {
   isAllowedExtensionPath,
   sanitizeExtensionRequestOptions,
@@ -52,6 +53,7 @@ import {
   type BridgePolicyContext,
   type ExtensionBridgeRole,
 } from "./iframe-bridge.js";
+import { normalizeAgentNativeExtensionSandbox } from "./portable-extension.js";
 
 const THEME_CSS_VARS = [
   "--background",
@@ -83,6 +85,9 @@ const THEME_CSS_VARS = [
   "--sidebar-border",
   "--sidebar-ring",
 ];
+
+const EXTENSION_IFRAME_SANDBOX =
+  normalizeAgentNativeExtensionSandbox(undefined);
 
 function getParentThemeVars(): Record<string, string> {
   const computed = getComputedStyle(document.documentElement);
@@ -260,6 +265,40 @@ function compactDiffLines(
     i = end;
   }
   return result;
+}
+
+function ExtensionUnavailableState({ status }: { status?: number }) {
+  const sessionExpired = status === 401;
+  const accessDenied = status === 403;
+  const unavailable = status === 404;
+  const title = sessionExpired
+    ? "Session expired"
+    : accessDenied
+      ? "Extension is not shared"
+      : unavailable
+        ? "Extension is unavailable"
+        : "Extension not found";
+  const message = sessionExpired
+    ? "Sign in again to view this extension."
+    : accessDenied
+      ? "You do not have access to this extension. Ask the owner to share it with your organization or open a different extension."
+      : "This extension may not be shared with you, may have been deleted, or is not available to your account.";
+  return (
+    <div className="flex h-full min-h-[20rem] items-center justify-center bg-muted/20 p-6">
+      <div className="w-full max-w-md rounded-lg border border-border bg-background p-6 text-center shadow-sm">
+        <p className="text-sm font-semibold text-foreground">{title}</p>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">
+          {message}
+        </p>
+        <Link
+          to="/extensions"
+          className="mt-4 inline-flex h-9 items-center justify-center rounded-md border border-input px-3 text-sm font-medium text-foreground hover:bg-accent hover:text-accent-foreground"
+        >
+          Back to extensions
+        </Link>
+      </div>
+    </div>
+  );
 }
 
 function diffLineClass(line: CompactDiffLine): string {
@@ -540,6 +579,7 @@ function ExtensionHistoryPopover({
   onRestored?: () => void;
   onOpenChange?: (open: boolean) => void;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
   const [restoringVersion, setRestoringVersion] = useState<number | null>(null);
@@ -661,6 +701,13 @@ function ExtensionHistoryPopover({
                   <IconLoader2 className="h-3.5 w-3.5 animate-spin" />
                   Loading history
                 </div>
+              ) : historyQuery.isError ? (
+                <ExtensionQueryErrorState
+                  compact
+                  message={t("extensions.historyLoadError")}
+                  onRetry={() => void historyQuery.refetch()}
+                  retrying={historyQuery.isFetching}
+                />
               ) : history.length === 0 ? (
                 <p className="px-2 py-3 text-xs text-muted-foreground">
                   No history yet.
@@ -730,9 +777,11 @@ function ExtensionHistoryPopover({
                   Loading diff
                 </div>
               ) : detailQuery.isError ? (
-                <div className="p-4 text-xs text-destructive">
-                  Could not load this version.
-                </div>
+                <ExtensionQueryErrorState
+                  message={t("extensions.versionLoadError")}
+                  onRetry={() => void detailQuery.refetch()}
+                  retrying={detailQuery.isFetching}
+                />
               ) : compactedDiff.length === 0 ? (
                 <div className="p-4 text-xs text-muted-foreground">
                   No content changes in this version.
@@ -765,6 +814,7 @@ function ExtensionHistoryPopover({
 }
 
 export function ExtensionViewer({ extensionId }: ExtensionViewerProps) {
+  const t = useT();
   const location = useLocation();
   const navigate = useNavigate();
   const [isDark, setIsDark] = useState(false);
@@ -1072,14 +1122,20 @@ export function ExtensionViewer({ extensionId }: ExtensionViewerProps) {
   const {
     data: extension,
     error: extensionError,
+    failureReason: extensionFailureReason,
     isFetching,
     isLoading,
+    isError,
+    refetch,
   } = useQuery<Extension>({
     queryKey: ["extension", extensionId],
     queryFn: async () => {
       const res = await fetch(
         agentNativePath(`/_agent-native/extensions/${extensionId}`),
       );
+      if (res.status === 401) {
+        throw extensionLoadError(401, "Session expired");
+      }
       if (res.status === 404) {
         throw extensionLoadError(404, "Extension not found");
       }
@@ -1093,6 +1149,7 @@ export function ExtensionViewer({ extensionId }: ExtensionViewerProps) {
     },
     retry: shouldRetryExtensionLoad,
     retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 4000),
+    refetchOnMount: "always",
   });
 
   toolRef.current = extension ?? null;
@@ -1131,6 +1188,13 @@ export function ExtensionViewer({ extensionId }: ExtensionViewerProps) {
     if (!extension?.content || !isEmbedMcpChatBridgeActive()) return undefined;
     return buildExtensionViewerSrcDoc(extension, isDark);
   }, [extension, isDark]);
+  const unavailableStatus = extensionLoadErrorStatus(
+    extensionError ?? extensionFailureReason,
+  );
+  const latestFetchDenied =
+    unavailableStatus === 401 ||
+    unavailableStatus === 403 ||
+    unavailableStatus === 404;
 
   useEffect(() => {
     setIframeReady(false);
@@ -1188,13 +1252,19 @@ export function ExtensionViewer({ extensionId }: ExtensionViewerProps) {
     );
   }
 
-  if (!extension) {
-    const status = extensionLoadErrorStatus(extensionError);
+  if (isError && !latestFetchDenied) {
     return (
-      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-        {status === 403 ? "Extension access denied" : "Extension not found"}
-      </div>
+      <ExtensionQueryErrorState
+        className="h-full min-h-[20rem]"
+        message={t("extensions.loadError")}
+        onRetry={() => void refetch()}
+        retrying={isFetching}
+      />
     );
+  }
+
+  if (latestFetchDenied || !extension) {
+    return <ExtensionUnavailableState status={unavailableStatus} />;
   }
 
   const isLocalExtension = extension.source?.mode === "local-files";
@@ -1204,19 +1274,6 @@ export function ExtensionViewer({ extensionId }: ExtensionViewerProps) {
       <div className="flex h-full w-full flex-col">
         <div className="flex h-12 shrink-0 items-center justify-between gap-3 border-b px-3">
           <div className="flex min-w-0 items-center gap-3">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Link
-                  to="/"
-                  className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-md px-2 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                  aria-label="Back to app"
-                >
-                  <IconArrowLeft className="h-4 w-4" />
-                  <span className="hidden sm:inline">Back to app</span>
-                </Link>
-              </TooltipTrigger>
-              <TooltipContent>Back to app</TooltipContent>
-            </Tooltip>
             <nav
               aria-label="Extension breadcrumb"
               className="group/name flex min-w-0 items-center gap-1 text-sm"
@@ -1348,7 +1405,7 @@ export function ExtensionViewer({ extensionId }: ExtensionViewerProps) {
             src={iframeSrcDoc ? undefined : iframeSrc}
             srcDoc={iframeSrcDoc}
             className="h-full w-full border-0"
-            sandbox="allow-scripts allow-forms"
+            sandbox={EXTENSION_IFRAME_SANDBOX}
             title={extension.name}
             style={{
               pointerEvents: openPopoverCount > 0 ? "none" : "auto",
@@ -1383,6 +1440,7 @@ function ToolMoreMenu({
   sourceMode?: "database" | "local-files";
   onOpenChange?: (open: boolean) => void;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const queryClient = useQueryClient();
@@ -1392,17 +1450,20 @@ function ToolMoreMenu({
     onOpenChange?.(v);
   };
 
-  const { data: slots = [] } = useQuery<SlotDeclaration[]>({
+  const slotsQuery = useQuery<SlotDeclaration[]>({
     queryKey: ["extension-slots", extensionId],
     queryFn: async () => {
       const res = await fetch(
         agentNativePath(`/_agent-native/slots/extension/${extensionId}`),
       );
-      if (!res.ok) return [];
+      if (!res.ok) {
+        throw new Error(`Failed to load extension slots (${res.status})`);
+      }
       return res.json();
     },
     enabled: open,
   });
+  const slots = slotsQuery.data ?? [];
 
   const closeMenu = () => {
     setOpenAndNotify(false);
@@ -1466,7 +1527,15 @@ function ToolMoreMenu({
           <>
             <div className="px-3 py-2 border-b border-border/40">
               <p className="text-[12px] font-medium">Appears in</p>
-              {slots.length === 0 ? (
+              {slotsQuery.isError ? (
+                <ExtensionQueryErrorState
+                  compact
+                  className="px-0"
+                  message={t("extensions.widgetAreasLoadError")}
+                  onRetry={() => void slotsQuery.refetch()}
+                  retrying={slotsQuery.isFetching}
+                />
+              ) : slots.length === 0 ? (
                 <p className="text-[11px] text-muted-foreground/70 mt-0.5">
                   Not installed in any widget areas. Ask the agent to add it
                   somewhere.

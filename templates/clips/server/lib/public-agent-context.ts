@@ -2,8 +2,8 @@ import { appStateGet } from "@agent-native/core/application-state";
 import { ssrfSafeFetch } from "@agent-native/core/extensions/url-safety";
 import {
   getSession,
-  signShortLivedToken,
-  verifyShortLivedToken,
+  signScopedAgentAccessToken,
+  verifyScopedAgentAccessToken,
 } from "@agent-native/core/server";
 import { asc, eq } from "drizzle-orm";
 import { getRequestURL, setResponseHeader, type H3Event } from "h3";
@@ -15,6 +15,8 @@ import {
 import {
   buildAgentApiUrls,
   buildRecommendedFrames,
+  CLIP_AGENT_ACCESS_TOKEN_PREFIX,
+  CLIPS_AGENT_ACCESS_PARAM,
   CLIP_AGENT_CONTEXT_VERSION,
   toAgentTranscriptSegments,
 } from "../../shared/agent-context.js";
@@ -30,6 +32,7 @@ import {
   normalizeTranscriptSegments,
   parseTranscriptSegments,
 } from "../../shared/transcript-segments.js";
+import { resolveTranscriptPresentation } from "../../shared/transcript-status.js";
 import { getDb, schema } from "../db/index.js";
 import { verifySharePassword } from "./share-password.js";
 
@@ -57,6 +60,8 @@ export type PublicAgentAccessResult =
   | { ok: false; failure: PublicAgentFailure };
 
 const DEFAULT_MAX_AGENT_FRAME_MEDIA_BYTES = 200 * 1024 * 1024;
+export const CLIPS_AGENT_ACCESS_TTL_SECONDS = 2 * 60 * 60;
+export { CLIPS_AGENT_ACCESS_PARAM };
 
 function sameOwnerEmail(
   a: string | null | undefined,
@@ -211,8 +216,20 @@ export async function loadPublicAgentAccess(
   const viewerIsOwner = Boolean(
     session?.email && sameOwnerEmail(session.email, recording.ownerEmail),
   );
+  const suppliedToken = options.token ?? "";
+  const tokenAccess = suppliedToken
+    ? verifyScopedAgentAccessToken(suppliedToken, {
+        resourceKind: CLIP_AGENT_ACCESS_TOKEN_PREFIX,
+        resourceId: recording.id,
+      })
+    : null;
+  const tokenAllowsAgentAccess = Boolean(tokenAccess?.ok);
 
-  if (recording.visibility !== "public" && !viewerIsOwner) {
+  if (
+    recording.visibility !== "public" &&
+    !viewerIsOwner &&
+    !tokenAllowsAgentAccess
+  ) {
     return {
       ok: false,
       failure: { status: 404, body: { error: "Not found" } },
@@ -233,26 +250,24 @@ export async function loadPublicAgentAccess(
   }
 
   let apiToken: string | null = null;
+  if (tokenAllowsAgentAccess) {
+    apiToken = suppliedToken;
+  }
   if (
     recording.password &&
     recording.visibility === "public" &&
     viewerIsOwner
   ) {
-    apiToken = signShortLivedToken({ resourceId: recording.id });
+    apiToken = signScopedAgentAccessToken({
+      resourceKind: CLIP_AGENT_ACCESS_TOKEN_PREFIX,
+      resourceId: recording.id,
+      ttlSeconds: CLIPS_AGENT_ACCESS_TTL_SECONDS,
+    });
   }
 
   if (recording.password && !viewerIsOwner) {
-    const suppliedToken = options.token ?? "";
     const suppliedPassword = options.password ?? "";
-    let allowed = false;
-
-    if (suppliedToken) {
-      const result = verifyShortLivedToken(suppliedToken, recording.id);
-      if (result.ok) {
-        allowed = true;
-        apiToken = suppliedToken;
-      }
-    }
+    let allowed = tokenAllowsAgentAccess;
 
     if (
       !allowed &&
@@ -260,7 +275,11 @@ export async function loadPublicAgentAccess(
       verifySharePassword(suppliedPassword, recording.password)
     ) {
       allowed = true;
-      apiToken = signShortLivedToken({ resourceId: recording.id });
+      apiToken = signScopedAgentAccessToken({
+        resourceKind: CLIP_AGENT_ACCESS_TOKEN_PREFIX,
+        resourceId: recording.id,
+        ttlSeconds: CLIPS_AGENT_ACCESS_TTL_SECONDS,
+      });
     }
 
     if (!allowed) {
@@ -318,6 +337,7 @@ export async function loadAgentTranscript(
     fullText: transcript?.fullText,
     durationMs,
   });
+  const presentation = resolveTranscriptPresentation(transcript);
 
   // Respect the owner's cut: segments that fall entirely inside an excluded
   // range are what a share viewer never sees during playback, so external
@@ -344,7 +364,13 @@ export async function loadAgentTranscript(
           .trim();
 
   return {
-    transcript: transcript ?? null,
+    transcript: transcript
+      ? {
+          ...transcript,
+          status: presentation.stalePending ? "failed" : transcript.status,
+          failureReason: presentation.failureReason,
+        }
+      : null,
     fullText,
     excludedRanges,
     segments: kept,

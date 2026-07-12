@@ -1,17 +1,25 @@
 import {
-  appBasePath,
   appPath,
+  useActionMutation,
   useActionQuery,
   useSession,
   useT,
 } from "@agent-native/core/client";
 import {
   IconCode,
+  IconChevronDown,
   IconExternalLink,
   IconLink,
   IconMail,
 } from "@tabler/icons-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 
 import {
   CopyField,
@@ -27,6 +35,11 @@ import {
 } from "@/components/sharing/share-ui";
 import { SlackShareHint } from "@/components/sharing/slack-share-hint";
 import { Button } from "@/components/ui/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,7 +51,6 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
-import { buildAgentApiUrls } from "../../../shared/agent-context";
 import { isLoomEmbedUrl } from "../../../shared/loom";
 import { withShareAttribution } from "../../../shared/share-attribution";
 
@@ -50,6 +62,8 @@ function absoluteAppUrl(path: string): string {
 export interface ShareRecordingPopoverProps {
   recordingId: string;
   recordingTitle?: string;
+  initialVisibility?: Visibility | null;
+  initialRole?: "owner" | "admin" | "editor" | "viewer";
   videoUrl?: string | null;
   animatedThumbnailUrl?: string | null;
   isLoomRecording?: boolean;
@@ -78,10 +92,11 @@ type ShareRecordingDialogProps = Omit<
 export function ShareRecordingPopover({
   recordingId,
   recordingTitle,
+  initialVisibility,
+  initialRole,
   videoUrl,
   animatedThumbnailUrl,
   isLoomRecording = false,
-  hasPassword = false,
   children,
   open,
   onOpenChange,
@@ -89,17 +104,19 @@ export function ShareRecordingPopover({
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger asChild>{children}</PopoverTrigger>
+      {/* Keep the layer class in app source so Tailwind emits it for Clips. */}
       <PopoverContent
         align="end"
-        className="w-[440px] max-w-[calc(100vw-1rem)] overflow-hidden border-border p-0"
+        className="z-[260] w-[440px] max-w-[calc(100vw-1rem)] overflow-hidden border-border p-0"
       >
         <ShareRecordingContent
           recordingId={recordingId}
           recordingTitle={recordingTitle}
+          initialVisibility={initialVisibility}
+          initialRole={initialRole}
           videoUrl={videoUrl}
           animatedThumbnailUrl={animatedThumbnailUrl}
           isLoomRecording={isLoomRecording}
-          hasPassword={hasPassword}
         />
       </PopoverContent>
     </Popover>
@@ -114,10 +131,11 @@ export function ShareRecordingPopover({
 export function ShareRecordingDialog({
   recordingId,
   recordingTitle,
+  initialVisibility,
+  initialRole,
   videoUrl,
   animatedThumbnailUrl,
   isLoomRecording = false,
-  hasPassword = false,
   open,
   onOpenChange,
 }: ShareRecordingDialogProps) {
@@ -133,10 +151,11 @@ export function ShareRecordingDialog({
         <ShareRecordingContent
           recordingId={recordingId}
           recordingTitle={recordingTitle}
+          initialVisibility={initialVisibility}
+          initialRole={initialRole}
           videoUrl={videoUrl}
           animatedThumbnailUrl={animatedThumbnailUrl}
           isLoomRecording={isLoomRecording}
-          hasPassword={hasPassword}
           reserveCloseButton
         />
       </DialogContent>
@@ -147,18 +166,20 @@ export function ShareRecordingDialog({
 function ShareRecordingContent({
   recordingId,
   recordingTitle,
+  initialVisibility,
+  initialRole,
   videoUrl,
   animatedThumbnailUrl,
   isLoomRecording = false,
-  hasPassword = false,
   reserveCloseButton = false,
 }: {
   recordingId: string;
   recordingTitle?: string;
+  initialVisibility?: Visibility | null;
+  initialRole?: "owner" | "admin" | "editor" | "viewer";
   videoUrl?: string | null;
   animatedThumbnailUrl?: string | null;
   isLoomRecording?: boolean;
-  hasPassword?: boolean;
   reserveCloseButton?: boolean;
 }) {
   const t = useT();
@@ -168,7 +189,12 @@ function ShareRecordingContent({
   });
 
   const data = sharesQuery.data;
-  const canManage = data?.role === "owner" || data?.role === "admin";
+  const role = data?.role ?? initialRole;
+  const canManage = role === "owner" || role === "admin";
+  const visibility =
+    (data?.visibility as Visibility | null | undefined) ??
+    initialVisibility ??
+    null;
 
   // Attribution `via` must be a stable non-PII id, never an email. The only
   // owner id available client-side is the *current* session's userId, which is
@@ -219,11 +245,11 @@ function ShareRecordingContent({
             recordingId={recordingId}
             shareUrl={shareUrl}
             sharesQuery={sharesQuery}
+            visibility={visibility}
             canManage={canManage}
             videoUrl={videoUrl}
             animatedThumbnailUrl={animatedThumbnailUrl}
             isLoomRecording={isLoomRecording}
-            hasPassword={hasPassword}
           />
         </TabsContent>
 
@@ -241,6 +267,7 @@ function ShareRecordingContent({
           <ClipsEmbedConfigurator
             recordingId={recordingId}
             sharesQuery={sharesQuery}
+            visibility={visibility}
             canManage={canManage}
             ownerViaId={ownerViaId}
           />
@@ -258,20 +285,20 @@ function LinkTab({
   recordingId,
   shareUrl,
   sharesQuery,
+  visibility,
   canManage,
   videoUrl,
   animatedThumbnailUrl,
   isLoomRecording: isLoomRecordingProp,
-  hasPassword,
 }: {
   recordingId: string;
   shareUrl: string;
   sharesQuery: SharesQuery;
+  visibility: Visibility | null;
   canManage: boolean;
   videoUrl?: string | null;
   animatedThumbnailUrl?: string | null;
   isLoomRecording?: boolean;
-  hasPassword: boolean;
 }) {
   const t = useT();
   const { setResourceVisibility, isPending } = useResourceVisibilityMutation(
@@ -279,94 +306,162 @@ function LinkTab({
     recordingId,
     sharesQuery,
   );
-  const data = sharesQuery.data;
-  const visibility: Visibility =
-    (data?.visibility as Visibility | null) ?? "private";
   const isPublic = visibility === "public";
+  const sharesLoaded = visibility !== null;
+  const visibilityPending = isPending || sharesQuery.isLoading;
   const isLoomRecording = isLoomRecordingProp || isLoomEmbedUrl(videoUrl);
-  const publicAgentContextUrl =
-    typeof window === "undefined"
-      ? ""
-      : buildAgentApiUrls(recordingId, {
-          origin: window.location.origin,
-          basePath: appBasePath(),
-        }).contextUrl;
-  const [tokenizedAgentContextUrl, setTokenizedAgentContextUrl] = useState("");
+  const createAgentLink = useActionMutation(
+    "create-recording-agent-link" as any,
+  );
+  const createAgentLinkAsyncRef = useRef(createAgentLink.mutateAsync);
+  const agentLinkRequestIdRef = useRef(0);
+  const [agentContextUrl, setAgentContextUrl] = useState("");
+  const [agentLinkError, setAgentLinkError] = useState(false);
+  const [agentShareOpen, setAgentShareOpen] = useState(false);
 
   useEffect(() => {
-    if (!isPublic || !hasPassword || typeof window === "undefined") {
-      setTokenizedAgentContextUrl("");
-      return;
+    createAgentLinkAsyncRef.current = createAgentLink.mutateAsync;
+  });
+
+  const loadAgentContextUrl = useCallback(async () => {
+    const requestId = agentLinkRequestIdRef.current + 1;
+    agentLinkRequestIdRef.current = requestId;
+
+    setAgentContextUrl("");
+    setAgentLinkError(false);
+
+    try {
+      const result = (await createAgentLinkAsyncRef.current({
+        recordingId,
+      })) as { url?: string };
+      if (agentLinkRequestIdRef.current !== requestId) return;
+      if (result?.url) {
+        setAgentContextUrl(result.url);
+      } else {
+        setAgentLinkError(true);
+      }
+    } catch {
+      if (agentLinkRequestIdRef.current === requestId) {
+        setAgentLinkError(true);
+      }
+    }
+  }, [recordingId]);
+
+  useEffect(() => {
+    setAgentContextUrl("");
+    setAgentLinkError(false);
+    if (!sharesLoaded) return;
+
+    if (!isPublic && agentShareOpen) {
+      void loadAgentContextUrl();
     }
 
-    let cancelled = false;
-    async function loadTokenizedAgentContextUrl() {
-      setTokenizedAgentContextUrl("");
-      const res = await fetch(publicAgentContextUrl, {
-        credentials: "include",
-      }).catch(() => null);
-      if (!res?.ok) return;
-      const payload = await res.json().catch(() => null);
-      const contextUrl =
-        typeof payload?.apis?.context?.url === "string"
-          ? payload.apis.context.url
-          : "";
-      if (!cancelled) setTokenizedAgentContextUrl(contextUrl);
-    }
-
-    void loadTokenizedAgentContextUrl();
     return () => {
-      cancelled = true;
+      agentLinkRequestIdRef.current += 1;
     };
-  }, [hasPassword, isPublic, publicAgentContextUrl]);
+  }, [
+    agentShareOpen,
+    isPublic,
+    loadAgentContextUrl,
+    recordingId,
+    sharesLoaded,
+    visibility,
+  ]);
 
-  const agentContextUrl = hasPassword
-    ? tokenizedAgentContextUrl
-    : publicAgentContextUrl;
-  const agentShareDisabled = isPending || !isPublic || !agentContextUrl;
+  const agentShareDisabled =
+    isPending || createAgentLink.isPending || !agentContextUrl;
   const agentPrompt = agentContextUrl
     ? t("shareDialog.agentPrompt", { agentContextUrl })
     : "";
 
   return (
     <div className="space-y-4">
-      <GeneralAccessSelect
-        visibility={visibility}
-        canManage={canManage}
-        isPending={isPending}
-        onChange={(next) => setResourceVisibility(next)}
-        publicDescription={t("shareDialog.publicDescription")}
-      />
+      {visibility ? (
+        <GeneralAccessSelect
+          visibility={visibility}
+          canManage={canManage}
+          isPending={visibilityPending}
+          onChange={(next) => setResourceVisibility(next)}
+          publicDescription={t("shareDialog.publicDescription")}
+        />
+      ) : (
+        <div className="space-y-2" aria-hidden>
+          <div className="h-3 w-24 animate-pulse rounded bg-muted" />
+          <div className="h-12 w-full animate-pulse rounded bg-muted" />
+        </div>
+      )}
 
       <CopyField
         label={t("shareDialog.shareLink")}
         value={shareUrl}
-        disabled={isPending || (!isPublic && canManage)}
+        disabled={
+          visibilityPending || !sharesLoaded || (!isPublic && canManage)
+        }
       />
 
       {/* Public links unfurl into a playable video in Slack; surface that here
           (and a connect link) instead of leaving it buried in Settings. */}
       {isPublic ? <SlackShareHint canManage={canManage} /> : null}
 
-      <CopyField
-        label={t("shareDialog.shareWithAgents")}
-        value={agentContextUrl}
-        disabled={agentShareDisabled}
-      />
-
-      <CopyField
-        label={t("shareDialog.copyAgentPrompt")}
-        value={agentPrompt}
-        disabled={agentShareDisabled}
-      />
-
-      {isPublic && hasPassword ? (
-        <p className="text-xs text-muted-foreground">
-          {t("shareDialog.agentTokenDescription")}
-        </p>
+      {sharesLoaded && !isPublic ? (
+        <Collapsible open={agentShareOpen} onOpenChange={setAgentShareOpen}>
+          <CollapsibleTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              className="h-auto w-full justify-between px-0 py-1 text-left hover:bg-transparent"
+            >
+              <span className="min-w-0">
+                <span className="block text-xs font-medium text-foreground">
+                  {t("shareDialog.shareWithAgents")}
+                </span>
+                <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
+                  {t("shareDialog.agentTokenDescription")}
+                </span>
+              </span>
+              <IconChevronDown
+                className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${
+                  agentShareOpen ? "rotate-180" : ""
+                }`}
+                aria-hidden
+              />
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="pt-2">
+            <div className="space-y-3 rounded-md border border-border bg-muted/30 p-3">
+              <CopyField
+                label={t("shareDialog.shareWithAgents")}
+                value={agentContextUrl}
+                disabled={agentShareDisabled}
+              />
+              {agentLinkError ? (
+                <div className="flex items-center justify-between gap-2 rounded-md border border-border bg-background px-3 py-2">
+                  <p className="text-xs text-muted-foreground">
+                    {t("shareDialog.agentLinkUnavailable")}
+                  </p>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7"
+                    onClick={() => void loadAgentContextUrl()}
+                    disabled={createAgentLink.isPending}
+                  >
+                    {t("shareDialog.retryAgentLink")}
+                  </Button>
+                </div>
+              ) : null}
+              <CopyField
+                label={t("shareDialog.copyAgentPrompt")}
+                value={agentPrompt}
+                disabled={agentShareDisabled}
+              />
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
       ) : null}
 
-      {!isPublic && canManage ? (
+      {sharesLoaded && !isPublic && canManage ? (
         <MakePublicCard
           isPending={isPending}
           onMakePublic={() =>
@@ -403,7 +498,7 @@ function LinkTab({
                   {t("shareDialog.openPlayer")}
                 </>
               ) : (
-                t("shareDialog.downloadMp4")
+                t("recordRoute.downloadRecording")
               )}
             </Button>
           ) : null}
@@ -420,11 +515,13 @@ function LinkTab({
 function ClipsEmbedConfigurator({
   recordingId,
   sharesQuery,
+  visibility,
   canManage,
   ownerViaId,
 }: {
   recordingId: string;
   sharesQuery: SharesQuery;
+  visibility: Visibility | null;
   canManage: boolean;
   ownerViaId?: string;
 }) {
@@ -435,11 +532,10 @@ function ClipsEmbedConfigurator({
   const [width, setWidth] = useState(640);
   const [height, setHeight] = useState(360);
 
-  const data = sharesQuery.data;
-  const visibility: Visibility =
-    (data?.visibility as Visibility | null) ?? "private";
   const isPublic = visibility === "public";
-  const visibilityLabel = t(`shareUi.visibility.${visibility}.label`);
+  const visibilityLabel = visibility
+    ? t(`shareUi.visibility.${visibility}.label`)
+    : "";
   const { setResourceVisibility, isPending } = useResourceVisibilityMutation(
     "recording",
     recordingId,
@@ -463,6 +559,15 @@ function ClipsEmbedConfigurator({
     mode === "responsive"
       ? `<div style="position:relative;padding-bottom:56.25%;height:0;background:#000;overflow:hidden"><iframe src="${src}" title="${t("shareDialog.embedIframeTitle")}" frameborder="0" scrolling="no" allowfullscreen allow="autoplay; fullscreen; picture-in-picture" style="position:absolute;inset:0;width:100%;height:100%;border:0;background:#000;overflow:hidden"></iframe></div>`
       : `<iframe src="${src}" title="${t("shareDialog.embedIframeTitle")}" width="${width}" height="${height}" frameborder="0" scrolling="no" allowfullscreen allow="autoplay; fullscreen; picture-in-picture" style="display:block;max-width:100%;border:0;background:#000;overflow:hidden"></iframe>`;
+
+  if (!visibility) {
+    return (
+      <div className="space-y-2" aria-hidden>
+        <div className="h-16 w-full animate-pulse rounded bg-muted" />
+        <div className="h-24 w-full animate-pulse rounded bg-muted" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3">

@@ -15,7 +15,8 @@ import {
   normalizeModelForEngine,
 } from "../../agent/engine/index.js";
 import type { ActionTool } from "../../agent/types.js";
-import { canUseDeployCredentialFallbackForRequest } from "../../server/credential-provider.js";
+import { resolveHostedDefaultModelExperiment } from "../../observability/hosted-model-experiment.js";
+import { getRequestUserEmail } from "../../server/request-context.js";
 import { getSetting } from "../../settings/index.js";
 
 export const tool: ActionTool = {
@@ -38,9 +39,9 @@ export async function run(args: Record<string, string> = {}): Promise<string> {
     : null;
 
   // Same priority chain resolveEngine uses after explicit request options:
-  // AGENT_ENGINE → app default → Builder app_secrets → stored (if usable)
-  // → user BYOK app_secrets → env → anthropic. Gating stored/app defaults
-  // on the request-aware helper keeps the picker in step with the runtime.
+  // AGENT_ENGINE → app default → stored (if usable) → user/Builder app_secrets
+  // → env → anthropic. Gating stored/app defaults on the request-aware helper
+  // keeps the picker in step with the runtime.
   const storedEntry =
     typeof current?.engine === "string"
       ? getAgentEngineEntry(current.engine)
@@ -65,16 +66,13 @@ export async function run(args: Record<string, string> = {}): Promise<string> {
     !!envEntry &&
     (await isStoredEngineUsableForRequest({ engine: envEntry.name }, envEntry));
   const envUnavailable = !!envEntry && !envUsable;
-  const detectedFromEnv = canUseDeployCredentialFallbackForRequest()
-    ? detectEngineFromEnv()
-    : null;
+  const detectedFromEnv = detectEngineFromEnv();
   const envSelectedEntry = envUsable ? envEntry : undefined;
 
   const currentEntry = envUnavailable
     ? undefined
     : (envSelectedEntry ??
       (appDefaultUsable ? appDefaultEntry : undefined) ??
-      (detectedFromUser?.name === "builder" ? detectedFromUser : undefined) ??
       (storedUsable ? storedEntry : undefined) ??
       detectedFromUser ??
       detectedFromEnv ??
@@ -86,13 +84,23 @@ export async function run(args: Record<string, string> = {}): Promise<string> {
         ? current?.model
         : undefined;
   const currentEngineName = currentEntry?.name ?? "anthropic";
-  const currentModel =
+  let currentModel =
     currentEntry && !envUnavailable
       ? normalizeModelForEngine(
           currentEntry,
           currentModelCandidate ?? currentEntry.defaultModel,
         )
       : (currentModelCandidate ?? DEFAULT_MODEL);
+  const hostedExperiment =
+    currentEntry && !currentModelCandidate
+      ? resolveHostedDefaultModelExperiment({
+          userId: getRequestUserEmail(),
+          engineName: currentEntry.name,
+          isDefaultModelSelection: true,
+          supportedModels: currentEntry.supportedModels,
+        })
+      : null;
+  if (hostedExperiment) currentModel = hostedExperiment.model;
 
   const result = {
     engines: engines.map((e) => ({
@@ -111,6 +119,12 @@ export async function run(args: Record<string, string> = {}): Promise<string> {
       : {
           engine: currentEngineName,
           model: currentModel,
+          ...(hostedExperiment
+            ? {
+                modelSelectionSource: "experiment",
+                experimentAssignment: hostedExperiment.assignment,
+              }
+            : {}),
         },
   };
 

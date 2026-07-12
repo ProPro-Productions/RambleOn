@@ -353,6 +353,12 @@ export function EditorLayout({ recordingId, className }: EditorLayoutProps) {
   const [chaptersOpen, setChaptersOpen] = useState(false);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const trackpadGestureRef = useRef<{
+    zoom: number;
+    scrollLeft: number;
+    anchorRatio: number;
+    viewportX: number;
+  } | null>(null);
 
   // Measure viewport so waveform + timeline stay responsive.
   useEffect(() => {

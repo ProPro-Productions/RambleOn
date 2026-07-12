@@ -30,7 +30,7 @@ import {
 import type { LinksFunction } from "react-router";
 
 import { Layout as AppLayout } from "@/components/layout/Layout";
-import { Toaster } from "@/components/ui/toaster";
+import { AppToolkitProvider } from "@/components/ui/toolkit-provider";
 import { DeckProvider } from "@/context/DeckContext";
 import { useNavigationState } from "@/hooks/use-navigation-state";
 import { TAB_ID } from "@/lib/tab-id";
@@ -241,17 +241,15 @@ export default function Root() {
   }
 
   return (
-    <AppProviders
-      queryClient={queryClient}
-      defaultTheme="dark"
-      i18n={{ catalog: i18nCatalog }}
-    >
-      <AppContent />
-      {/* useToast-based Toaster — separate from AppProviders' sonner Toaster.
-          Components throughout the app call toast() from @/hooks/use-toast,
-          which requires this Toaster to be mounted. */}
-      <Toaster />
-    </AppProviders>
+    <AppToolkitProvider>
+      <AppProviders
+        queryClient={queryClient}
+        defaultTheme="dark"
+        i18n={{ catalog: i18nCatalog }}
+      >
+        <AppContent />
+      </AppProviders>
+    </AppToolkitProvider>
   );
 }
 

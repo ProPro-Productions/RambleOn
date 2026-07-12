@@ -1,13 +1,15 @@
 import { getOrgContext } from "@agent-native/core/org";
 import {
   createAgentChatPlugin,
-  getRequestRunContext,
   loadActionsFromStaticRegistry,
   type AgentLoopFinalResponseGuardContext,
 } from "@agent-native/core/server";
 
 import actionsRegistry from "../../.generated/actions-registry.js";
-import { renderDataDictionary } from "../lib/data-dictionary-context";
+import {
+  applyAnalyticsPlanModePolicy,
+  INITIAL_TOOL_NAMES,
+} from "../lib/agent-chat-plan-mode";
 import {
   failedDataQueryAttemptMessage,
   hasExplicitPartialDisclosure,
@@ -22,47 +24,31 @@ import {
   needsCorpusWorkflowForCoverageSensitiveRequest,
   needsSourceRecordBodyWorkflowForCoverageSensitiveRequest,
 } from "../lib/real-data-actions";
-import {
-  listScopedSettingRecords,
-  resolveSettingsScope,
-} from "../lib/scoped-settings";
+const ANALYTICS_BACKGROUND_RUN_SOFT_TIMEOUT_MS = 13 * 60_000;
 
-const DATA_DICT_PREFIX = "data-dict-";
+export const SIMPLE_TIME_BOUNDED_METRIC_FAST_PATH_GUIDANCE =
+  "SIMPLE TIME-BOUNDED METRIC FAST PATH — When the data dictionary or a known canonical source identifies the metric, run one bounded aggregate. Once it returns a valid result, answer the explicit question immediately with the source, time window, row count, and only necessary caveats. Do not schema-discover, retry, enrich, cross-check, or add breakdowns after that successful result unless the query failed or the result conflicts with the known metric definition. This does not waive the real-data requirement: never answer from a guess, stale value, or unverified result. ";
 
-const INITIAL_TOOL_NAMES = [
-  "view-screen",
-  "data-source-status",
-  "list-analyses",
-  "get-analysis",
-  "save-analysis",
-  "rename-analysis",
-  "delete-analysis",
-  "get-sql-dashboard",
-  "mutate-dashboard",
-  "generate-chart",
-  "query-agent-native-analytics",
-  "bigquery",
-  "search-bigquery-schema",
-  "bigquery-table-info",
-  "provider-api-catalog",
-  "provider-api-docs",
-  "provider-api-request",
-  "provider-corpus-job",
-  "provider-corpus-jobs",
-  "query-staged-dataset",
-  "list-staged-datasets",
-  "delete-staged-dataset",
-  "account-deep-dive",
-  "hubspot-deals",
-  "hubspot-records",
-  "gong-calls",
-  "jira-search",
-  "slack-messages",
-  "sentry",
-  "list-data-dictionary",
-  "save-data-dictionary-entry",
-  "navigate",
-];
+export function analyticsSourceGuidanceOpening(): string {
+  return (
+    "<data-source-guidance>\n" +
+    "Apply real-data requirements only when presenting analytics results, source records, or derived metrics. Do not call data-source tools for workflow migration, recurring-job setup, UI/code fixes, settings help, conceptual planning, or other non-data tasks unless the user explicitly asks for data. " +
+    SIMPLE_TIME_BOUNDED_METRIC_FAST_PATH_GUIDANCE +
+    "SURFACE DIFFERENTIATION — You are the analytics assistant for definitions, deep-dive analysis, and action. For questions about what a metric, model, or table means, use the Data Dictionary and configured schema tools first. For trends, comparisons, anomalies, current data, or anything that requires querying live data, answer directly in chat with the relevant provider query, dashboard analysis, and inline charts when useful. "
+  );
+}
+
+export function analyticsDataDictionaryRoutingContext(): string {
+  return `<data-dictionary-routing>
+Data-dictionary definitions are available on demand instead of being embedded in every chat request. Before writing SQL or making a metric-definition claim, call \`list-data-dictionary\` with a focused \`search\` or \`department\` filter. If the user asks what definitions exist and no useful filter is available, call it without filters. Treat approved entries as canonical, verify unreviewed human entries when stakes are high, and treat AI-generated unapproved entries as suggestions only. If no matching definition exists, inspect the configured source schema or ask the user instead of guessing.
+</data-dictionary-routing>`;
+}
+
+export {
+  applyAnalyticsPlanModePolicy,
+  INITIAL_TOOL_NAMES,
+  PLAN_MODE_ACT_ONLY_TOOLS,
+} from "../lib/agent-chat-plan-mode";
 
 function latestUserText(
   messages: AgentLoopFinalResponseGuardContext["messages"],
@@ -79,7 +65,61 @@ function latestUserText(
   return "";
 }
 
-function realDataFinalGuard(context: AgentLoopFinalResponseGuardContext) {
+function configuredDataSourceLabels(
+  toolResults: AgentLoopFinalResponseGuardContext["toolResults"],
+): string[] {
+  const labels = new Set<string>();
+  for (const result of toolResults ?? []) {
+    const normalizedName = String(result.name ?? "")
+      .trim()
+      .toLowerCase()
+      .replace(/[\s_]+/g, "-");
+    if (normalizedName !== "data-source-status" || result.isError) continue;
+
+    let parsed: Record<string, unknown>;
+    try {
+      const value = JSON.parse(String(result.content ?? ""));
+      if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+      parsed = value as Record<string, unknown>;
+    } catch {
+      continue;
+    }
+
+    const compactSources = Array.isArray(parsed.configuredDataSources)
+      ? parsed.configuredDataSources
+      : [];
+    for (const source of compactSources) {
+      if (!source || typeof source !== "object" || Array.isArray(source)) {
+        continue;
+      }
+      const record = source as Record<string, unknown>;
+      const label = record.label ?? record.provider;
+      if (typeof label === "string" && label.trim()) labels.add(label.trim());
+    }
+
+    // Backward compatibility for runs against deployments that predate the
+    // compact configuredDataSources summary.
+    const providers = Array.isArray(parsed.providers) ? parsed.providers : [];
+    for (const provider of providers) {
+      if (
+        !provider ||
+        typeof provider !== "object" ||
+        Array.isArray(provider)
+      ) {
+        continue;
+      }
+      const record = provider as Record<string, unknown>;
+      if (record.configured !== true) continue;
+      const label = record.label ?? record.provider;
+      if (typeof label === "string" && label.trim()) labels.add(label.trim());
+    }
+  }
+  return [...labels];
+}
+
+export function realDataFinalGuard(
+  context: AgentLoopFinalResponseGuardContext,
+) {
   if ((context as { executionMode?: string }).executionMode === "plan") {
     return null;
   }
@@ -149,17 +189,30 @@ function realDataFinalGuard(context: AgentLoopFinalResponseGuardContext) {
     };
   }
 
+  const configuredSources = configuredDataSourceLabels(context.toolResults);
+  const configuredSourceGuidance = configuredSources.length
+    ? ` \`data-source-status\` already confirmed these connected sources: ${configuredSources.join(", ")}. Do not claim that no sources are connected and do not ask the user to reconnect them. Immediately call the relevant query action for one of those sources.`
+    : "";
   return {
     retryMessage:
-      "This looks like an analytics result request, but no real source query ran. If you are making data claims, run one relevant data-source action or connected provider MCP tool now and answer from that result. If the right response is a clarification, plan, or explicit unavailable/credentials-missing message with no metrics or source-record claims, finalize that directly instead.",
-    fallbackMessage:
-      "I can't provide a grounded analytics result yet because no real data-source query ran successfully. Tell me which source to use or connect the missing source, and I'll run it before giving numbers or source-record conclusions.",
+      "This looks like an analytics result request, but no real source query ran. If you are making data claims, run one relevant data-source action or connected provider MCP tool now and answer from that result." +
+      configuredSourceGuidance +
+      " If the right response is a clarification, plan, or explicit unavailable/credentials-missing message with no metrics or source-record claims, finalize that directly instead.",
+    fallbackMessage: configuredSources.length
+      ? `I found connected data sources (${configuredSources.join(", ")}), but the model still did not run a real source query. Please retry the request; you do not need to reconnect those sources.`
+      : "I can't provide a grounded analytics result yet because no real data-source query ran successfully. Tell me which source to use or connect the missing source, and I'll run it before giving numbers or source-record conclusions.",
+    // Some models use separate turns for status, schema discovery, and the
+    // actual query. One corrective turn was enough for Sonnet but caused Luna
+    // to hit the fallback before it reached the query.
+    maxRetries: 2,
   };
 }
 
 export default createAgentChatPlugin({
   appId: "analytics",
-  actions: loadActionsFromStaticRegistry(actionsRegistry),
+  actions: applyAnalyticsPlanModePolicy(
+    loadActionsFromStaticRegistry(actionsRegistry),
+  ),
   initialToolNames: INITIAL_TOOL_NAMES,
   finalResponseGuard: realDataFinalGuard,
   // Enable sandboxed JavaScript execution for analytics data processing.
@@ -170,18 +223,18 @@ export default createAgentChatPlugin({
   // Operators deploying to trusted internal environments can set
   // AGENT_PROD_CODE_EXECUTION=trusted to also enable bash/read/edit/write.
   codeExecution: { production: "sandboxed" },
+  durableBackgroundRuns: true,
+  runSoftTimeoutMs: ANALYTICS_BACKGROUND_RUN_SOFT_TIMEOUT_MS,
   resolveOrgId: async (event) => {
     const ctx = await getOrgContext(event);
     return ctx.orgId;
   },
-  extraContext: async (event) => {
-    // Always inject source guidance, even if the data-dictionary lookup throws.
-    // The generic template can ship provider actions without every deployment
-    // having credentials or workspace-specific schemas configured.
+  extraContext: async () => {
+    // Always inject compact source-routing guidance. Dictionary definitions
+    // stay behind list-data-dictionary so prompt assembly does not read and
+    // render every organization metric before the model request starts.
     const sourceGuidance =
-      "<data-source-guidance>\n" +
-      "Apply real-data requirements only when presenting analytics results, source records, or derived metrics. Do not call data-source tools for workflow migration, recurring-job setup, UI/code fixes, settings help, conceptual planning, or other non-data tasks unless the user explicitly asks for data. " +
-      "SURFACE DIFFERENTIATION — You are the analytics assistant for definitions, deep-dive analysis, and action. For questions about what a metric, model, or table means, use the Data Dictionary and configured schema tools first. For trends, comparisons, anomalies, current data, or anything that requires querying live data, answer directly in chat with the relevant provider query, dashboard analysis, and inline charts when useful. " +
+      analyticsSourceGuidanceOpening() +
       "DASHBOARD CREATION RULE — You may create dashboards, analyses, SQL panels, or other resources only when the user explicitly asks you to (e.g. 'build me a dashboard for...', 'create a new analysis', 'add a chart for...'). Never create any resource proactively during research, trend analysis, or answering questions. If you think a dashboard would be useful, suggest it and wait for explicit confirmation before creating anything. Never add new items to the sidebar or modify existing dashboards without an explicit user directive. " +
       "DASHBOARD MUTATION RULE — For dashboard edits, default to `mutate-dashboard` with the typed `dashboard.*` script API so the main payload is a string and avoids native-array serialization traps. It can move panels by id, edit titles/SQL/config, insert, duplicate, remove, and patch dashboard fields in one atomic save. The script API is constrained: no variables/imports/loops/functions, only JSON-compatible arguments on documented dashboard methods. Do not count shifting `/panels/<index>` positions for ordinary dashboard edits unless the user specifically asks for low-level JSON-pointer operations. " +
       "DASHBOARD READ RULE — `get-sql-dashboard` is compact by default: use its `panels` summaries plus `layout.panelOrder`, `layout.firstPanelIds`, and `layout.groups[].rows[].rowNumber/panelIds` for orientation and verification. Pass `includeConfig: true` only when you truly need full panel SQL/config. " +
@@ -209,36 +262,11 @@ export default createAgentChatPlugin({
       "<analytics-artifact-guidance>\n" +
       "Native Analytics dashboards and saved analyses are constrained artifacts: dashboards are JSON configs rendered by the built-in dashboard components, and analyses are Markdown reports with generated chart images plus structured resultData. " +
       "If the user's requested dashboard, analysis surface, visualization, interaction model, custom layout, or bespoke workflow cannot be faithfully represented within those native components/config fields, do not hand-wave, force an approximate JSON dashboard, or route to source-code changes. In production mode, automatically create a sandboxed extension with `create-extension` instead, using Alpine.js HTML and the available app/data helpers. " +
-      "After creating the extension, briefly tell the user that the request needed bespoke UI/code beyond the native Analytics dashboard or analysis format, so you built it as an extension.\n" +
+      "After creating the extension, briefly tell the user that the request needed bespoke UI/code beyond the native Analytics dashboard or analysis format, so you built it as an extension. " +
+      "Do not also create a same-named dashboard or saved analysis unless the user explicitly asked for multiple artifacts; saved analyses appear in the sidebar and should not be used for throwaway notes or scratch summaries.\n" +
       "</analytics-artifact-guidance>";
 
-    // In the durable background-function worker, skip the data-dictionary read
-    // + render. That settings read + synchronous render is the heaviest, most
-    // hang-prone part of worker setup on a cold bg-fn instance, and it runs
-    // EAGERLY while the system prompt is built (before any pre-send timeout can
-    // arm), so a stall here is what kept the analytics worker from ever claiming
-    // its run. The agent can still pull dictionary entries on demand via
-    // `list-data-dictionary` / `search-bigquery-schema`; the static guidance is
-    // what it needs to know they exist. Foreground requests keep the full dict.
-    if (getRequestRunContext()?.isBackgroundWorker) {
-      return `${sourceGuidance}\n\n${artifactGuidance}`;
-    }
-
-    try {
-      const scope = await resolveSettingsScope(event);
-      const all = await listScopedSettingRecords(scope, DATA_DICT_PREFIX);
-      const entries = Object.values(all) as Array<Record<string, unknown>>;
-      const dict = renderDataDictionary(entries);
-      return dict
-        ? `${sourceGuidance}\n\n${artifactGuidance}\n\n${dict}`
-        : `${sourceGuidance}\n\n${artifactGuidance}`;
-    } catch (err) {
-      console.warn(
-        "[analytics] data dictionary context failed:",
-        err instanceof Error ? err.message : err,
-      );
-      return `${sourceGuidance}\n\n${artifactGuidance}`;
-    }
+    return `${sourceGuidance}\n\n${artifactGuidance}\n\n${analyticsDataDictionaryRoutingContext()}`;
   },
   mentionProviders: {
     dashboards: {

@@ -16,11 +16,17 @@ function createNitroApp() {
 }
 
 async function dispatch(nitroApp: any, pathname: string) {
+  const url = new URL(`http://example.test${pathname}`);
   const event = {
     method: "GET",
-    url: new URL(`http://example.test${pathname}`),
+    url,
     path: pathname,
     context: {},
+    // h3 v2's own getMethod/getRequestHeader read from `event.req` (a real
+    // web-standard Request) — the CSRF middleware that `getH3App()` now
+    // registers globally on every nitroApp calls both, so the fake event
+    // needs a real Request even though these tests never assert on it.
+    req: new Request(url, { method: "GET" }),
     // Minimal h3-v2 response shape so handlers that call setResponseStatus /
     // setResponseHeader (e.g. the init-failure 503 fallback) work under test.
     res: { status: 200, headers: new Headers() },
@@ -35,11 +41,15 @@ async function dispatch(nitroApp: any, pathname: string) {
 }
 
 async function dispatchViaGeneratedMiddleware(nitroApp: any, pathname: string) {
+  const url = new URL(`http://example.test${pathname}`);
   const event = {
     method: "GET",
-    url: new URL(`http://example.test${pathname}`),
+    url,
     path: pathname,
     context: {},
+    // See `dispatch()` above — the globally-registered CSRF middleware needs
+    // a real h3-v2 `event.req`.
+    req: new Request(url, { method: "GET" }),
   };
   const route = {
     data: {
@@ -78,6 +88,26 @@ describe("framework request handler", () => {
       mountedPathname: "/_agent-native/extensions/extension-1/render",
       pathname: "/extension-1/render",
     });
+  });
+
+  it("does not log or write a 500 response for client-aborted framework routes", async () => {
+    const nitroApp = createNitroApp();
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => {});
+    getH3App(nitroApp).use("/_agent-native/poll", () => {
+      const error = new Error("aborted") as Error & { code?: string };
+      error.code = "ECONNRESET";
+      throw error;
+    });
+
+    await expect(dispatch(nitroApp, "/_agent-native/poll")).resolves.toBe(
+      undefined,
+    );
+
+    expect(errorSpy).not.toHaveBeenCalled();
+    expect(debugSpy).toHaveBeenCalledWith(
+      "[agent-native] GET /_agent-native/poll aborted by client: aborted",
+    );
   });
 
   it("keeps dynamic framework middleware visible to Nitro generated dispatchers", async () => {
@@ -391,11 +421,15 @@ describe("framework request handler", () => {
     pathname: string,
     opts: { runRequestHooks: boolean },
   ) {
+    const url = new URL(`http://example.test${pathname}`);
     const event = {
       method: "GET",
-      url: new URL(`http://example.test${pathname}`),
+      url,
       path: pathname,
       context: {},
+      // See `dispatch()` above — the globally-registered CSRF middleware
+      // needs a real h3-v2 `event.req`.
+      req: new Request(url, { method: "GET" }),
       res: { status: 200, headers: new Headers() },
     };
     // Nitro bridges the `request` hook to h3's `config.onRequest`, which h3

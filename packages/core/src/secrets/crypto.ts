@@ -5,39 +5,95 @@
  * credentials (`resolveCredential` / `saveCredential`, stored in `settings`) so
  * there is a single crypto implementation and a single key story.
  *
- * The encryption key is derived from `SECRETS_ENCRYPTION_KEY` (preferred) or the
- * existing `BETTER_AUTH_SECRET` env var (fallback so templates don't need a
- * second secret during development). In production we refuse to start without
- * one of them — a CWD-derived fallback would be effectively static (e.g.
- * `/var/task` on Lambda), so anyone with read access to the DB could decrypt
- * every secret.
+ * The encryption key is derived from `<APP_NAME>_SECRETS_ENCRYPTION_KEY` when
+ * set, then `SECRETS_ENCRYPTION_KEY`, then `BETTER_AUTH_SECRET`. The app-scoped
+ * key lets a local multi-app workspace read one app's encrypted production data
+ * without replacing the shared local auth secret. In production we refuse to
+ * start without configured key material — a CWD-derived fallback would be
+ * effectively static (e.g. `/var/task` on Lambda), so anyone with read access
+ * to the DB could decrypt every secret.
  *
  * Encrypted values are tagged `v1:<iv-hex>:<ct-hex>:<tag-hex>`. The `v1:` prefix
  * lets readers distinguish ciphertext from legacy plaintext during migration.
  */
 
-import {
-  randomBytes,
-  createCipheriv,
-  createDecipheriv,
-  createHash,
-} from "node:crypto";
+type NodeCryptoModule = typeof import("node:crypto");
+
+function getNodeCrypto(): NodeCryptoModule | undefined {
+  if (
+    typeof window !== "undefined" ||
+    typeof process === "undefined" ||
+    !process.versions?.node ||
+    typeof process.getBuiltinModule !== "function"
+  ) {
+    return undefined;
+  }
+  return process.getBuiltinModule("node:crypto") as
+    | NodeCryptoModule
+    | undefined;
+}
+
+const nodeCrypto = getNodeCrypto();
 
 let _warnedFallback = false;
+
+function requireNodeCrypto(): NonNullable<typeof nodeCrypto> {
+  if (!nodeCrypto) {
+    throw new Error(
+      "[agent-native/secrets] Secret encryption is only available in server/runtime code.",
+    );
+  }
+  return nodeCrypto;
+}
+
+function processNodeEnv(): string | undefined {
+  if (typeof process === "undefined") return undefined;
+  return process.env.NODE_ENV;
+}
+
+function processCwd(): string {
+  if (typeof process === "undefined") return ".";
+  return process.cwd();
+}
+
+function appScopedEncryptionKey(): string | undefined {
+  if (typeof process === "undefined") return undefined;
+  const appName = process.env.APP_NAME?.trim() // guard:allow-env-credential — deploy-level app configuration selects the scoped encryption key.
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return appName
+    ? process.env[`${appName}_SECRETS_ENCRYPTION_KEY`] // guard:allow-env-credential — deploy-level app encryption material, never a user credential.
+    : undefined;
+}
 
 /**
  * Derive a 32-byte AES key from the configured secret material via SHA-256.
  * Re-derived per call (cheap, stateless, and makes rotation easy).
  */
 export function getSecretEncryptionKey(): Buffer {
+  const { createHash } = requireNodeCrypto();
   const explicit =
-    process.env.SECRETS_ENCRYPTION_KEY || process.env.BETTER_AUTH_SECRET;
+    appScopedEncryptionKey() ||
+    (typeof process === "undefined"
+      ? undefined
+      : process.env.SECRETS_ENCRYPTION_KEY) ||
+    (typeof process === "undefined"
+      ? undefined
+      : process.env.BETTER_AUTH_SECRET);
 
   if (!explicit) {
-    if (process.env.NODE_ENV === "production") {
+    if (processNodeEnv() === "production") {
+      const appName =
+        typeof process === "undefined"
+          ? undefined
+          : process.env.APP_NAME?.trim() // guard:allow-env-credential — deploy-level app configuration selects the scoped encryption key.
+              .toUpperCase()
+              .replace(/[^A-Z0-9]+/g, "_")
+              .replace(/^_+|_+$/g, "");
       throw new Error(
         "[agent-native/secrets] Refusing to start in production without an encryption key. " +
-          "Set SECRETS_ENCRYPTION_KEY (preferred) or BETTER_AUTH_SECRET in the deploy environment. " +
+          `Set ${appName ? `${appName}_SECRETS_ENCRYPTION_KEY, ` : ""}SECRETS_ENCRYPTION_KEY, or BETTER_AUTH_SECRET in the deploy environment. ` +
           "The previous CWD-derived fallback was effectively static (e.g. `/var/task` on Lambda), " +
           "which means anyone with read access to the secrets table could decrypt every user's secrets.",
       );
@@ -47,18 +103,19 @@ export function getSecretEncryptionKey(): Buffer {
       // eslint-disable-next-line no-console
       console.warn(
         "[agent-native/secrets] SECRETS_ENCRYPTION_KEY not set — using a machine-local fallback. " +
-          "Set SECRETS_ENCRYPTION_KEY (or BETTER_AUTH_SECRET) for production. " +
+          "Set an app-scoped *_SECRETS_ENCRYPTION_KEY, SECRETS_ENCRYPTION_KEY, or BETTER_AUTH_SECRET for production. " +
           "Production deploys without one of these env vars now hard-fail.",
       );
     }
   }
 
-  const material = explicit || `agent-native-secrets:${process.cwd()}`;
+  const material = explicit || `agent-native-secrets:${processCwd()}`;
   return createHash("sha256").update(material).digest();
 }
 
 /** Encrypt a plain-text value. Returns `v1:<iv-hex>:<ct-hex>:<tag-hex>`. */
 export function encryptSecretValue(plaintext: string): string {
+  const { createCipheriv, randomBytes } = requireNodeCrypto();
   const key = getSecretEncryptionKey();
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", key, iv);
@@ -69,6 +126,7 @@ export function encryptSecretValue(plaintext: string): string {
 
 /** Decrypt a value produced by `encryptSecretValue`. Throws on tampering. */
 export function decryptSecretValue(encrypted: string): string {
+  const { createDecipheriv } = requireNodeCrypto();
   if (!encrypted.startsWith("v1:")) {
     throw new Error("Unrecognised secret encoding");
   }

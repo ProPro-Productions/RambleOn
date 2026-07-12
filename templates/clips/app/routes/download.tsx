@@ -3,8 +3,8 @@ import {
   IconBrandChrome,
   IconBrandApple,
   IconBrandWindows,
+  IconDeviceDesktop,
   IconExternalLink,
-  IconPlayerRecord,
 } from "@tabler/icons-react";
 import { useEffect, useState } from "react";
 
@@ -26,7 +26,7 @@ export function meta() {
   ];
 }
 
-type PlatformId = "mac" | "windows";
+type PlatformId = "mac" | "windows" | "linux";
 
 interface PlatformVariant {
   id: PlatformId;
@@ -37,6 +37,9 @@ interface PlatformVariant {
     | "mac-arm64"
     | "mac-x64"
     | "windows-msi"
+    | "linux-appimage"
+    | "linux-deb"
+    | "linux-rpm"
   )[];
   icon: typeof IconBrandApple;
 }
@@ -61,6 +64,13 @@ const VARIANTS: PlatformVariant[] = [
     assetKinds: ["windows-msi"],
     icon: IconBrandWindows,
   },
+  {
+    id: "linux",
+    label: "Linux",
+    sublabel: "AppImage, Debian, and RPM packages",
+    assetKinds: ["linux-appimage", "linux-deb", "linux-rpm"],
+    icon: IconDeviceDesktop,
+  },
 ];
 
 interface Manifest {
@@ -81,6 +91,7 @@ function detectPlatform(): PlatformId | null {
   const ua = navigator.userAgent;
   if (/Windows/i.test(ua)) return "windows";
   if (/Mac/i.test(ua)) return "mac";
+  if (/Linux|X11/i.test(ua) && !/Android/i.test(ua)) return "linux";
   return null;
 }
 
@@ -191,7 +202,7 @@ export default function DownloadPage() {
   }, []);
 
   const primary = VARIANTS.find((v) => v.id === detected) ?? VARIANTS[0];
-  const secondary = VARIANTS.find((v) => v.id !== primary.id)!;
+  const secondary = VARIANTS.filter((v) => v.id !== primary.id);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -201,9 +212,18 @@ export default function DownloadPage() {
             href={appPath("/")}
             className="flex items-center gap-2 font-semibold"
           >
-            <span className="grid h-7 w-7 place-items-center rounded-md bg-primary text-primary-foreground">
-              <IconPlayerRecord className="h-4 w-4" />
-            </span>
+            <img
+              src={appPath("/agent-native-icon-light.svg")}
+              alt=""
+              aria-hidden="true"
+              className="block h-4 w-auto shrink-0 dark:hidden"
+            />
+            <img
+              src={appPath("/agent-native-icon-dark.svg")}
+              alt=""
+              aria-hidden="true"
+              className="hidden h-4 w-auto shrink-0 dark:block"
+            />
             <span>Clips</span>
           </a>
           <a
@@ -231,12 +251,16 @@ export default function DownloadPage() {
               manifestError,
               t("downloadRoute.downloadFor", { platform: primary.label }),
             )}
-            {secondaryDownloadButton(
-              secondary,
-              manifest,
-              manifestError,
-              t("downloadRoute.alsoFor", { platform: secondary.label }),
-            )}
+            {secondary.map((variant) => (
+              <div key={variant.id}>
+                {secondaryDownloadButton(
+                  variant,
+                  manifest,
+                  manifestError,
+                  t("downloadRoute.alsoFor", { platform: variant.label }),
+                )}
+              </div>
+            ))}
             <div className="text-xs text-muted-foreground">
               {manifest ? (
                 <>

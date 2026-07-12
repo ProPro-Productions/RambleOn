@@ -39,7 +39,7 @@
  */
 import {
   hasConfiguredA2ASecret,
-  isA2AProductionRuntime,
+  isTrustedLocalRuntime,
 } from "../a2a/auth-policy.js";
 import {
   extractBearerToken,
@@ -76,6 +76,18 @@ export const AGENT_BACKGROUND_FUNCTION_NAME = "server-agent-background";
  * dispatches HERE on hosted Netlify (see `resolveAgentChatProcessRunDispatchPath`).
  */
 export const AGENT_BACKGROUND_FUNCTION_URL_PATH = `/.netlify/functions/${AGENT_BACKGROUND_FUNCTION_NAME}`;
+
+/**
+ * Marker carried in a Netlify background-function body when the shared
+ * long-running worker should route to a processor other than agent chat.
+ * The emitted wrapper defaults to the normal agent-chat `_process-run` route;
+ * A2A uses this marker to reuse the same 15-minute function for async tasks.
+ */
+export const AGENT_BACKGROUND_PROCESSOR_FIELD = "__agentNativeProcessor";
+export const AGENT_BACKGROUND_PROCESSOR_A2A = "a2a";
+export const AGENT_BACKGROUND_PROCESSOR_ROUTE = "route";
+export const AGENT_BACKGROUND_PROCESSOR_ROUTE_FIELD =
+  "__agentNativeProcessorRoute";
 
 /**
  * The per-app workspace background function URL path. Workspace deploy emits one
@@ -147,6 +159,18 @@ export function resolveAgentChatProcessRunDispatchPath(): string {
     );
   }
   return AGENT_CHAT_PROCESS_RUN_PATH;
+}
+
+export function resolveDurableBackgroundDispatchPath(
+  fallbackPath: string,
+): string {
+  if (isNetlifyHostedRuntimeForDispatch()) {
+    return (
+      resolveWorkspaceBackgroundFunctionUrlPath() ??
+      AGENT_BACKGROUND_FUNCTION_URL_PATH
+    );
+  }
+  return fallbackPath;
 }
 
 export function dispatchPathTargetsNetlifyBackgroundFunction(
@@ -260,12 +284,12 @@ export function backgroundRunMarkerExpectsBackgroundRuntime(
 }
 
 export function shouldUseBackgroundFunctionTimeoutForWorker(
-  marker: unknown,
+  _marker: unknown,
 ): boolean {
-  return (
-    isInBackgroundFunctionRuntime() ||
-    backgroundRunMarkerExpectsBackgroundRuntime(marker)
-  );
+  // The dispatch marker says which URL the foreground targeted, not where the
+  // request actually landed. Only the worker runtime proof can safely lift the
+  // hosted 40s clamp to the 15-minute background-function budget.
+  return isInBackgroundFunctionRuntime();
 }
 
 export function backgroundRuntimeDiagnosticDetail(marker: unknown): string {
@@ -339,6 +363,59 @@ export function isAgentChatDurableBackgroundEnabled(options?: {
   );
 }
 
+/**
+ * Env flag for the FOREGROUND server-driven self-chain. DEFAULT-ON for hosted
+ * deployments with `A2A_SECRET`: unset/empty/unknown means enabled, and an app
+ * opts OUT with an explicit falsy value (`false`/`0`/`no`/`off`). Deliberately
+ * kept separate from `AGENT_CHAT_DURABLE_BACKGROUND` so this narrower
+ * capability can be disabled independently of the full durable-background
+ * worker path.
+ */
+export const AGENT_CHAT_FOREGROUND_SELF_CHAIN_ENV =
+  "AGENT_CHAT_FOREGROUND_SELF_CHAIN";
+
+function isForegroundSelfChainExplicitlyDisabled(): boolean {
+  // Read the literal key (not `process.env[CONST]`) so guard:no-env-credentials
+  // can statically verify it against the allowlisted `AGENT_*` prefix. Keep this
+  // in sync with AGENT_CHAT_FOREGROUND_SELF_CHAIN_ENV.
+  const raw = process.env.AGENT_CHAT_FOREGROUND_SELF_CHAIN;
+  if (raw == null) return false;
+  const normalized = raw.trim().toLowerCase();
+  return (
+    normalized === "0" ||
+    normalized === "false" ||
+    normalized === "no" ||
+    normalized === "off"
+  );
+}
+
+/**
+ * Gate for the foreground self-chain: a normal (non-durable-background)
+ * agent-chat turn that hits its soft-timeout chunk boundary continues via a
+ * server-side self-dispatch on the REGULAR function (not a Netlify
+ * `-background` function) instead of depending on the client to re-POST
+ * `auto_continue`. Composes exactly like `isAgentChatDurableBackgroundEnabled`:
+ * true when the runtime is hosted AND `A2A_SECRET` is configured (the HMAC
+ * handoff authenticates the self-dispatch), unless the env flag is explicitly
+ * falsy. False otherwise — and false means the existing client-driven
+ * `auto_continue` re-POST path is used unchanged, byte-for-byte.
+ *
+ * Deliberately independent of `isAgentChatDurableBackgroundEnabled`: an app can
+ * use this narrower capability without opting into the full 15-min
+ * background-function worker path, and the two gates never need to agree.
+ * When BOTH would be true for a given run, the durable-background dispatch
+ * decision in `production-agent.ts` is evaluated first and takes precedence —
+ * a run already dispatched to the durable background worker chains via the
+ * existing `isBackgroundWorker` path, not this one.
+ */
+export function isAgentChatForegroundSelfChainEnabled(): boolean {
+  return (
+    !isForegroundSelfChainExplicitlyDisabled() &&
+    isHostedRuntimeForDurableBackground() &&
+    hasConfiguredA2ASecret()
+  );
+}
+
 /** Decision returned by `prepareProcessRunRequest`. */
 export type ProcessRunPreparation =
   | {
@@ -392,10 +469,13 @@ export function extractProcessRunId(body: unknown): string | null {
  *
  * Auth policy mirrors the agent-teams processor exactly:
  *   - `A2A_SECRET` set → require a valid `verifyInternalToken(runId, token)`.
- *   - no secret but a production runtime → refuse (503) — never run unsigned in
- *     prod.
- *   - no secret + non-prod (local dev) → allow unsigned; the SQL atomic claim
- *     in the worker still prevents double-processing.
+ *   - no secret → require `isTrustedLocalRuntime({ loopback })` (see
+ *     auth-policy.ts): refuse (503) unless `A2A_ALLOW_UNSIGNED_INTERNAL=1` is
+ *     set. This function has no h3 `event` of its own, so callers that CAN
+ *     see the inbound socket peer (the route handler, which has the event)
+ *     should compute `loopback` from it and pass it through; callers that
+ *     can't determine the peer address should omit it (defaults to `false`
+ *     — never trust unsigned dispatch without an explicit opt-in).
  *
  * Extracted from the route handler so the auth + marker-prep decision is unit
  * testable without booting the whole Nitro plugin. The route only adds body
@@ -404,6 +484,7 @@ export function extractProcessRunId(body: unknown): string | null {
 export function prepareProcessRunRequest(
   body: unknown,
   authHeader: string | undefined,
+  loopback: boolean = false,
 ): ProcessRunPreparation {
   if (!body || typeof body !== "object") {
     return {
@@ -437,12 +518,16 @@ export function prepareProcessRunRequest(
         runId,
       };
     }
-  } else if (isA2AProductionRuntime()) {
+  } else if (!isTrustedLocalRuntime({ loopback })) {
+    // Callers that can see the h3 `event` (the route handler) pass the real
+    // loopback signal; callers without one default to non-loopback. Unsigned
+    // dispatch is still allowed via A2A_ALLOW_UNSIGNED_INTERNAL=1 for trusted
+    // local/dev setups; see auth-policy.ts `isTrustedLocalRuntime`.
     return {
       ok: false,
       status: 503,
       error:
-        "Agent chat background processor not configured — set A2A_SECRET on this deployment.",
+        "Agent chat background processor not configured — set A2A_SECRET on this deployment (or A2A_ALLOW_UNSIGNED_INTERNAL=1 for trusted local dev).",
       runId,
     };
   }

@@ -7,11 +7,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentMcpAppPayload } from "../../mcp-client/app-result.js";
 import type { ContentPart } from "../sse-event-processor.js";
 import {
+  ApprovalContext,
   ChatRunningContext,
   ReconnectStreamMessage,
   ToolCallDisplay,
   ToolCallFallback,
   TOOL_LONG_RUNNING_HINT_DELAY_MS,
+  formatWorkedDuration,
+  ReasoningCell,
+  WorkedForSummary,
+  toolInputPayload,
 } from "./tool-call-display.js";
 import {
   clearReservedToolRenderersForTests,
@@ -325,6 +330,53 @@ describe("ToolCallDisplay native renderers", () => {
     const row = container.querySelector("button")?.parentElement;
     expect(row?.className).toContain("w-full");
     expect(container.querySelector("button")?.className).toContain("w-full");
+  });
+
+  it("expands inputs inline and opens output in a popover", () => {
+    act(() => {
+      root.render(
+        <ToolCallDisplay
+          toolName="slack_read_thread"
+          args={{ channel_id: "C123", message_ts: "1.2" }}
+          result={JSON.stringify({ messages: "ok" })}
+          isRunning={false}
+        />,
+      );
+    });
+
+    expect(container.textContent).toContain("slack read thread");
+    expect(container.textContent).not.toContain("C123");
+
+    const expandButton = container.querySelector(
+      'button[aria-expanded="false"]',
+    ) as HTMLButtonElement | null;
+    expect(expandButton).not.toBeNull();
+    act(() => {
+      expandButton?.click();
+    });
+
+    expect(container.textContent).toContain("C123");
+    const outputButton = container.querySelector(
+      'button[aria-label="View slack_read_thread output"]',
+    ) as HTMLButtonElement | null;
+    expect(outputButton).not.toBeNull();
+
+    act(() => {
+      outputButton?.click();
+    });
+
+    expect(document.body.textContent).toContain(
+      "Raw slack_read_thread tool call output",
+    );
+    expect(document.body.textContent).toContain("messages");
+  });
+
+  it("syntax highlights run-code source as JavaScript", () => {
+    const payload = toolInputPayload("run-code", {
+      code: "const answer = 42;\nconsole.log(answer);",
+    });
+
+    expect(payload?.lang).toBe("javascript");
   });
 
   it("shows a compact repeat count for coalesced tool rows", () => {
@@ -651,5 +703,303 @@ describe("ToolCallDisplay native renderers", () => {
     expect(
       textParts.map((part) => part.getAttribute("data-streaming")),
     ).toEqual([null]);
+  });
+});
+
+describe("formatWorkedDuration", () => {
+  it("formats seconds, minutes, and hours", () => {
+    expect(formatWorkedDuration(1_000)).toBe("1s");
+    expect(formatWorkedDuration(45_000)).toBe("45s");
+    expect(formatWorkedDuration(60_000)).toBe("1m");
+    expect(formatWorkedDuration(125_000)).toBe("2m 5s");
+    expect(formatWorkedDuration(3_600_000)).toBe("1h");
+    expect(formatWorkedDuration(3_900_000)).toBe("1h 5m");
+  });
+});
+
+describe("ReasoningCell", () => {
+  let container: HTMLDivElement;
+  let root: Root;
+
+  beforeEach(() => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+  });
+
+  afterEach(() => {
+    act(() => root.unmount());
+    container.remove();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("renders plain-English thinking prose expanded by default and can collapse", () => {
+    act(() => {
+      root.render(
+        <ReasoningCell text="I should verify the join keys first." />,
+      );
+    });
+
+    expect(container.textContent).toContain("Thought");
+    expect(container.textContent).toContain("verify the join keys first.");
+
+    const button = container.querySelector(
+      'button[aria-expanded="true"]',
+    ) as HTMLButtonElement | null;
+    act(() => {
+      button?.click();
+    });
+
+    expect(button?.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("honors an explicitly collapsed default", () => {
+    act(() => {
+      root.render(
+        <ReasoningCell
+          text="I should verify the join keys first."
+          defaultOpen={false}
+        />,
+      );
+    });
+
+    expect(container.textContent).toContain("Thought");
+    expect(container.textContent).not.toContain("verify the join keys");
+
+    const button = container.querySelector(
+      'button[aria-expanded="false"]',
+    ) as HTMLButtonElement | null;
+    act(() => {
+      button?.click();
+    });
+
+    expect(button?.getAttribute("aria-expanded")).toBe("true");
+    expect(container.textContent).toContain("verify the join keys first.");
+  });
+
+  it("renders reasoning directly inside the shared work disclosure", () => {
+    act(() => {
+      root.render(
+        <WorkedForSummary>
+          <ReasoningCell text="I should verify the join keys first." />
+        </WorkedForSummary>,
+      );
+    });
+
+    expect(container.querySelectorAll("button")).toHaveLength(1);
+    expect(container.textContent).not.toContain("verify the join keys first.");
+
+    act(() => {
+      container.querySelector("button")?.click();
+    });
+
+    expect(container.querySelectorAll("button")).toHaveLength(1);
+    expect(container.textContent).toContain("verify the join keys first.");
+    expect(container.textContent).not.toContain("Thought");
+  });
+
+  it('shows a shimmering "Thinking" label while streaming', () => {
+    act(() => {
+      root.render(<ReasoningCell text="Weighing options…" isStreaming />);
+    });
+
+    expect(container.textContent).toContain("Thinking");
+    const shimmer = container.querySelector(".agent-thinking-indicator__text");
+    expect(shimmer?.textContent).toBe("Thinking");
+  });
+
+  it('falls back to a plain "Thought" label with no live timing', () => {
+    act(() => {
+      root.render(<ReasoningCell text="Some finished reasoning." />);
+    });
+
+    expect(container.textContent).toContain("Thought");
+    expect(container.querySelector(".agent-thinking-indicator__text")).toBe(
+      null,
+    );
+  });
+
+  it('shows "Thought for Xs" once a duration is known', () => {
+    act(() => {
+      root.render(
+        <ReasoningCell text="Some finished reasoning." durationMs={4200} />,
+      );
+    });
+
+    expect(container.textContent).toContain("Thought for 4s");
+  });
+
+  it("ignores sub-second durations and shows plain Thought", () => {
+    act(() => {
+      root.render(
+        <ReasoningCell text="Some finished reasoning." durationMs={400} />,
+      );
+    });
+
+    const button = container.querySelector("button");
+    expect(button?.textContent).toBe("Thought");
+  });
+
+  it("clamps to a tail view while streaming and open, and unclamps once done", () => {
+    act(() => {
+      root.render(
+        <ReasoningCell
+          text="Line one\nLine two\nLine three"
+          isStreaming
+          defaultOpen
+        />,
+      );
+    });
+
+    expect(container.querySelector(".reasoning-cell-tail")).not.toBe(null);
+
+    act(() => {
+      root.render(
+        <ReasoningCell
+          text="Line one\nLine two\nLine three"
+          isStreaming={false}
+          defaultOpen
+        />,
+      );
+    });
+
+    expect(container.querySelector(".reasoning-cell-tail")).toBe(null);
+  });
+});
+
+describe("ApprovalAffordance", () => {
+  let container: HTMLDivElement;
+  let root: Root;
+
+  beforeEach(() => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+  });
+
+  afterEach(() => {
+    act(() => root.unmount());
+    container.remove();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("keeps Deny local-only and hides Approve/Always-allow with no ApprovalContext", () => {
+    act(() => {
+      root.render(
+        <ToolCallDisplay
+          toolName="bash"
+          args={{}}
+          approval={{ approvalKey: "approval-1" }}
+          isRunning={false}
+        />,
+      );
+    });
+
+    expect(container.textContent).toContain("Approve to run bash?");
+    expect(
+      Array.from(container.querySelectorAll("button")).map(
+        (button) => button.textContent,
+      ),
+    ).toEqual(["bash", "Deny"]);
+
+    const denyButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent === "Deny",
+    ) as HTMLButtonElement;
+    act(() => denyButton.click());
+
+    expect(container.textContent).toContain("Denied. bash did not run.");
+  });
+
+  it("keeps the default two-button layout when only onApprove is provided", () => {
+    const onApprove = vi.fn();
+    act(() => {
+      root.render(
+        <ApprovalContext.Provider value={{ onApprove }}>
+          <ToolCallDisplay
+            toolName="bash"
+            args={{}}
+            approval={{ approvalKey: "approval-1" }}
+            isRunning={false}
+          />
+        </ApprovalContext.Provider>,
+      );
+    });
+
+    expect(
+      Array.from(container.querySelectorAll("button")).map(
+        (button) => button.textContent,
+      ),
+    ).toEqual(["bash", "Approve", "Deny"]);
+
+    const approveButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent === "Approve",
+    ) as HTMLButtonElement;
+    act(() => approveButton.click());
+
+    expect(onApprove).toHaveBeenCalledWith("approval-1");
+    expect(container.textContent).toContain("Approved. Re-running bash...");
+  });
+
+  it("calls onDeny in addition to the local denied state when provided", () => {
+    const onApprove = vi.fn();
+    const onDeny = vi.fn();
+    act(() => {
+      root.render(
+        <ApprovalContext.Provider value={{ onApprove, onDeny }}>
+          <ToolCallDisplay
+            toolName="bash"
+            args={{}}
+            approval={{ approvalKey: "approval-1" }}
+            isRunning={false}
+          />
+        </ApprovalContext.Provider>,
+      );
+    });
+
+    const denyButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent === "Deny",
+    ) as HTMLButtonElement;
+    act(() => denyButton.click());
+
+    expect(onDeny).toHaveBeenCalledWith("approval-1");
+    expect(container.textContent).toContain("Denied. bash did not run.");
+  });
+
+  it("renders Always allow only when onAlwaysAllow is provided, and it approves on click", () => {
+    const onApprove = vi.fn();
+    const onAlwaysAllow = vi.fn();
+    act(() => {
+      root.render(
+        <ApprovalContext.Provider value={{ onApprove, onAlwaysAllow }}>
+          <ToolCallDisplay
+            toolName="bash"
+            args={{}}
+            approval={{ approvalKey: "approval-1" }}
+            isRunning={false}
+          />
+        </ApprovalContext.Provider>,
+      );
+    });
+
+    expect(
+      Array.from(container.querySelectorAll("button")).map(
+        (button) => button.textContent,
+      ),
+    ).toEqual(["bash", "Approve", "Always allow", "Deny"]);
+
+    const alwaysAllowButton = Array.from(
+      container.querySelectorAll("button"),
+    ).find(
+      (button) => button.textContent === "Always allow",
+    ) as HTMLButtonElement;
+    act(() => alwaysAllowButton.click());
+
+    expect(onAlwaysAllow).toHaveBeenCalledWith("approval-1");
+    expect(onApprove).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("Approved. Re-running bash...");
   });
 });

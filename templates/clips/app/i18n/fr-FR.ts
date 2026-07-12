@@ -48,6 +48,7 @@ const messages = {
   navigation: {
     brand: "Clips",
     library: "Bibliothèque",
+    sharedWithMe: "Partagés avec moi",
     spaces: "Espaces",
     meetings: "Réunions",
     dictate: "Dicter",
@@ -83,6 +84,10 @@ const messages = {
       title: "Votre bibliothèque est vide",
       body: "Capturez votre premier enregistrement d’écran et il apparaîtra ici, prêt à partager.",
       cta: "Enregistrer votre premier Clip",
+    },
+    shared: {
+      title: "Aucun clip partagé avec vous",
+      body: "Les clips que vos collègues partagent avec vous apparaîtront ici.",
     },
     folder: {
       title: "Ce dossier est vide",
@@ -123,6 +128,10 @@ const messages = {
     restoreFailed: "Échec de la restauration",
     permanentlyDeleted: "Supprimé définitivement",
     deleteFailed: "Échec de la suppression",
+    clipsRestored: "{{count}} clips restaurés",
+    clipsRestoreFailed: "{{count}} clips n’ont pas pu être restaurés",
+    clipsPermanentlyDeleted: "{{count}} clips supprimés définitivement",
+    clipsDeleteFailed: "{{count}} clips n’ont pas pu être supprimés",
   },
   recordingRoute: {
     pageTitle: "Enregistrement du clip · Clips",
@@ -205,6 +214,13 @@ const messages = {
     edit: "Modifier",
     aiTools: "Outils d'IA",
     enhanceRecording: "Améliorer cet enregistrement",
+    includeFullVideo: "Inclure la vidéo complète",
+    includeFullVideoDescription:
+      "Lorsque c'est activé, les outils d'IA regardent l'enregistrement (Gemini uniquement) pour le contexte à l'écran — pas seulement la transcription audio. S'applique aussi à la génération par défaut du titre et de la description. Nécessite un modèle Gemini via Builder ou GEMINI_API_KEY.",
+    includeFullVideoOn:
+      "Les outils d'IA utiliseront la vidéo complète (Gemini)",
+    includeFullVideoOff:
+      "Les outils d'IA utiliseront uniquement la transcription",
     regenerateTitle: "Régénérer le titre",
     regenerateDescription: "Régénérer la description",
     autoChapters: "Chapitres automatiques",
@@ -297,6 +313,7 @@ const messages = {
     insights: "Connaissances",
     downloadForMac: "Télécharger pour Mac",
     downloadForWindows: "Télécharger pour Windows",
+    downloadForLinux: "Télécharger pour Linux",
     downloadDesktopApp: "Téléchargez l'application de bureau",
     agentNativeClips: "Agent-Native Clips",
     agentNativeClipsIntro: "est une alternative gratuite,",
@@ -313,8 +330,7 @@ const messages = {
     unassigned: "Non attribué",
     them: "Eux",
     me: "Moi",
-    regeneratingNotes:
-      "Notes régénératrices : vos propres notes sont conservées",
+    regeneratingNotes: "Régénération du résumé",
     meetingRemoved: "Réunion supprimée",
     couldNotRemoveMeeting: "Impossible de supprimer la réunion",
     couldNotLoadMeeting: "Impossible de charger cette réunion.",
@@ -322,8 +338,8 @@ const messages = {
     couldNotCopyTranscript: "Impossible de copier la transcription",
     allMeetings: "Toutes les réunions",
     live: "En direct",
-    generatingNotesInline: "Générer des notes…",
-    regenerateNotes: "Régénérer les notes",
+    generatingNotesInline: "Génération du résumé…",
+    regenerateNotes: "Régénérer le résumé",
     share: "Partager",
     meetingOptions: "Options de réunion",
     removeMeeting: "Supprimer la réunion",
@@ -334,14 +350,15 @@ const messages = {
     removing: "Suppression...",
     remove: "Retirer",
     desktopHint:
-      "Enregistrez des notes en direct pour cette réunion à partir de l'application de bureau Clips — la transcription et les notes AI apparaîtront ici automatiquement.",
+      "Pour démarrer les notes, ouvrez Clips Desktop dans la barre de menus et choisissez Start Meeting Notes, ou cliquez sur Start notes lorsque le rappel apparaît. Clips capture le micro et l'audio système, puis écrit la transcription ici.",
     getDesktopApp: "Obtenir l'application de bureau",
-    generateNotesFailed: "Impossible de générer des notes. Essayer à nouveau.",
+    generateNotesFailed: "Impossible de générer le résumé. Essayer à nouveau.",
     attendee_one: "participant {{count}}",
     attendee_other: "participants {{count}}",
     joinCall: "Rejoindre l'appel",
     myNotes: "Mes notes",
     aiNotes: "Notes sur l'IA",
+    summary: "Résumé",
     actionItems: "Éléments d'action",
     working: "Fonctionnement…",
     noActionItems:
@@ -351,6 +368,14 @@ const messages = {
     copyTranscript: "Copier la transcription",
     copyFullTranscript: "Copier la transcription complète",
     attendee_many: "{{count}} attendees",
+    timeRemaining_one: "{{count}} min restante",
+    timeRemaining_other: "{{count}} min restantes",
+    timeRemaining_many: "{{count}} min restantes",
+    endMeeting: "Terminer la réunion",
+    endThisMeeting: "Terminer cette réunion ?",
+    endMeetingDescription:
+      "Cela arrête l'enregistrement et la transcription de cette réunion. Vous pourrez toujours générer des notes à partir de ce qui a été capturé jusqu'ici.",
+    couldNotEndMeeting: "Impossible de terminer la réunion",
   },
   transcriptPanel: {
     transcribing: "Transcription…",
@@ -371,6 +396,7 @@ const messages = {
     searchPlaceholder: "Rechercher la transcription",
     copyTranscript: "Copier la transcription",
     downloadSrt: "Télécharger .srt",
+    regenerate: "Régénérer la transcription",
     cleanupRunning: "Nettoyage de la transcription en arrière-plan.",
     noMatches: "Aucun match.",
     noTranscript: "Pas encore de transcription.",
@@ -435,7 +461,9 @@ const messages = {
     agentPrompt:
       "Récupère cette URL de contexte Clips pour agent : {{agentContextUrl}}. Utilise transcript.segments pour le contexte parlé, récupère recommendedFrames ou les URLs de l'API d'images pour voir l'écran, et consulte browserDiagnostics s'il est présent pour les journaux de console expurgés et les métadonnées de requêtes fetch/XHR.",
     agentTokenDescription:
-      "Cet agent URL utilise un jeton de courte durée, afin que les agents puissent lire le clip sans exposer le mot de passe.",
+      "Cette URL temporaire pour agents permet de lire le clip sans le rendre public. Elle expire dans deux heures.",
+    agentLinkUnavailable: "Impossible de créer le lien pour agents.",
+    retryAgentLink: "Réessayer",
     gifPreview: "aperçu de GIF",
     openPlayer: "Joueur ouvert",
     downloadMp4: "Télécharger MP4",
@@ -495,6 +523,12 @@ const messages = {
     quickPrompts: "Invites rapides",
     whatDidIMiss: "Qu'est-ce que j'ai raté ?",
     whatDidIMissPrompt: "Qu'est-ce que j'ai raté ?",
+    suggestQuestions: "Suggérer des questions à poser",
+    suggestQuestionsPrompt:
+      "Suggérez-moi quelques bonnes questions à poser ensuite dans cette réunion, en vous basant sur ce qui a été discuté jusqu'ici.",
+    makeMeSoundSmart: "Faites-moi paraître brillant",
+    makeMeSoundSmartPrompt:
+      "Donnez-moi un commentaire ou une question pertinente et perspicace que je pourrais ajouter maintenant, d'après cette réunion.",
     summarizeLastFive: "Résumez les 5 dernières minutes",
     summarizeLastFivePrompt:
       "Résumez les 5 dernières minutes de cette réunion en 3 à 5 puces.",
@@ -535,7 +569,7 @@ const messages = {
   downloadRoute: {
     pageTitle: "Télécharger Clips Desktop",
     description:
-      "Enregistrez votre écran à partir de la barre de menu. Application de bureau à mise à jour automatique pour macOS et Windows.",
+      "Enregistrez votre écran depuis la barre d’état système. Application de bureau à mise à jour automatique pour macOS, Windows et Linux.",
     macSublabel: "Universel (Apple Silicon + Intel)",
     windowsSublabel: "Programme d'installation de MSI 64 bits",
     downloadFor: "Télécharger pour {{platform}}",
@@ -659,6 +693,11 @@ Tous les changements visibles par les utilisateurs de Clips sont documentés ici
     s3SecretAccessKeyLabel: "Clé d’accès secrète",
     s3RegionLabel: "Région",
     s3PublicBaseUrlLabel: "URL de base publique",
+    s3UrlInvalid:
+      "Doit être une URL valide (ex. https://s3.us-east-1.amazonaws.com)",
+    s3BucketInvalid:
+      "Le nom du bucket doit contenir 3–63 lettres minuscules, chiffres ou tirets",
+    s3RegionInvalid: 'Doit être une région valide (ex. us-east-1) ou "auto"',
     apiSetup: "Configuration IA",
     apiSetupDescription:
       "Connectez l’IA avec les crédits gratuits Builder.io ou vos propres clés LLM.",
@@ -673,6 +712,8 @@ Tous les changements visibles par les utilisateurs de Clips sont documentés ici
     providerKeysSet: "{{count}} définies",
     checkingProviderKeys: "Vérification des clés fournisseur…",
     keySet: "Définie",
+    keyCleared: "Identifiants de stockage effacés",
+    clearAllS3: "Effacer les identifiants",
     replaceKey: "Remplacer la clé…",
     pasteProviderKey: "Collez d’abord une clé fournisseur.",
     apiKeySaved: "Clé API enregistrée",
@@ -772,6 +813,9 @@ Tous les changements visibles par les utilisateurs de Clips sont documentés ici
     anonymous: "Anonyme",
     anon: "Anon",
     moreViewers: "+{{count}} de plus",
+    viewedBy: "Vu par",
+    someone: "Quelqu’un",
+    noViewsYet: "Aucune vue pour le moment.",
   },
   libraryGrid: {
     spaceRoot: "Racine de l’espace",
@@ -791,6 +835,10 @@ Tous les changements visibles par les utilisateurs de Clips sont documentés ici
     clipsMovedToTrash: "{{count}} clips déplacés vers la corbeille",
     clipsTrashFailed:
       "{{count}} clips n’ont pas pu être déplacés vers la corbeille",
+    loadFailedTitle: "Impossible de charger vos enregistrements",
+    loadFailedBody:
+      "Une erreur s’est produite lors du chargement de cette liste. Vos enregistrements sont en sécurité — réessayez.",
+    retry: "Réessayer",
   },
   notificationsRoute: {
     pageTitle: "Alertes · Clips",
@@ -891,7 +939,7 @@ Tous les changements visibles par les utilisateurs de Clips sont documentés ici
     unavailable: "Cette réunion est privée ou n’est plus disponible.",
     tryClips: "Essayer Clips",
     attendees: "{{count}} participants",
-    noAiNotes: "Les notes IA n’ont pas encore été générées pour cette réunion.",
+    noAiNotes: "Aucun résumé n’a encore été généré pour cette réunion.",
     summary: "Résumé",
     keyPoints: "Points clés",
     actionItems: "Actions à faire",
@@ -949,6 +997,8 @@ Tous les changements visibles par les utilisateurs de Clips sont documentés ici
     noVideo: "Aucune vidéo disponible",
     thanks: "Merci d’avoir regardé",
     playClip: "Lire le clip",
+    unsupportedFormat:
+      "Ce navigateur ne peut pas lire cette vidéo. Essayez d’ouvrir le lien dans Chrome, Edge ou Firefox.",
   },
   searchBar: {
     placeholder: "Rechercher des enregistrements…",
@@ -1004,7 +1054,11 @@ Tous les changements visibles par les utilisateurs de Clips sont documentés ici
     inHours: "dans {{count}} h",
     join: "Rejoindre",
     openNotes: "Ouvrir les notes",
-    open: "Ouvrir",
+    open: "Ouvrir les notes",
+    startFromDesktopNow:
+      "Démarrez les notes en direct depuis le rappel bureau ou la barre de menus.",
+    startFromDesktopLater:
+      "Clips Desktop affichera Start notes au moment voulu.",
   },
   transcriptBubbles: {
     listening: "Écoute…",
@@ -1013,6 +1067,13 @@ Tous les changements visibles par les utilisateurs de Clips sont documentés ici
       "La transcription en direct apparaîtra ici lorsque les notes commenceront.",
     me: "Moi",
     them: "Eux",
+    searchTranscript: "Rechercher dans la transcription",
+    searchPlaceholder: "Rechercher dans la transcription…",
+    searchMatchCount: "{{current}} sur {{total}}",
+    searchNoMatches: "Aucun résultat",
+    searchPrevMatch: "Résultat précédent",
+    searchNextMatch: "Résultat suivant",
+    searchClose: "Fermer la recherche",
   },
   editorLayout: {
     trimmed: "Découpé",
@@ -1334,6 +1395,11 @@ Tous les changements visibles par les utilisateurs de Clips sont documentés ici
     desktopShortcuts: "Raccourcis de bureau",
     desktopShortcutsDescriptionSuffix: ", dans l’application de bureau.",
     holdFn: "Maintenez Fn",
+    browserDictationDescriptionDesktop:
+      "Use the button below to capture a note right here on this page. It does not paste into other apps — for that, use the desktop shortcut on the right. (Localisé)",
+    quickNoteTitle: "Quick dictation note (Localisé)",
+    quickNoteHint:
+      "Captures here without leaving this page — it does not paste into other apps. Use the button to start and stop. (Localisé)",
     browserUnavailable:
       "La reconnaissance vocale du navigateur n’est pas disponible ici. Utilisez Chrome ou l’application de bureau pour la dictée globale.",
     browserUnavailableShort:
@@ -1363,6 +1429,18 @@ Tous les changements visibles par les utilisateurs de Clips sont documentés ici
       "Dictée voix-texte avec nettoyage par l’IA. Téléchargez l’application de bureau pour dicter depuis n’importe où avec un raccourci global.",
     loadFailed: "Impossible de charger les dictées.",
     noFilterMatches: "Aucune dictée ne correspond à ce filtre.",
+    dictionaryTitle: "Dictionary (Localisé)",
+    dictionaryDescription:
+      "Terms here bias speech recognition toward your preferred spellings — auto-learned from corrections, or add your own. (Localisé)",
+    dictionaryTermPlaceholder: "Term (Localisé)",
+    dictionaryReplacementPlaceholder: "Replacement (optional) (Localisé)",
+    dictionaryAdd: "Add (Localisé)",
+    dictionaryLoading: "Loading dictionary... (Localisé)",
+    dictionaryEmpty: "No learned terms yet. (Localisé)",
+    dictionaryUsesCount: "Used {{count}}x (Localisé)",
+    dictionaryRemove: "Remove (Localisé)",
+    vocabularyAddFailed: "Couldn't add term (Localisé)",
+    vocabularyRemoveFailed: "Couldn't remove term (Localisé)",
   },
   clipsFinalRaw: {
     splitAtPlayhead: "Couper à la tête de lecture (S)",
@@ -1478,6 +1556,18 @@ Tous les changements visibles par les utilisateurs de Clips sont documentés ici
       "Les prochaines réunions du calendrier apparaissent ici, et les enregistrements terminés y arrivent dès que vous prenez des notes.",
     noMeetingsMatch: "Aucune réunion ne correspond à « {{query}} »",
     refreshing: "Actualisation…",
+    howToTriggerTitle: "How to trigger meeting notes (Localisé)",
+    howToTriggerDescription:
+      "Meeting notes are the Granola-style flow in Clips: calendar events appear here, the desktop app captures mic and system audio, and the transcript plus AI notes land back in this history. (Localisé)",
+    guideCalendarTitle: "Connect Google Calendar (Localisé)",
+    guideCalendarDescription:
+      "Meetings are pulled from your calendar so Clips knows when to remind you. (Localisé)",
+    guideDesktopTitle: "Keep Clips Desktop open (Localisé)",
+    guideDesktopDescription:
+      "Desktop capture is required for mic plus system-audio transcription. (Localisé)",
+    guideStartTitle: "Click Start notes (Localisé)",
+    guideStartDescription:
+      "Use the desktop reminder or the menu-bar Start Meeting Notes item when the call begins. (Localisé)",
   },
   videoProjects: {
     listPageTitle: "Projets vidéo · Clips",

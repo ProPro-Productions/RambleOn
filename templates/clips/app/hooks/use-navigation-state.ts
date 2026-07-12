@@ -2,6 +2,7 @@ import { getBrowserTabId, useAgentRouteState } from "@agent-native/core/client";
 
 export type ClipsView =
   | "library"
+  | "shared"
   | "spaces"
   | "space"
   | "archive"
@@ -47,6 +48,7 @@ interface NavigateCommand extends Partial<NavigationState> {
  *   /library                    -> library
  *   /library?q=...              -> library (with search)
  *   /library/folder/:folderId   -> library (with folderId)
+ *   /shared                     -> shared
  *   /spaces                     -> spaces
  *   /spaces/:spaceId            -> space
  *   /archive                    -> archive
@@ -61,7 +63,10 @@ interface NavigateCommand extends Partial<NavigationState> {
  *   /notifications              -> notifications
  *   /settings[/*]               -> settings
  */
-function stateFromLocation(pathname: string, search: string): NavigationState {
+export function stateFromLocation(
+  pathname: string,
+  search: string,
+): NavigationState {
   const params = new URLSearchParams(search);
   const searchTerm = params.get("q") || undefined;
   const p = pathname.replace(/\/+$/, "") || "/";
@@ -129,6 +134,7 @@ function stateFromLocation(pathname: string, search: string): NavigationState {
   }
 
   if (p === "/spaces") return { view: "spaces" };
+  if (p === "/shared") return { view: "shared" };
   if (p === "/archive") return { view: "archive" };
   if (p === "/trash") return { view: "trash" };
   if (p === "/record") return { view: "record" };
@@ -156,7 +162,7 @@ function stateFromLocation(pathname: string, search: string): NavigationState {
  * Turn a navigate-command payload (from the agent) into a URL path.
  * If the command includes `path`, prefer that — otherwise map view+ids.
  */
-function pathFromCommand(cmd: NavigateCommand): string {
+export function pathFromCommand(cmd: NavigateCommand): string {
   if (cmd.path) return cmd.path;
   switch (cmd.view) {
     case "recording":
@@ -171,6 +177,8 @@ function pathFromCommand(cmd: NavigateCommand): string {
       return cmd.spaceId ? `/spaces/${cmd.spaceId}` : "/spaces";
     case "spaces":
       return "/spaces";
+    case "shared":
+      return "/shared";
     case "archive":
       return "/archive";
     case "trash":

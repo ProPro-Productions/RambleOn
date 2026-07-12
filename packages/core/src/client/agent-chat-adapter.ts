@@ -1,6 +1,10 @@
 import type { ChatModelAdapter, ChatModelRunResult } from "@assistant-ui/react";
 
 import { actionPreparationContinuationNote } from "../agent/action-continuation-guidance.js";
+import {
+  LLM_MISSING_CREDENTIALS_ERROR_CODE,
+  LLM_MISSING_CREDENTIALS_MESSAGE,
+} from "../agent/engine/credential-errors.js";
 import type {
   AgentChatStructuredContentPart,
   AgentChatStructuredMessage,
@@ -20,6 +24,7 @@ import {
   type AgentActivityTrailEntry,
   type AgentAutoContinueErrorInfo,
   type ContentPart,
+  type PreparingActionState,
   readSSEStream,
   settleInterruptedToolCalls,
 } from "./sse-event-processor.js";
@@ -33,7 +38,9 @@ export type AgentChatSurfaceKind =
    */
   | "app"
   /** Chat rendered by the outer local dev frame, outside the app iframe. */
-  | "dev-frame";
+  | "dev-frame"
+  /** Chat hosted by Desktop for a local app with explicit code access. */
+  | "desktop";
 
 type AdapterHistoryMessage = {
   role: "user" | "assistant";
@@ -131,6 +138,68 @@ const LARGE_INPUT_TOOL_NAMES = new Set([
 const MAX_HISTORY_LARGE_TOOL_ARGS_CHARS = 200_000;
 const STARTUP_RESPONSE_TIMEOUT_MS = 45_000;
 
+// ── Background follow mode ──────────────────────────────────────────────────
+// For server-continued runs (dispatchMode starts with "background" or equals
+// "foreground-self-chain") the SERVER normally chains continuation chunks
+// itself (fresh runId, same turnId), pre-inserts the successor run row BEFORE
+// the old chunk completes (so /runs/active shows an active run continuously
+// across chunk boundaries), and a server sweep reaps lost handoffs into loud
+// terminal errors. The client demotes itself to a READER of server state for
+// healthy handoffs. Foreground self-chain keeps one escape hatch: if the server
+// reports that the self-dispatch itself failed before a successor claimed the
+// run, the existing client auto-continue POST remains the fallback.
+const BACKGROUND_FOLLOW_POLL_INTERVAL_MS = 1_000;
+// How long the follow loop tolerates seeing NO active run for this turn before
+// treating the turn as ended. The server pre-inserts the successor row before
+// the old chunk completes, so a healthy chain never shows an idle gap; allow a
+// wider window here because the server's unclaimed-handoff recovery can span
+// the 25s grace plus sweep/DB latency. This stays below the background
+// reconnect stuck threshold, but gives the server-owned recovery brain time to
+// surface the successor or terminal errored run before the client reports idle.
+//
+// THREE-SITE INVARIANT (keep in lockstep with run-store.ts and
+// agent-chat-plugin.ts — see `UNCLAIMED_BACKGROUND_RUN_FAST_SWEEP_MS`'s doc
+// comment in run-store.ts for the full derivation): a `chainServerDrivenContinuation`
+// deferral (server/production-agent.ts) leaves a successor row `running` with
+// no live worker until a sweep redispatches it. The budget is a derived
+// chain, each bound comfortably inside the next:
+//   UNCLAIMED_BACKGROUND_RUN_GRACE_MS            (25s)
+// + UNCLAIMED_BACKGROUND_RUN_FAST_SWEEP_MS       (20s)
+// = ~45-65s worst-case time-to-first-redispatch-attempt
+// < BACKGROUND_FOLLOW_IDLE_TIMEOUT_MS            (150s, this constant)
+// < UNCLAIMED_BACKGROUND_RUN_REDISPATCH_BOUND_MS (300s, run-store.ts)
+// On top of that margin, the follow loop below never counts a tick against
+// this timeout at all while `/runs/active` reports `awaitingRedispatch:
+// true` — a server-authoritative "known deferred, recovery in progress"
+// signal, not a guess — so this timeout is a backstop for a genuinely lost
+// run, not the primary mechanism racing the sweep. Do NOT raise this value to
+// paper over a slow sweep; fix the sweep timing (run-store.ts /
+// agent-chat-plugin.ts) instead, and keep this comment's inequality chain
+// accurate if any of the four numbers change.
+export const BACKGROUND_FOLLOW_IDLE_TIMEOUT_MS = 150_000;
+
+/**
+ * User-facing copy for the server's background terminal reasons
+ * (`agent_runs.terminal_reason`, surfaced by /runs/active). These runs died in
+ * server-side handoff machinery where no richer error event may exist, so the
+ * client owns the message. Keys are matched after stripping an optional
+ * `error:` prefix (`terminalReasonForEvent` records `error:<code>`). Keep this
+ * map scoped to terminal failures, including reasons that must override a
+ * mistakenly completed row.
+ */
+const BACKGROUND_TERMINAL_REASON_MESSAGES: Record<string, string> = {
+  background_worker_never_started:
+    "The agent run was handed off to a background worker that never started. It was recovered so you can try again.",
+  background_continuation_dispatch_failed:
+    "The agent's background worker could not hand off the next step of this run. Retry to continue from the preserved context.",
+  dispatch_payload_missing:
+    "The agent's background run lost its saved request data and could not continue. Retry to start a fresh run.",
+  missing_api_key: LLM_MISSING_CREDENTIALS_MESSAGE,
+  missing_credentials: LLM_MISSING_CREDENTIALS_MESSAGE,
+  turn_continuation_budget_exhausted:
+    "This request needed more automatic continuations than allowed and was stopped. Try breaking it into smaller steps.",
+};
+
 function normalizeMentions(text: string): string {
   return text.replace(/@\[([^\]|]+)\|[^\]]+\]/g, "@$1");
 }
@@ -157,6 +226,7 @@ function contentToContinuationHistory(content: ContentPart[]): string {
       if (part.text.trim()) chunks.push(part.text.trim());
       continue;
     }
+    if (part.type === "reasoning") continue;
     if (part.activity === true) continue;
     const toolSummary = [
       `Tool: ${part.toolName}`,
@@ -538,6 +608,12 @@ function contentToStructuredMessages(
       continue;
     }
 
+    // Reasoning/thinking is UI-only — do not send chain-of-thought back into
+    // model history on continuation.
+    if (part.type === "reasoning") {
+      continue;
+    }
+
     if (isToolCallContentPart(part)) {
       if (part.activity === true) continue;
       const toolCallId = nextToolCallId();
@@ -697,15 +773,15 @@ function combineContinuationHistory(fragments: string[]): string {
 }
 
 function hasContinuationProgress(content: ContentPart[]): boolean {
-  return content.some((part) =>
-    part.type === "text"
-      ? part.text.trim().length > 0
-      : part.result !== undefined,
-  );
+  return content.some((part) => {
+    if (part.type === "text") return part.text.trim().length > 0;
+    if (part.type === "reasoning") return false;
+    return part.result !== undefined;
+  });
 }
 
 const COMPLETED_TOOL_TIMEOUT_NAME_RE =
-  /^(add|apply|archive|capture|create|delete|deploy|duplicate|edit|generate|grant|insert|migrate|move|present|publish|remove|rename|reorder|revoke|save|send|set|sync|trash|update|write)(-|$)/;
+  /^(add|apply|archive|capture|compose|create|delete|deploy|duplicate|edit|generate|grant|insert|install|migrate|move|mutate|present|publish|remove|rename|reorder|revoke|save|send|set|sync|trash|update|write)(-|$)/;
 const COMPLETED_TOOL_TIMEOUT_NAME_ALLOWLIST = new Set([
   "connect-assets-mcp",
   "import-design-tokens",
@@ -808,6 +884,21 @@ function lastActivityTool(
   return undefined;
 }
 
+function lastPreparingActionTool(
+  trail: readonly AgentActivityTrailEntry[],
+): string | undefined {
+  for (let i = trail.length - 1; i >= 0; i--) {
+    const entry = trail[i];
+    const tool = entry?.tool?.trim();
+    if (!tool) continue;
+    const label = entry.label.trim().toLowerCase();
+    if (label.startsWith("preparing ") && label.includes(" action")) {
+      return tool;
+    }
+  }
+  return undefined;
+}
+
 function formatActivityTrail(
   trail: readonly AgentActivityTrailEntry[],
 ): string | undefined {
@@ -841,7 +932,9 @@ function lastUnresolvedToolActivity(
 
 function snapshotContent(content: ContentPart[]): ContentPart[] {
   return content.map((part) =>
-    part.type === "text" ? { ...part } : { ...part, args: { ...part.args } },
+    part.type === "text" || part.type === "reasoning"
+      ? { ...part }
+      : { ...part, args: { ...part.args } },
   );
 }
 
@@ -913,6 +1006,22 @@ function contentAfterContinuationPrefix(
       return content.slice(contentIndex);
     }
 
+    if (prefixPart.type === "reasoning" && currentPart.type === "reasoning") {
+      if (currentPart.text === prefixPart.text) {
+        contentIndex += 1;
+        continue;
+      }
+      if (currentPart.text.startsWith(prefixPart.text)) {
+        const appendedText = currentPart.text.slice(prefixPart.text.length);
+        if (appendedText) {
+          delta.push({ type: "reasoning", text: appendedText });
+        }
+        contentIndex += 1;
+        continue;
+      }
+      return content.slice(contentIndex);
+    }
+
     if (
       prefixPart.type === "tool-call" &&
       currentPart.type === "tool-call" &&
@@ -960,15 +1069,15 @@ function autoContinueMessage(signal: AgentAutoContinueSignal): string {
 function delay(ms: number, abortSignal: AbortSignal): Promise<void> {
   if (abortSignal.aborted) return Promise.resolve();
   return new Promise((resolve) => {
-    const timer = setTimeout(resolve, ms);
-    abortSignal.addEventListener(
-      "abort",
-      () => {
-        clearTimeout(timer);
-        resolve();
-      },
-      { once: true },
-    );
+    const onAbort = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(() => {
+      abortSignal.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    abortSignal.addEventListener("abort", onAbort, { once: true });
   });
 }
 
@@ -1238,6 +1347,77 @@ export interface CreateAgentChatAdapterOptions {
   surface?: AgentChatSurfaceKind;
 }
 
+function runtimeDebugUrlForApiUrl(apiUrl: string): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const url = new URL(apiUrl, window.location.href);
+    const marker = "/_agent-native/";
+    const markerIndex = url.pathname.indexOf(marker);
+    if (markerIndex < 0) return null;
+    url.pathname = `${url.pathname.slice(0, markerIndex)}${marker}debug/runtime`;
+    url.search = "";
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+function stringValue(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function formatRuntimeDebugDetails(payload: unknown): string {
+  if (!payload || typeof payload !== "object") return "";
+  const root = payload as Record<string, any>;
+  const runtime =
+    root.runtime && typeof root.runtime === "object" ? root.runtime : {};
+  const database =
+    runtime.database && typeof runtime.database === "object"
+      ? runtime.database
+      : {};
+  const schema =
+    root.schema && typeof root.schema === "object" ? root.schema : {};
+  const lines = [
+    stringValue(runtime.app) ? `runtime_app: ${runtime.app}` : "",
+    stringValue(runtime.environment)
+      ? `runtime_environment: ${runtime.environment}`
+      : "",
+    stringValue(runtime.deployContext)
+      ? `deploy_context: ${runtime.deployContext}`
+      : "",
+    stringValue(runtime.deployId) ? `deploy_id: ${runtime.deployId}` : "",
+    stringValue(runtime.commitRef) ? `commit_ref: ${runtime.commitRef}` : "",
+    stringValue(runtime.branch) ? `branch: ${runtime.branch}` : "",
+    stringValue(runtime.siteName) ? `site_name: ${runtime.siteName}` : "",
+    typeof database.configured === "boolean"
+      ? `db_configured: ${database.configured}`
+      : "",
+    stringValue(database.source) ? `db_source: ${database.source}` : "",
+    stringValue(database.dialect) ? `db_dialect: ${database.dialect}` : "",
+    stringValue(database.protocol) ? `db_protocol: ${database.protocol}` : "",
+    stringValue(database.host) ? `db_host: ${database.host}` : "",
+    stringValue(database.database) ? `db_database: ${database.database}` : "",
+    stringValue(database.urlHash) ? `db_url_hash: ${database.urlHash}` : "",
+    database.neon?.endpointId
+      ? `db_neon_endpoint: ${database.neon.endpointId}`
+      : "",
+    typeof database.neon?.pooled === "boolean"
+      ? `db_neon_pooled: ${database.neon.pooled}`
+      : "",
+    typeof schema.ok === "boolean" ? `schema_ok: ${schema.ok}` : "",
+    Array.isArray(schema.missingTables) && schema.missingTables.length
+      ? `schema_missing_tables: ${schema.missingTables.join(", ")}`
+      : "",
+    Array.isArray(schema.missingColumns) && schema.missingColumns.length
+      ? `schema_missing_columns: ${schema.missingColumns
+          .map((entry: any) => `${entry.table}.${entry.column}`)
+          .join(", ")}`
+      : "",
+    stringValue(schema.error) ? `schema_error: ${schema.error}` : "",
+  ].filter(Boolean);
+  return lines.join("\n");
+}
+
 export function createAgentChatAdapter(
   options?: CreateAgentChatAdapterOptions,
 ): ChatModelAdapter {
@@ -1252,6 +1432,16 @@ export function createAgentChatAdapter(
   const browserTabId = options?.browserTabId;
   const scopeRef = options?.scopeRef;
   const surface = options?.surface ?? "app";
+  let runtimeDebugDetails = "";
+  const runtimeDebugUrl = runtimeDebugUrlForApiUrl(apiUrl);
+  if (runtimeDebugUrl && typeof fetch === "function") {
+    void fetch(runtimeDebugUrl, { credentials: "include" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((payload) => {
+        runtimeDebugDetails = formatRuntimeDebugDetails(payload);
+      })
+      .catch(() => {});
+  }
 
   return {
     async *run({ messages, abortSignal, runConfig }) {
@@ -1381,6 +1571,10 @@ export function createAgentChatAdapter(
       let runId: string | null = null;
       let lastSeq = -1;
       const seenRunSeqs = new Map<string, number>();
+      const preparingActionStatesByRun = new Map<
+        string,
+        PreparingActionState
+      >();
       let currentRunDispatchMode: string | null = null;
       let currentMessageText = normalizeMentions(
         recoveryMessageText.trim() || userMessageText,
@@ -1444,6 +1638,7 @@ export function createAgentChatAdapter(
           attemptedRunIds.length > 0
             ? `attempted_runs: ${attemptedRunIds.join(", ")}`
             : "",
+          runtimeDebugDetails,
         ]
           .filter(Boolean)
           .join("\n");
@@ -1521,6 +1716,18 @@ export function createAgentChatAdapter(
         );
       };
 
+      const dispatchMissingApiKey = () => {
+        if (typeof window === "undefined") return;
+        window.dispatchEvent(
+          new CustomEvent("agent-chat:missing-api-key", {
+            detail: {
+              ...(tabId ? { tabId } : {}),
+              ...(threadId ? { threadId } : {}),
+            },
+          }),
+        );
+      };
+
       const tryRecoverAuthOnce = async (): Promise<boolean> => {
         if (authRecoveryAttempted || abortSignal.aborted) return false;
         authRecoveryAttempted = true;
@@ -1549,6 +1756,30 @@ export function createAgentChatAdapter(
         if (mode) currentRunDispatchMode = mode;
       };
 
+      // Mode switch for recovery ownership: durable/background-dispatched runs
+      // are always recovered by the server. Foreground self-chain follows the
+      // server on healthy handoffs. A loud continuation-dispatch failure falls
+      // back to the client POST path in either mode because the server has
+      // already marked the unclaimed successor terminal; the per-turn tool
+      // journal keeps that retry from replaying completed side effects.
+      const isDurableBackgroundDispatch = () =>
+        currentRunDispatchMode?.startsWith("background") === true;
+      const isForegroundSelfChainDispatch = () =>
+        currentRunDispatchMode === "foreground-self-chain";
+      const shouldFollowServerContinuation = (
+        signal?: AgentAutoContinueSignal,
+      ) => {
+        if (
+          signal?.errorInfo?.errorCode ===
+          "background_continuation_dispatch_failed"
+        ) {
+          return false;
+        }
+        if (isDurableBackgroundDispatch()) return true;
+        if (!isForegroundSelfChainDispatch()) return false;
+        return true;
+      };
+
       const rememberRunSeq = (seq: number) => {
         lastSeq = seq;
         if (runId) {
@@ -1560,6 +1791,11 @@ export function createAgentChatAdapter(
         nextRunId: string,
         previousRunId: string | null,
       ) => {
+        if (previousRunId !== nextRunId) {
+          lastAutoContinueReason = null;
+          lastRecoverableRunError = null;
+          lastActivityTrail = [];
+        }
         const rememberedSeq = seenRunSeqs.get(nextRunId);
         if (rememberedSeq !== undefined) {
           lastSeq = rememberedSeq;
@@ -1570,9 +1806,23 @@ export function createAgentChatAdapter(
         }
       };
 
+      const preparingActionStateForRun = (
+        id: string | null,
+      ): PreparingActionState | undefined => {
+        if (!id) return undefined;
+        const existing = preparingActionStatesByRun.get(id);
+        if (existing) return existing;
+        const state: PreparingActionState = {};
+        preparingActionStatesByRun.set(id, state);
+        return state;
+      };
+
       const currentSSEOptions = () => ({
         durableBackgroundRun:
           currentRunDispatchMode?.startsWith("background") === true,
+        ...(runId
+          ? { preparingActionState: preparingActionStateForRun(runId) }
+          : {}),
       });
 
       const captureChatClientError = (
@@ -1898,6 +2148,397 @@ export function createAgentChatAdapter(
             return false;
           };
 
+        // ── Background follow mode (see module comment on the constants) ──
+        // Emits a terminal chat error using the same runError/content/yield
+        // shape as the exhausted-recovery paths, so background failures render
+        // identically to foreground ones.
+        const emitBackgroundTerminalError = function* (args: {
+          message: string;
+          errorCode: string;
+          details?: string;
+        }): Generator<ChatModelRunResult, void, unknown> {
+          const runError = {
+            message: args.message,
+            details: [args.details, connectionRecoveryDetails()]
+              .filter(Boolean)
+              .join("\n\n"),
+            errorCode: args.errorCode,
+            recoverable: true,
+            ...(runId ? { runId } : {}),
+          };
+          if (typeof window !== "undefined") {
+            if (args.errorCode === LLM_MISSING_CREDENTIALS_ERROR_CODE) {
+              dispatchMissingApiKey();
+            }
+            window.dispatchEvent(
+              new CustomEvent("agent-chat:run-error", {
+                detail: { ...runError, tabId },
+              }),
+            );
+          }
+          settleInterruptedToolCalls(content, undefined, {
+            includeActivity: true,
+          });
+          content.push({
+            type: "text",
+            text: formatChatErrorText(args.message, undefined, args.errorCode),
+          });
+          yield {
+            content: [...content],
+            status: { type: "incomplete" as const, reason: "error" as const },
+            metadata: { custom: { ...(runId ? { runId } : {}), runError } },
+          } as ChatModelRunResult;
+          clearActiveRun();
+        };
+
+        // Final outcome for a background turn the follow loop can no longer
+        // follow: either the run went terminal server-side (surface its
+        // error, mapping terminal_reason to clear copy) or it vanished
+        // (finalize with received content when it completed, loud error
+        // otherwise — never a silent stop).
+        const emitBackgroundTerminalOutcome = function* (
+          lastKnown: Record<string, unknown> | null,
+        ): Generator<ChatModelRunResult, void, unknown> {
+          const status =
+            typeof lastKnown?.status === "string" ? lastKnown.status : "";
+          const rawTerminalReason =
+            typeof lastKnown?.terminalReason === "string"
+              ? lastKnown.terminalReason
+              : "";
+          // terminal_reason is either a bare reason ("dispatch_payload_missing")
+          // or "error:<errorCode>" when derived from a terminal error event.
+          const hasErrorTerminalReason = rawTerminalReason.startsWith("error:");
+          const terminalReason = rawTerminalReason.replace(/^error:/, "");
+          const mappedMessage = terminalReason
+            ? BACKGROUND_TERMINAL_REASON_MESSAGES[terminalReason]
+            : undefined;
+          const mappedErrorCode =
+            terminalReason === "missing_api_key" ||
+            terminalReason === LLM_MISSING_CREDENTIALS_ERROR_CODE
+              ? LLM_MISSING_CREDENTIALS_ERROR_CODE
+              : terminalReason;
+
+          if (mappedMessage) {
+            yield* emitBackgroundTerminalError({
+              message: mappedMessage,
+              errorCode: mappedErrorCode,
+              details: `terminal_reason: ${rawTerminalReason}`,
+            });
+            return;
+          }
+
+          if (hasErrorTerminalReason) {
+            if (lastRecoverableRunError) {
+              yield* emitBackgroundTerminalError({
+                message: lastRecoverableRunError.message,
+                errorCode:
+                  lastRecoverableRunError.errorCode ||
+                  mappedErrorCode ||
+                  "background_run_failed",
+                details: lastRecoverableRunError.details,
+              });
+              return;
+            }
+            yield* emitBackgroundTerminalError({
+              message:
+                "The agent's background run failed before its final response could be recovered. You can retry from the preserved chat context.",
+              errorCode: mappedErrorCode || "background_run_failed",
+              details: `terminal_reason: ${rawTerminalReason}`,
+            });
+            return;
+          }
+
+          if (status === "completed") {
+            // The turn finished server-side; the events we managed to fold are
+            // the durable transcript. Finalize with them.
+            settleInterruptedToolCalls(content, undefined, {
+              includeActivity: true,
+            });
+            yield {
+              content: [...content],
+              status: { type: "complete" as const, reason: "stop" as const },
+              metadata: { custom: { ...(runId ? { runId } : {}) } },
+            } as ChatModelRunResult;
+            clearActiveRun();
+            return;
+          }
+
+          if (lastRecoverableRunError) {
+            // A replayed terminal error event already carried the real
+            // message (recoverable errors replay as auto-continue signals
+            // whose errorInfo we captured while following).
+            yield* emitBackgroundTerminalError({
+              message: lastRecoverableRunError.message,
+              errorCode:
+                lastRecoverableRunError.errorCode ?? "connection_error",
+              details: lastRecoverableRunError.details,
+            });
+            return;
+          }
+          yield* emitBackgroundTerminalError({
+            message:
+              "The agent's background run stopped before finishing and no continuation appeared. You can retry from the preserved chat context.",
+            errorCode: terminalReason || "background_run_lost",
+            details: rawTerminalReason
+              ? `terminal_reason: ${rawTerminalReason}`
+              : undefined,
+          });
+        };
+
+        // One read-only attach to the current run's event stream. Unlike
+        // reconnectCurrentRun this does NOT retry internally and lets the
+        // follow loop see every auto-continue signal (with errorInfo intact),
+        // because the loop — not this reader — decides what a detach means.
+        // Return values: "completed" = terminal event consumed (turn over);
+        // "aborted" = user abort; "detached" = we ATTACHED to a live stream
+        // that ended/stalled without a terminal event (resets the follow
+        // loop's idle window); "gone" = could not attach at all (404, HTTP
+        // error, network failure — the idle window keeps accumulating so a
+        // persistently unattachable run still terminates loudly).
+        const followAttachOnce = async function* (): AsyncGenerator<
+          ChatModelRunResult,
+          "completed" | "aborted" | "detached" | "gone",
+          unknown
+        > {
+          if (!runId) return "gone";
+          let attached = false;
+          try {
+            const eventsRes = await fetch(
+              `${apiUrl}/runs/${encodeURIComponent(runId)}/events?after=${lastSeq + 1}`,
+              { signal: abortSignal },
+            );
+            if (!eventsRes.ok || !eventsRes.body) {
+              return "gone";
+            }
+            attached = true;
+            updateCurrentRunDispatchMode(
+              eventsRes.headers.get("X-Dispatch-Mode"),
+            );
+            for await (const result of readSSEStream(
+              eventsRes.body,
+              content,
+              toolCallCounter,
+              tabId,
+              (seq) => {
+                rememberRunSeq(seq);
+                if (threadId) updateActiveRunSeq(seq);
+              },
+              runId,
+              currentSSEOptions(),
+            )) {
+              yield withRequestModeMetadata(result);
+            }
+            // readSSEStream returned normally: a terminal done/error was
+            // consumed and rendered — the turn is over.
+            clearActiveRun();
+            return "completed";
+          } catch (attachErr: unknown) {
+            if (attachErr instanceof Error && attachErr.name === "AbortError") {
+              clearActiveRun();
+              return "aborted";
+            }
+            if (attachErr instanceof AgentAutoContinueSignal) {
+              lastAutoContinueReason = attachErr.reason;
+              if (attachErr.activityTrail.length > 0) {
+                lastActivityTrail = [...attachErr.activityTrail];
+              }
+              if (attachErr.errorInfo) {
+                lastRecoverableRunError = attachErr.errorInfo;
+              }
+            }
+            // A fetch that never yielded a response body counts as "gone" for
+            // the idle window; a broken mid-stream read counts as attached.
+            return attached ? "detached" : "gone";
+          }
+        };
+
+        // The background follow loop. Entered instead of ANY synthetic
+        // continuation POST when the current run is background-dispatched.
+        // Keeps following as long as an active run for this turn exists — the
+        // server keeps chaining until its own per-turn budget or a real
+        // terminal error, so a successor that stalls again is simply
+        // re-followed, not counted against any client budget. Only a
+        // continuous BACKGROUND_FOLLOW_IDLE_TIMEOUT_MS with no active run
+        // ends the turn from the client side.
+        const followBackgroundTurn = async function* (
+          initialSignal: AgentAutoContinueSignal,
+        ): AsyncGenerator<
+          ChatModelRunResult,
+          "completed" | "client_continue",
+          unknown
+        > {
+          lastAutoContinueReason = initialSignal.reason;
+          if (initialSignal.activityTrail.length > 0) {
+            lastActivityTrail = [...initialSignal.activityTrail];
+          }
+          if (initialSignal.errorInfo) {
+            lastRecoverableRunError = initialSignal.errorInfo;
+          }
+          // Show "Resuming…" instead of a frozen Thinking label while waiting
+          // for the server-chained successor chunk.
+          const dispatchResumingUiEvent = () => {
+            if (typeof window !== "undefined") {
+              window.dispatchEvent(
+                new CustomEvent("agent-chat:auto-continue", {
+                  detail: { tabId },
+                }),
+              );
+            }
+          };
+          dispatchResumingUiEvent();
+
+          let idleSince: number | null = null;
+          let lastSeenActive: Record<string, unknown> | null = null;
+          // Terminal runs already replayed once. A recoverable terminal error
+          // event replays as an auto-continue signal (isAutoRecoverableError),
+          // which used to re-drive a POST in foreground mode. In follow mode
+          // the server owns recovery, so a SECOND visit to the same terminal
+          // run means the turn is over — surface the outcome instead of
+          // re-replaying it every poll for the whole reconnect window.
+          const replayedTerminalRunIds = new Set<string>();
+
+          while (true) {
+            if (abortSignal.aborted) {
+              clearActiveRun();
+              return "completed";
+            }
+            let active: Record<string, unknown> | null = null;
+            try {
+              const activeRes = await fetch(
+                `${apiUrl}/runs/active?threadId=${encodeURIComponent(threadId!)}`,
+                { signal: abortSignal },
+              );
+              if (activeRes.ok) {
+                active = await activeRes.json().catch(() => null);
+              }
+            } catch (pollErr: unknown) {
+              if (pollErr instanceof Error && pollErr.name === "AbortError") {
+                clearActiveRun();
+                return "completed";
+              }
+              // Transient poll failure — counts as "no active run" this tick.
+            }
+
+            const activeRunId =
+              active?.active === true && active.runId
+                ? String(active.runId)
+                : null;
+            const activeTurnId =
+              typeof active?.turnId === "string" ? active.turnId : "";
+            const activeStatus =
+              typeof active?.status === "string" ? active.status : "";
+            // Only follow runs belonging to THIS turn (server-chained
+            // successors reuse the turnId) or runs we already attached to.
+            const isOurRun =
+              activeRunId !== null &&
+              (attemptedRunIds.includes(activeRunId) ||
+                !activeTurnId ||
+                activeTurnId === turnId);
+
+            if (activeRunId && isOurRun) {
+              lastSeenActive = active;
+              updateCurrentRunDispatchMode(active?.dispatchMode);
+              const isTerminal =
+                activeStatus === "completed" || activeStatus === "errored";
+              if (isTerminal && replayedTerminalRunIds.has(activeRunId)) {
+                if (
+                  lastAutoContinueReason === "stale_run" &&
+                  lastRecoverableRunError?.errorCode === "stale_run"
+                ) {
+                  const continuation = prepareAutoContinuation(
+                    new AgentAutoContinueSignal({
+                      reason: "stale_run",
+                      errorInfo: lastRecoverableRunError,
+                      activityTrail: lastActivityTrail,
+                    }),
+                  );
+                  if (continuation.ok) {
+                    dispatchResumingUiEvent();
+                    await delay(250, abortSignal);
+                    return "client_continue";
+                  }
+                }
+                yield* emitBackgroundTerminalOutcome(active);
+                return "completed";
+              }
+              const previousRunId = runId;
+              runId = activeRunId;
+              if (!attemptedRunIds.includes(activeRunId)) {
+                attemptedRunIds.push(activeRunId);
+              }
+              reconnectCursorForRun(activeRunId, previousRunId);
+              if (threadId) {
+                setActiveRun({ threadId, runId: activeRunId, lastSeq });
+              }
+              const attach = yield* followAttachOnce();
+              if (attach === "completed" || attach === "aborted") {
+                return "completed";
+              }
+              if (isTerminal) {
+                replayedTerminalRunIds.add(activeRunId);
+              }
+              // Server-authoritative "silently deferred, recovery in
+              // progress" signal (see `awaitingRedispatch` on
+              // `getActiveRunForThreadAsync`, run-manager.ts): a
+              // `chainServerDrivenContinuation` successor still inside
+              // `UNCLAIMED_BACKGROUND_RUN_REDISPATCH_BOUND_MS`, being
+              // redispatched by the server's fast/slow sweeps. This is known
+              // to demonstrably exist — same as a "detached" attach — so
+              // treat it identically and never accumulate idle time against
+              // it. Once the server's own bound is exceeded (or the row is
+              // claimed/terminal) this flips false and normal idle accounting
+              // resumes, so a truly stuck deferral still fails loud via the
+              // existing timeout below.
+              const awaitingRedispatch = active?.awaitingRedispatch === true;
+              if (attach === "detached" || awaitingRedispatch) {
+                // We really attached to a live stream (chunk boundary or
+                // transport blip), or the server told us recovery is
+                // in-flight — the run demonstrably exists; keep following
+                // with a fresh idle window.
+                idleSince = null;
+              } else {
+                // "gone": /runs/active reported the run but its event stream
+                // 404s (reaped row / cross-isolate lag). Let the idle window
+                // ACCUMULATE instead of resetting, so a persistently
+                // inconsistent state still terminates loudly instead of
+                // hot-looping for the whole reconnect window.
+                if (idleSince === null) idleSince = Date.now();
+                if (
+                  Date.now() - idleSince >=
+                  BACKGROUND_FOLLOW_IDLE_TIMEOUT_MS
+                ) {
+                  yield* emitBackgroundTerminalOutcome(lastSeenActive);
+                  return "completed";
+                }
+              }
+              dispatchResumingUiEvent();
+            } else {
+              if (idleSince === null) idleSince = Date.now();
+              if (Date.now() - idleSince >= BACKGROUND_FOLLOW_IDLE_TIMEOUT_MS) {
+                captureChatClientError(
+                  new Error(
+                    "Background run went idle with no successor run appearing",
+                  ),
+                  "background-follow-idle",
+                  {
+                    lastSeenStatus:
+                      typeof lastSeenActive?.status === "string"
+                        ? lastSeenActive.status
+                        : null,
+                  },
+                );
+                yield* emitBackgroundTerminalOutcome(lastSeenActive);
+                return "completed";
+              }
+            }
+            await delay(BACKGROUND_FOLLOW_POLL_INTERVAL_MS, abortSignal);
+            if (abortSignal.aborted) {
+              clearActiveRun();
+              return "completed";
+            }
+          }
+        };
+
         const visibleContentForContinuation = (): ContentPart[] => {
           return contentAfterContinuationPrefix(
             content,
@@ -1943,7 +2584,8 @@ export function createAgentChatAdapter(
               part.result !== undefined,
           );
           const currentPreparingToolName =
-            lastUnresolvedToolActivity(visibleContent);
+            lastUnresolvedToolActivity(visibleContent) ??
+            lastPreparingActionTool(signal.activityTrail);
           // In-flight tool stall guard. When the same write tool is stuck
           // in-flight because the connection keeps dropping (stream_ended),
           // hasInFlightTool=true keeps madeProgress=true and completely
@@ -2270,11 +2912,18 @@ export function createAgentChatAdapter(
                 // can report a just-finished run as active for up to
                 // RUN_STALE_MS while its terminal status write lands) — adopting
                 // `activeRunId` below would reconnect to that prior run, replay
-                // its final answer, and silently drop this turn. Wait for the
-                // run to clear and retry THIS prompt instead. Only genuine
-                // internal continuations (deliberate resumes of the active run)
-                // fall through to the reconnect path.
-                if (!internalContinuationRequest && activeRunId) {
+                // its final answer, and silently drop this turn. The same race
+                // can happen after an internal auto-continue: if the reported
+                // active run is one this adapter already consumed, reconnecting
+                // to it replays the terminal auto_continue and exits instead of
+                // posting the continuation. Wait for stale/previous active runs
+                // to clear and retry THIS prompt. A genuinely newer background
+                // run still falls through to the reconnect path below.
+                const shouldRetryConflictingActiveRun =
+                  activeRunId !== null &&
+                  (!internalContinuationRequest ||
+                    attemptedRunIds.includes(activeRunId));
+                if (shouldRetryConflictingActiveRun) {
                   queuedConflictRetries += 1;
                   if (queuedConflictRetries <= MAX_QUEUED_CONFLICT_RETRIES) {
                     await delay(500, abortSignal);
@@ -2290,7 +2939,20 @@ export function createAgentChatAdapter(
                     recoverable: true,
                     runId: activeRunId,
                   };
+                  // This is a terminal outcome for the attempted turn. Settle
+                  // both real in-flight calls and activity-only placeholders
+                  // before yielding the error; otherwise a prior "Preparing
+                  // run-code" event remains an unresolved tool card and the UI
+                  // keeps showing a spinner beside an already-terminal error.
+                  settleInterruptedToolCalls(content, undefined, {
+                    includeActivity: true,
+                  });
                   if (typeof window !== "undefined") {
+                    window.dispatchEvent(
+                      new CustomEvent("agent-chat:activity-clear", {
+                        detail: { tabId },
+                      }),
+                    );
                     window.dispatchEvent(
                       new CustomEvent("agent-chat:run-error", {
                         detail: { ...runError, tabId },
@@ -2399,9 +3061,7 @@ export function createAgentChatAdapter(
                 if (isMissingCredentialMessage(body)) {
                   const failure = missingCredentialFailure(body);
                   if (typeof window !== "undefined") {
-                    window.dispatchEvent(
-                      new Event("agent-chat:missing-api-key"),
-                    );
+                    dispatchMissingApiKey();
                     window.dispatchEvent(
                       new CustomEvent("agent-chat:run-error", {
                         detail: { ...failure.runError, tabId },
@@ -2470,6 +3130,20 @@ export function createAgentChatAdapter(
             }
 
             if (err instanceof AgentAutoContinueSignal) {
+              // Background-dispatched runs: the server chains continuations
+              // itself (successor row pre-inserted before the old chunk
+              // completes). Never POST a synthetic continuation and never
+              // abort the live server-side run — switch to read-only
+              // following of server state instead. This is the fix for the
+              // client/server recovery race: client watchdog signals here are
+              // just "reattach", not "recover".
+              if (shouldFollowServerContinuation(err) && threadId) {
+                const followOutcome = yield* followBackgroundTurn(err);
+                if (followOutcome === "client_continue") {
+                  continue;
+                }
+                return;
+              }
               if (err.reason === "no_progress") {
                 await abortCurrentRun();
               }
@@ -2614,7 +3288,7 @@ export function createAgentChatAdapter(
             if (isMissingCredentialMessage(errMsg)) {
               const failure = missingCredentialFailure(errMsg);
               if (typeof window !== "undefined") {
-                window.dispatchEvent(new Event("agent-chat:missing-api-key"));
+                dispatchMissingApiKey();
                 window.dispatchEvent(
                   new CustomEvent("agent-chat:run-error", {
                     detail: { ...failure.runError, tabId },
@@ -2639,6 +3313,21 @@ export function createAgentChatAdapter(
             if (reconnected) return;
             const activeReconnected = yield* reconnectActiveRunForThread();
             if (activeReconnected) return;
+
+            // Background-dispatched run whose transport failed and could not
+            // be reconnected above: follow server state instead of the
+            // synthetic-continuation POST below. (An initial POST that failed
+            // before any response headers arrived has no dispatch mode yet
+            // and keeps the foreground startup-retry path.)
+            if (shouldFollowServerContinuation() && threadId) {
+              const followOutcome = yield* followBackgroundTurn(
+                new AgentAutoContinueSignal({ reason: "stream_ended" }),
+              );
+              if (followOutcome === "client_continue") {
+                continue;
+              }
+              return;
+            }
 
             if (err instanceof AgentStartupTimeoutError) {
               if (startupRecoveryAttempts < MAX_STARTUP_RECOVERY_ATTEMPTS) {

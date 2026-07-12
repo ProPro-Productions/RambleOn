@@ -53,7 +53,11 @@ export default defineAction({
     let restoredMs = 0;
     const nextTrims: typeof edits.trims = [];
     for (const trim of edits.trims) {
-      if (!trim.excluded || trim.endMs <= args.startMs || trim.startMs >= args.endMs) {
+      if (
+        !trim.excluded ||
+        trim.endMs <= args.startMs ||
+        trim.startMs >= args.endMs
+      ) {
         nextTrims.push(trim);
         continue;
       }

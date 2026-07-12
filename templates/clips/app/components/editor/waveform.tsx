@@ -26,14 +26,14 @@ export interface WaveformProps {
   activityRanges?: Array<{ startMs: number; endMs: number }>;
   /** Click handler — returns the original ms at the click position. */
   onSeek?: (originalMs: number) => void;
-  /** Called on scroll so the parent can sync ruler / chapter markers. */
-  onScroll?: (scrollLeft: number, totalWidth: number) => void;
   /**
    * Controlled scroll offset: the waveform is the timeline's one native
    * scroller, so zoom-around-cursor (which must set a computed offset)
    * writes here and every other layer follows through onScroll.
    */
   scrollLeft?: number;
+  /** Called on scroll so the parent can sync ruler / chapter markers. */
+  onScroll?: (scrollLeft: number, totalWidth: number) => void;
   className?: string;
 }
 
@@ -97,8 +97,8 @@ export function Waveform({
   selectionType = "range",
   activityRanges = [],
   onSeek,
+  scrollLeft = 0,
   onScroll,
-  scrollLeft,
   className,
 }: WaveformProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -108,14 +108,15 @@ export function Waveform({
   const totalWidth = Math.max(width, Math.floor(width * Math.max(1, zoom)));
 
   // Controlled scroll: adopt the parent's offset when it diverges (>1px so
-  // the echo from our own onScroll doesn't loop).
+  // the echo from our own onScroll doesn't loop), clamped to the content.
   useEffect(() => {
     const el = scrollRef.current;
     if (!el || scrollLeft == null) return;
-    if (Math.abs(el.scrollLeft - scrollLeft) > 1) {
-      el.scrollLeft = scrollLeft;
+    const next = Math.max(0, Math.min(scrollLeft, totalWidth - width));
+    if (Math.abs(el.scrollLeft - next) > 1) {
+      el.scrollLeft = next;
     }
-  }, [scrollLeft, totalWidth]);
+  }, [scrollLeft, totalWidth, width]);
 
   // Re-draw whenever peaks, size, or excluded ranges change.
   useEffect(() => {
@@ -259,10 +260,7 @@ export function Waveform({
 
   const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!onSeek) return;
-    const rect = (
-      e.currentTarget.firstElementChild as HTMLElement
-    )?.getBoundingClientRect();
-    if (!rect) return;
+    const rect = e.currentTarget.getBoundingClientRect();
     const scroll = scrollRef.current?.scrollLeft ?? 0;
     const x = e.clientX - rect.left + scroll;
     const ms = Math.max(0, Math.min(durationMs, (x / totalWidth) * durationMs));

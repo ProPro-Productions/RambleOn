@@ -27,6 +27,7 @@ import {
   Outlet,
   Scripts,
   ScrollRestoration,
+  useLocation,
   useNavigate,
 } from "react-router";
 import type { LinksFunction } from "react-router";
@@ -37,11 +38,12 @@ import {
   useWireframeStyle,
 } from "@/components/plan/wireframe/use-wireframe-style";
 import { Toaster } from "@/components/ui/sonner";
+import { AppToolkitProvider } from "@/components/ui/toolkit-provider";
 import { useNavigationState } from "@/hooks/use-navigation-state";
-import { APP_TITLE } from "@/lib/app-config";
 // Side effect: register Plan's native chat renderers so visual answers render
 // their diagram/wireframe/api-spec blocks inline in the agent chat.
 import "@/lib/register-chat-renderers";
+import { APP_TITLE } from "@/lib/app-config";
 import { TAB_ID } from "@/lib/tab-id";
 
 import changelog from "../CHANGELOG.md?raw";
@@ -210,18 +212,30 @@ function AppContent() {
 
 export default function Root() {
   const [queryClient] = useState(() => createAgentNativeQueryClient());
+  const location = useLocation();
+  const sessionBypass =
+    location.pathname === "/" ||
+    location.pathname === "/plans" ||
+    location.pathname.startsWith("/plans/") ||
+    location.pathname === "/recaps" ||
+    location.pathname.startsWith("/recaps/") ||
+    location.pathname === "/local-plans" ||
+    location.pathname.startsWith("/local-plans/");
   return (
     // Pass the plan-specific styled Toaster via `toaster` so only one sonner
     // instance renders (avoids the duplicate that would appear if AppProviders'
     // built-in Toaster AND a children-rendered Toaster both mounted).
-    <AppProviders
-      queryClient={queryClient}
-      toaster={<Toaster richColors position="bottom-left" />}
-      i18n={{ catalog: i18nCatalog }}
-    >
-      <DbSyncSetup />
-      <AppContent />
-    </AppProviders>
+    <AppToolkitProvider>
+      <AppProviders
+        queryClient={queryClient}
+        sessionBypass={sessionBypass}
+        toaster={<Toaster richColors position="bottom-left" />}
+        i18n={{ catalog: i18nCatalog }}
+      >
+        <DbSyncSetup />
+        <AppContent />
+      </AppProviders>
+    </AppToolkitProvider>
   );
 }
 

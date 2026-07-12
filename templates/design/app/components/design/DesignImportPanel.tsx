@@ -1,4 +1,9 @@
-import { appApiPath, useActionMutation, useT } from "@agent-native/core/client";
+import {
+  useActionMutation,
+  useFormatters,
+  useT,
+} from "@agent-native/core/client";
+import { parseFigmaFileKey } from "@shared/figma-url";
 import {
   IconBrandFigma,
   IconBrandGithub,
@@ -10,27 +15,30 @@ import {
   IconUpload,
 } from "@tabler/icons-react";
 import { useQueryClient } from "@tanstack/react-query";
-import {
-  useCallback,
-  useRef,
-  useState,
-  type ClipboardEvent,
-  type ReactNode,
-} from "react";
+import { useCallback, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { sendToDesignAgentChat } from "@/lib/agent-chat";
 import {
-  getFigmaClipboardContent,
-  importResultSummary,
+  uploadDesignFile,
+  validateFigUploadFile,
+} from "@/lib/design-file-upload";
+import {
+  importResultNotification,
   looksLikeStandaloneHtml,
   VISUAL_EDIT_CONNECT_COMMAND,
+  VISUAL_EDIT_INSTALL_COMMAND,
   type ImportResult,
 } from "@/lib/design-import";
+import {
+  getFigmaConnectionStatus,
+  saveFigmaAccessToken,
+} from "@/lib/figma-connection";
 import { cn } from "@/lib/utils";
 
 import type { DesignExtensionSlotContext } from "./DesignExtensionsPanel";
@@ -39,20 +47,44 @@ interface DesignImportPanelProps {
   context: Pick<DesignExtensionSlotContext, "designId" | "viewMode">;
 }
 
-type ImportMode = "figma-paste" | "fig-file" | "html" | "local-app";
+type ImportMode =
+  | "figma-url"
+  | "figma-paste"
+  | "fig-upload"
+  | "html"
+  | "local-app";
 
 export function DesignImportPanel({ context }: DesignImportPanelProps) {
   const t = useT();
+  const { formatNumber } = useFormatters();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const importSource = useActionMutation("import-design-source");
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const importFigmaFrame = useActionMutation("import-figma-frame");
+  const figFileInputRef = useRef<HTMLInputElement | null>(null);
   const htmlFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [figmaUrl, setFigmaUrl] = useState("");
+  const [figmaAccessToken, setFigmaAccessToken] = useState("");
+  const [figmaConnectionChecked, setFigmaConnectionChecked] = useState(false);
+  const [figmaConnected, setFigmaConnected] = useState(false);
+  const [figmaConnectionLast4, setFigmaConnectionLast4] = useState<
+    string | null
+  >(null);
+  const [figmaConnectionDocsUrl, setFigmaConnectionDocsUrl] = useState<
+    string | null
+  >(null);
+  const [figmaConnectionError, setFigmaConnectionError] = useState<
+    string | null
+  >(null);
+  const [figmaConnectionBusy, setFigmaConnectionBusy] = useState(false);
   const [htmlText, setHtmlText] = useState("");
-  const [uploading, setUploading] = useState(false);
   const [activeMode, setActiveMode] = useState<ImportMode | null>(null);
-  const [activeUploadName, setActiveUploadName] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<ImportResult | null>(null);
+  const [figUploadName, setFigUploadName] = useState<string | null>(null);
+  const [figUploadProgress, setFigUploadProgress] = useState<number | null>(
+    null,
+  );
+  const [figUploadBusy, setFigUploadBusy] = useState(false);
 
   const finishImport = useCallback(
     async (result: ImportResult | undefined, fallback: string) => {
@@ -62,15 +94,36 @@ export function DesignImportPanel({ context }: DesignImportPanelProps) {
         queryClient.invalidateQueries({ queryKey: ["action", "get-design"] }),
         queryClient.invalidateQueries({ queryKey: ["action"] }),
       ]);
-      toast.success(importResultSummary(result, fallback));
-      if (result?.warnings?.length) {
-        toast.warning(t("designEditor.import.warningsToast"), {
-          description: result.warnings[0],
+      const fidelityWarnings: string[] = [];
+      const imageFallbackCount = result?.fidelityReport?.imageFallbacks.length;
+      if (imageFallbackCount) {
+        fidelityWarnings.push(
+          t("designEditor.import.figmaImageFallbackWarning", {
+            count: formatNumber(imageFallbackCount),
+          }),
+        );
+      }
+      const approximatedCount = result?.fidelityReport?.approximated.length;
+      if (approximatedCount) {
+        fidelityWarnings.push(
+          t("designEditor.import.figmaApproximationWarning", {
+            count: formatNumber(approximatedCount),
+          }),
+        );
+      }
+      const notification = importResultNotification(result, fallback, {
+        fidelityWarnings,
+      });
+      if (notification.variant === "warning") {
+        toast.warning(notification.title, {
+          description: notification.description,
         });
+      } else {
+        toast.success(notification.title);
       }
       navigate(`/design/${result?.designId ?? context.designId}?view=overview`);
     },
-    [context.designId, navigate, queryClient, t],
+    [context.designId, formatNumber, navigate, queryClient, t],
   );
 
   const importHtmlString = useCallback(
@@ -107,95 +160,86 @@ export function DesignImportPanel({ context }: DesignImportPanelProps) {
     [context.designId, finishImport, importSource, t],
   );
 
-  const handlePaste = useCallback(
-    (event: ClipboardEvent<HTMLDivElement>) => {
-      const html = event.clipboardData.getData("text/html");
-      const text = event.clipboardData.getData("text/plain");
-      const content = html || text;
-      if (!content) return;
-      const figmaContent = getFigmaClipboardContent(event.clipboardData);
-      if (figmaContent) {
-        event.preventDefault();
-        importSource.mutate(
-          {
-            designId: context.designId,
-            sourceType: "figma-paste-html",
-            content: figmaContent,
-            originalName: "figma-paste.html",
-          },
-          {
-            onSuccess: (result: unknown) => {
-              void finishImport(
-                result as ImportResult,
-                t("designEditor.import.figmaSuccess"),
-              );
-            },
-            onError: (error: unknown) => {
-              toast.error(t("designEditor.import.errors.figmaPasteFailed"), {
-                description:
-                  error instanceof Error
-                    ? error.message
-                    : t("common.genericError"),
-              });
-            },
-          },
-        );
-        return;
-      }
-      if (looksLikeStandaloneHtml(content)) {
-        event.preventDefault();
-        importHtmlString(content, "pasted-html.html");
-      }
-    },
-    [context.designId, finishImport, importHtmlString, importSource, t],
-  );
+  const checkFigmaConnection = useCallback(async () => {
+    setFigmaConnectionBusy(true);
+    setFigmaConnectionError(null);
+    try {
+      const status = await getFigmaConnectionStatus();
+      setFigmaConnected(status.connected);
+      setFigmaConnectionLast4(status.last4 ?? null);
+      setFigmaConnectionDocsUrl(status.docsUrl ?? null);
+    } catch (error) {
+      setFigmaConnected(false);
+      setFigmaConnectionError(
+        error instanceof Error ? error.message : t("common.genericError"),
+      );
+    } finally {
+      setFigmaConnectionChecked(true);
+      setFigmaConnectionBusy(false);
+    }
+  }, [t]);
 
-  const uploadFile = useCallback(
-    async (file: File) => {
-      setUploading(true);
-      setActiveUploadName(file.name);
-      const body = new FormData();
-      body.append("designId", context.designId);
-      body.append("file", file);
-      try {
-        const response = await fetch(
-          appApiPath(
-            `/api/import-design-file?designId=${encodeURIComponent(context.designId)}`,
-          ),
-          {
-            method: "POST",
-            body,
-          },
-        );
-        const result = (await response.json()) as ImportResult;
-        if (!response.ok) {
-          throw new Error(
-            result.error || t("designEditor.import.errors.uploadFailed"),
-          );
-        }
-        await finishImport(result, t("designEditor.import.uploadSuccess"));
-      } catch (error) {
-        toast.error(t("designEditor.import.errors.uploadFailed"), {
-          description:
-            error instanceof Error ? error.message : t("common.genericError"),
-        });
-      } finally {
-        setUploading(false);
-        setActiveUploadName(null);
-      }
-    },
-    [context.designId, finishImport, t],
-  );
+  const openFigmaUrlImport = useCallback(() => {
+    if (activeMode === "figma-url") {
+      setFigmaAccessToken("");
+      setActiveMode(null);
+      return;
+    }
+    setActiveMode("figma-url");
+    if (!figmaConnectionChecked) void checkFigmaConnection();
+  }, [activeMode, checkFigmaConnection, figmaConnectionChecked]);
 
-  const handleFigmaFileChange = useCallback(
-    (file: File | undefined) => {
-      if (!file) return;
-      setActiveMode("fig-file");
-      void uploadFile(file);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    },
-    [uploadFile],
-  );
+  const figmaTokenRequired =
+    figmaConnectionChecked && !figmaConnected && !figmaConnectionError;
+
+  const handleFigmaUrlImport = useCallback(async () => {
+    const normalizedUrl = figmaUrl.trim();
+    if (!normalizedUrl) {
+      toast.error(t("designEditor.import.errors.figmaUrlRequired"));
+      return;
+    }
+    if (!parseFigmaFileKey(normalizedUrl)) {
+      toast.error(t("designEditor.import.errors.invalidFigmaUrl"));
+      return;
+    }
+
+    setFigmaConnectionBusy(true);
+    try {
+      if (figmaTokenRequired) {
+        const status = await saveFigmaAccessToken(figmaAccessToken);
+        setFigmaConnected(status.connected);
+        setFigmaConnectionChecked(true);
+        setFigmaConnectionLast4(status.last4 ?? null);
+        setFigmaConnectionDocsUrl(status.docsUrl ?? null);
+        setFigmaConnectionError(null);
+        setFigmaAccessToken("");
+      }
+
+      const result = (await importFigmaFrame.mutateAsync({
+        figmaUrl: normalizedUrl,
+        designId: context.designId,
+        asNewScreen: true,
+      })) as ImportResult;
+      await finishImport(result, t("designEditor.import.figmaUrlSuccess"));
+    } catch (error) {
+      // A rejected credential should not linger in component state or the DOM.
+      setFigmaAccessToken("");
+      toast.error(t("designEditor.import.errors.figmaImportFailed"), {
+        description:
+          error instanceof Error ? error.message : t("common.genericError"),
+      });
+    } finally {
+      setFigmaConnectionBusy(false);
+    }
+  }, [
+    context.designId,
+    figmaAccessToken,
+    figmaTokenRequired,
+    figmaUrl,
+    finishImport,
+    importFigmaFrame,
+    t,
+  ]);
 
   const handleHtmlFileChange = useCallback(
     async (file: File | undefined) => {
@@ -210,46 +254,194 @@ export function DesignImportPanel({ context }: DesignImportPanelProps) {
     [importHtmlString],
   );
 
-  const askVisualEdit = useCallback(() => {
-    sendToDesignAgentChat({
-      message:
-        "Use the visual-edit skill to connect my local app to this Design project. Run the app if needed, call `npx @agent-native/core@latest design connect`, then add URL-backed screens to this design.",
-    } as Parameters<typeof sendToDesignAgentChat>[0]);
-    toast.success(t("designEditor.import.visualEditSent"));
-  }, [t]);
+  const handleFigFileChange = useCallback(
+    async (file: File | undefined) => {
+      if (!file) return;
+      setActiveMode("fig-upload");
+      const validationError = validateFigUploadFile(file);
+      if (validationError === "invalid-extension") {
+        toast.error(t("designEditor.import.errors.uploadFailed"), {
+          description: t("designEditor.import.errors.invalidFigFile"),
+        });
+        if (figFileInputRef.current) figFileInputRef.current.value = "";
+        return;
+      }
+      if (validationError === "too-large") {
+        toast.error(t("designEditor.import.errors.uploadFailed"), {
+          description: t("designEditor.import.errors.figFileTooLarge"),
+        });
+        if (figFileInputRef.current) figFileInputRef.current.value = "";
+        return;
+      }
 
-  const copyVisualEditCommand = useCallback(async () => {
-    try {
-      await navigator.clipboard.writeText(VISUAL_EDIT_CONNECT_COMMAND);
-      toast.success(t("designEditor.copied"));
-    } catch {
-      toast.error(t("designEditor.toasts.clipboardBlocked"));
-    }
-  }, [t]);
+      setFigUploadName(file.name);
+      setFigUploadProgress(0);
+      setFigUploadBusy(true);
+      try {
+        const result = await uploadDesignFile({
+          designId: context.designId,
+          file,
+          fallbackErrorMessage: t("designEditor.import.errors.uploadFailed"),
+          onProgress: ({ percent }) => setFigUploadProgress(percent),
+        });
+        await finishImport(result, t("designEditor.import.uploadSuccess"));
+      } catch (error) {
+        toast.error(t("designEditor.import.errors.uploadFailed"), {
+          description:
+            error instanceof Error ? error.message : t("common.genericError"),
+        });
+      } finally {
+        setFigUploadBusy(false);
+        setFigUploadName(null);
+        setFigUploadProgress(null);
+        if (figFileInputRef.current) figFileInputRef.current.value = "";
+      }
+    },
+    [context.designId, finishImport, t],
+  );
 
-  const busy = importSource.isPending || uploading;
+  const copyVisualEditCommand = useCallback(
+    async (command: string) => {
+      try {
+        await navigator.clipboard.writeText(command);
+        toast.success(t("designEditor.copied"));
+      } catch {
+        toast.error(t("designEditor.toasts.clipboardBlocked"));
+      }
+    },
+    [t],
+  );
+
+  const busy =
+    importSource.isPending ||
+    importFigmaFrame.isPending ||
+    figUploadBusy ||
+    figmaConnectionBusy;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-background">
-      <div className="flex h-14 shrink-0 items-center border-b border-border/60 px-3.5">
-        <div className="min-w-0">
-          <h3 className="truncate text-base font-semibold tracking-tight text-foreground">
-            {t("designEditor.import.title")}
-          </h3>
-          <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
-            {"Bring source screens into this design" /* i18n-ignore */}
-          </p>
-        </div>
+      <div className="flex min-h-8 shrink-0 items-center border-b border-border/60 px-3">
+        <h3 className="min-w-0 flex-1 truncate text-xs font-semibold text-foreground">
+          {t("designEditor.import.title")}
+        </h3>
       </div>
 
-      <div className="design-inspector-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain px-3.5 pb-4 pt-3">
+      <div className="design-inspector-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-4 pt-3">
         <div className="space-y-0.5">
+          <ImportSourceRow
+            id="figma-url-import"
+            icon={<IconBrandFigma className="size-3.5" />}
+            title={t("designEditor.import.figmaUrlTitle")}
+            description={t("designEditor.import.figmaUrlDescription")}
+            isOpen={activeMode === "figma-url"}
+            onToggle={openFigmaUrlImport}
+          >
+            <form
+              className="space-y-2 p-2"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void handleFigmaUrlImport();
+              }}
+            >
+              <div className="space-y-1.5">
+                <Label htmlFor="figma-frame-url" className="text-[11px]">
+                  {t("designEditor.import.figmaUrlLabel")}
+                </Label>
+                <Input
+                  id="figma-frame-url"
+                  type="url"
+                  value={figmaUrl}
+                  onChange={(event) => setFigmaUrl(event.target.value)}
+                  placeholder={t("designEditor.import.figmaUrlPlaceholder")}
+                  autoComplete="url"
+                  className="h-8 text-xs"
+                />
+              </div>
+
+              {figmaConnectionBusy && !figmaConnectionChecked ? (
+                <p
+                  className="text-[10px] text-muted-foreground"
+                  aria-live="polite"
+                >
+                  {t("designEditor.import.figmaConnectionChecking")}
+                </p>
+              ) : figmaConnected ? (
+                <div className="flex items-center gap-1.5 rounded-md border border-border/70 bg-muted/30 px-2 py-1.5 text-[10px] text-muted-foreground">
+                  <IconCircleCheck className="size-3.5 shrink-0" />
+                  <span>
+                    {figmaConnectionLast4
+                      ? t("designEditor.import.figmaConnectedWithSuffix", {
+                          suffix: figmaConnectionLast4,
+                        })
+                      : t("designEditor.import.figmaConnected")}
+                  </span>
+                </div>
+              ) : figmaTokenRequired ? (
+                <div className="space-y-1.5 rounded-md border border-border/70 bg-muted/30 p-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <Label htmlFor="figma-access-token" className="text-[11px]">
+                      {t("designEditor.import.figmaTokenLabel")}
+                    </Label>
+                    {figmaConnectionDocsUrl ? (
+                      <a
+                        href={figmaConnectionDocsUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="shrink-0 text-[10px] font-medium text-foreground underline-offset-2 hover:underline"
+                      >
+                        {t("designEditor.import.figmaTokenDocs")}
+                      </a>
+                    ) : null}
+                  </div>
+                  <Input
+                    id="figma-access-token"
+                    type="password"
+                    value={figmaAccessToken}
+                    onChange={(event) =>
+                      setFigmaAccessToken(event.target.value)
+                    }
+                    placeholder={t("designEditor.import.figmaTokenPlaceholder")}
+                    autoComplete="new-password"
+                    aria-invalid={figmaConnectionError ? true : undefined}
+                    className="h-8 text-xs"
+                  />
+                  <p className="text-[10px] leading-snug text-muted-foreground">
+                    {figmaConnectionError ??
+                      t("designEditor.import.figmaTokenDescription")}
+                  </p>
+                </div>
+              ) : figmaConnectionError ? (
+                <p
+                  className="rounded-md border border-destructive/30 bg-destructive/5 px-2 py-1.5 text-[10px] leading-snug text-destructive"
+                  role="status"
+                >
+                  {figmaConnectionError}
+                </p>
+              ) : null}
+
+              <Button
+                type="submit"
+                size="sm"
+                className="h-8 w-full px-2"
+                disabled={
+                  busy ||
+                  !figmaUrl.trim() ||
+                  (figmaTokenRequired && !figmaAccessToken.trim())
+                }
+              >
+                {figmaTokenRequired
+                  ? t("designEditor.import.saveKeyAndImport")
+                  : t("designEditor.import.importFigmaUrl")}
+              </Button>
+            </form>
+          </ImportSourceRow>
+
           <ImportSourceRow
             id="figma-paste-import"
             icon={<IconBrandFigma className="size-3.5" />}
             title={t("designEditor.import.figmaPasteTitle")}
             description={
-              "Copy a frame in Figma, then paste here." /* i18n-ignore */
+              "Copy a frame in Figma, then paste into the canvas." /* i18n-ignore */
             }
             isOpen={activeMode === "figma-paste"}
             onToggle={() =>
@@ -258,20 +450,13 @@ export function DesignImportPanel({ context }: DesignImportPanelProps) {
               )
             }
           >
-            <div className="p-2">
-              <div
-                role="textbox"
-                tabIndex={0}
-                data-hotkeys-scope="text"
-                aria-label={t("designEditor.import.figmaPasteTarget")}
-                onPaste={handlePaste}
-                className={cn(
-                  "flex min-h-24 cursor-text items-center justify-center rounded-md border border-dashed border-border bg-muted/30 px-3 py-4 text-center text-xs text-muted-foreground outline-none transition-colors",
-                  "focus:border-primary/60 focus:bg-background focus:ring-2 focus:ring-primary/15",
-                )}
-              >
-                {t("designEditor.import.figmaPasteTarget")}
-              </div>
+            <div className="space-y-1.5 p-2 text-[11px] leading-snug text-muted-foreground">
+              <p>{t("designEditor.import.figmaPasteDescription")}</p>
+              <p>
+                {
+                  "Click the canvas first, then paste with the same shortcut you use for copied Design content." /* i18n-ignore */
+                }
+              </p>
             </div>
           </ImportSourceRow>
 
@@ -279,39 +464,74 @@ export function DesignImportPanel({ context }: DesignImportPanelProps) {
             id="fig-file-import"
             icon={<IconUpload className="size-3.5" />}
             title={t("designEditor.import.figUploadTitle")}
-            description={"Upload exported Figma frames." /* i18n-ignore */}
-            isOpen={activeMode === "fig-file"}
+            description={t("designEditor.import.figUploadDescription")}
+            isOpen={activeMode === "fig-upload"}
             onToggle={() =>
-              setActiveMode((mode) => (mode === "fig-file" ? null : "fig-file"))
+              setActiveMode((mode) =>
+                mode === "fig-upload" ? null : "fig-upload",
+              )
             }
           >
             <div className="space-y-2 p-2">
+              <p className="text-[11px] leading-snug text-muted-foreground">
+                {t("designEditor.import.figUploadDescription")}
+              </p>
               <input
-                ref={fileInputRef}
+                ref={figFileInputRef}
                 type="file"
-                accept=".fig"
+                accept=".fig,application/octet-stream"
                 className="hidden"
                 onChange={(event) =>
-                  handleFigmaFileChange(event.target.files?.[0])
+                  void handleFigFileChange(event.target.files?.[0])
                 }
               />
               <Button
                 size="sm"
                 variant="outline"
-                className="h-8 w-full justify-center"
+                className="h-8 w-full px-2"
                 disabled={busy}
-                onClick={() => fileInputRef.current?.click()}
+                onClick={() => figFileInputRef.current?.click()}
               >
-                {uploading
-                  ? "Importing..." /* i18n-ignore */
-                  : t("designEditor.import.chooseFigFile")}
+                {t("designEditor.import.chooseFigFile")}
               </Button>
-              <p className="truncate text-[10px] leading-snug text-muted-foreground">
-                {
-                  activeUploadName ??
-                    "Export only the frames you need." /* i18n-ignore */
-                }
-              </p>
+              {figUploadBusy && figUploadName ? (
+                <div
+                  className="space-y-1.5 rounded-md border border-border/70 bg-muted/30 p-2"
+                  aria-live="polite"
+                >
+                  <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                    <span
+                      className="min-w-0 flex-1 truncate"
+                      title={figUploadName}
+                    >
+                      {figUploadName}
+                    </span>
+                    <span className="tabular-nums">
+                      {figUploadProgress === 100
+                        ? t("designEditor.import.figUploadProcessing")
+                        : t("designEditor.import.figUploadUploading", {
+                            progress: figUploadProgress ?? 0,
+                          })}
+                    </span>
+                  </div>
+                  <div
+                    role="progressbar"
+                    aria-label={t("designEditor.import.figUploadTitle")}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={figUploadProgress ?? 0}
+                    className="h-1 overflow-hidden rounded-full bg-muted"
+                  >
+                    <div
+                      className="h-full rounded-full bg-foreground/70 origin-left transition-transform duration-150"
+                      style={{
+                        transform: `scaleX(${(figUploadProgress ?? 0) / 100})`,
+                        width: "100%",
+                      }}
+                    />
+                  </div>
+                </div>
+              ) : null}
             </div>
           </ImportSourceRow>
 
@@ -362,6 +582,46 @@ export function DesignImportPanel({ context }: DesignImportPanelProps) {
               </div>
             </div>
           </ImportSourceRow>
+
+          <ImportSourceRow
+            id="local-app-import"
+            icon={<IconCode className="size-3.5" />}
+            title={t("designEditor.import.localTitle")}
+            description={t("designEditor.import.localDescription")}
+            isOpen={activeMode === "local-app"}
+            onToggle={() =>
+              setActiveMode((mode) =>
+                mode === "local-app" ? null : "local-app",
+              )
+            }
+          >
+            <div className="space-y-2 p-2">
+              <p className="text-[11px] leading-snug text-muted-foreground">
+                {t("designEditor.import.visualEditGuidance")}{" "}
+                <a
+                  href="/docs/template-design"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-medium text-foreground underline-offset-2 hover:underline"
+                >
+                  {"Read the visual-edit docs." /* i18n-ignore */}
+                </a>
+              </p>
+              <VisualEditCommandRow
+                command={VISUAL_EDIT_INSTALL_COMMAND}
+                onCopy={copyVisualEditCommand}
+              />
+              <VisualEditCommandRow
+                command={VISUAL_EDIT_CONNECT_COMMAND}
+                onCopy={copyVisualEditCommand}
+              />
+              <p className="text-[10px] leading-snug text-muted-foreground">
+                {
+                  "Replace <port> with the running app's local port." /* i18n-ignore */
+                }
+              </p>
+            </div>
+          </ImportSourceRow>
         </div>
 
         <div className="mt-4 border-t border-border/60 pt-3">
@@ -377,47 +637,6 @@ export function DesignImportPanel({ context }: DesignImportPanelProps) {
               }
               badge={t("designEditor.import.comingSoon")}
             />
-            <ImportSourceRow
-              id="local-app-import"
-              icon={<IconCode className="size-3.5" />}
-              title={t("designEditor.import.localTitle")}
-              description={t("designEditor.import.localDescription")}
-              isOpen={activeMode === "local-app"}
-              onToggle={() =>
-                setActiveMode((mode) =>
-                  mode === "local-app" ? null : "local-app",
-                )
-              }
-            >
-              <div className="space-y-2 p-2">
-                <p className="text-[11px] leading-snug text-muted-foreground">
-                  {t("designEditor.import.visualEditGuidance")}
-                </p>
-                <div className="flex items-center gap-1.5 rounded-md border border-border/70 bg-muted/40 p-1.5">
-                  <code className="min-w-0 flex-1 truncate font-mono text-[10px] leading-5 text-foreground/80">
-                    {VISUAL_EDIT_CONNECT_COMMAND}
-                  </code>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    className="h-6 shrink-0 px-1.5 text-[10px]"
-                    onClick={copyVisualEditCommand}
-                  >
-                    <IconCopy className="size-3" />
-                    {"Copy" /* i18n-ignore */}
-                  </Button>
-                </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-7 w-full justify-center text-[11px]"
-                  onClick={askVisualEdit}
-                >
-                  {t("designEditor.import.useVisualEditNow")}
-                </Button>
-              </div>
-            </ImportSourceRow>
           </div>
         </div>
 
@@ -437,6 +656,32 @@ export function DesignImportPanel({ context }: DesignImportPanelProps) {
           </div>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+function VisualEditCommandRow({
+  command,
+  onCopy,
+}: {
+  command: string;
+  onCopy: (command: string) => void;
+}) {
+  return (
+    <div className="flex items-center gap-1.5 rounded-md border border-border/70 bg-muted/40 p-1.5">
+      <code className="min-w-0 flex-1 truncate font-mono text-[10px] leading-5 text-foreground/80">
+        {command}
+      </code>
+      <Button
+        type="button"
+        size="sm"
+        variant="ghost"
+        aria-label={"Copy command" /* i18n-ignore */}
+        className="h-6 shrink-0 px-1.5 text-[10px]"
+        onClick={() => onCopy(command)}
+      >
+        <IconCopy className="size-3" />
+      </Button>
     </div>
   );
 }

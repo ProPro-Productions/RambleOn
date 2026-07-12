@@ -41,6 +41,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Toaster } from "@/components/ui/sonner";
+import { AppToolkitProvider } from "@/components/ui/toolkit-provider";
 import { useNavigationState } from "@/hooks/use-navigation-state";
 
 import { i18nCatalog, loadI18nMessages } from "./i18n";
@@ -324,6 +325,10 @@ function isStandalonePublicPath(pathname: string): boolean {
   const path = pathname.replace(/\/+$/, "") || "/";
   return (
     path === "/download" ||
+    path === "/bug-report" ||
+    path.startsWith("/bug-report/") ||
+    path === "/r" ||
+    path.startsWith("/r/") ||
     path.startsWith("/share/") ||
     path.startsWith("/embed/") ||
     path.startsWith("/invite/")
@@ -382,19 +387,21 @@ export default function Root() {
   const loaderData = useLoaderData<typeof loader>();
   const [queryClient] = useState(() => createAgentNativeQueryClient());
   return (
-    <AppProviders
-      queryClient={queryClient}
-      isPublicPath={isStandalonePublicPath(location.pathname)}
-      i18n={{
-        catalog: i18nCatalog,
-        initialLocale: loaderData.locale,
-        initialPreference: loaderData.preference,
-        initialMessages: loaderData.messages,
-        persistPreference: !isStandalonePublicPath(location.pathname),
-      }}
-    >
-      <AppContent />
-    </AppProviders>
+    <AppToolkitProvider>
+      <AppProviders
+        queryClient={queryClient}
+        isPublicPath={isStandalonePublicPath(location.pathname)}
+        i18n={{
+          catalog: i18nCatalog,
+          initialLocale: loaderData.locale,
+          initialPreference: loaderData.preference,
+          initialMessages: loaderData.messages,
+          persistPreference: !isStandalonePublicPath(location.pathname),
+        }}
+      >
+        <AppContent />
+      </AppProviders>
+    </AppToolkitProvider>
   );
 }
 

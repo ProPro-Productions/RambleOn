@@ -67,6 +67,8 @@
     "guard:plan-skills": "tsx scripts/sync-plan-skills.ts --check",
     "guard:no-error-string-returns": "node scripts/guard-no-error-string-returns.mjs",
     "guard:no-action-twin-routes": "node scripts/guard-no-action-twin-routes.mjs",
+    "guard:agent-chat-context": "tsx scripts/guard-agent-chat-context.ts",
+    "guard:request-storms": "tsx scripts/guard-request-storms.ts",
     "guards": "tsx scripts/run-guards.ts",
     "sync:netlify-env": "tsx scripts/sync-template-netlify-env.ts",
     "sync:workspace-skills": "tsx scripts/sync-workspace-core-skills.ts",
@@ -97,13 +99,13 @@
     "@cloudflare/vite-plugin": "^1.31.0",
     "@libsql/linux-x64-gnu": "^0.5.29",
     "@playwright/test": "^1.61.1",
-    "@typescript/native-preview": "7.0.0-dev.20260624.1",
     "concurrently": "^9.1.0",
     "oxfmt": "0.56.0",
     "oxlint": "1.71.0",
-    "oxlint-tsgolint": "0.23.0",
+    "oxlint-tsgolint": "0.24.0",
     "prettier": "^3.6.2",
     "tsx": "^4.20.3",
+    "typescript-7": "catalog:",
     "wrangler": "^4.80.0"
   },
   "engines": {
@@ -128,8 +130,7 @@
       "fast-xml-parser": ">=5.5.6",
       "glob": ">=10.5.0",
       "@anthropic-ai/sdk": ">=0.90.0",
-      "hono": ">=4.12.4",
-      "kysely": "^0.28.9"
+      "hono": ">=4.12.4"
     }
   }
 }

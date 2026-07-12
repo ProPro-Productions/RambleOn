@@ -121,6 +121,7 @@ export function useIsDark(): boolean {
  */
 export const KitConfigContext = createContext<{
   skeleton?: boolean;
+  flushFrame?: boolean;
   sketch?: number;
   theme?: "light" | "dark";
   style?: "sketchy" | "clean";
@@ -195,6 +196,7 @@ export function Screen({
   const isSkeleton = skeleton || Boolean(cfg.skeleton);
   const wfStyle = cfg.style ?? "sketchy";
   const wfTheme = theme ?? cfg.theme ?? "light";
+  const effectivePad = cfg.flushFrame ? 0 : pad;
   void sketch;
   return (
     <div
@@ -218,7 +220,7 @@ export function Screen({
         lineHeight: 1.25,
         display: "flex",
         flexDirection: "column",
-        padding: pad,
+        padding: effectivePad,
         boxSizing: "border-box",
         overflow: "hidden",
         ...style,
@@ -1509,6 +1511,20 @@ function roundedRectPath(
   ].join(" ");
 }
 
+/** Rough.js cannot safely render paths whose inset consumes the whole box. */
+export function hasDrawableRoughBounds(
+  width: number,
+  height: number,
+  inset: number,
+): boolean {
+  return (
+    Number.isFinite(width) &&
+    Number.isFinite(height) &&
+    width > inset * 2 &&
+    height > inset * 2
+  );
+}
+
 function elementStroke(node: Element, fallback: string): string {
   const explicit = readVar(node, "--rough-stroke");
   if (explicit) return explicit;
@@ -1621,7 +1637,7 @@ function build(
     preserveVertices: true,
   });
 
-  if (opts.drawFrame) {
+  if (opts.drawFrame && hasDrawableRoughBounds(layoutW, layoutH, 2)) {
     const sw = 2;
     push(
       gen.path(
@@ -1645,7 +1661,7 @@ function build(
     const y = (r.top - base.top) / zoom;
     const w = r.width / zoom;
     const h = r.height / zoom;
-    if (w < 2 || h < 2) return;
+    if (!hasDrawableRoughBounds(w, h, 1)) return;
     const kind = inferRoughKind(node);
     const rawStroke = elementStroke(node, sketch);
     const stroke =

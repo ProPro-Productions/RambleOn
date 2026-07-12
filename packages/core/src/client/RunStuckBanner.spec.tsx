@@ -103,7 +103,7 @@ describe("RunStuckBanner", () => {
     ).toHaveLength(1);
   });
 
-  it("does not automatically abort a stuck but heartbeating background worker", async () => {
+  it("does not flag a heartbeating durable worker during its bounded tool window", async () => {
     const onRetry = vi.fn();
     const fetchSpy = vi.fn(async (url: string) => {
       if (url.includes("/runs/active")) {
@@ -112,9 +112,9 @@ describe("RunStuckBanner", () => {
           runId: "run-background",
           status: "running",
           dispatchMode: "background-processing",
-          heartbeatAt: 100_000,
+          heartbeatAt: 295_000,
           lastProgressAt: 10_000,
-          serverNow: 101_000,
+          serverNow: 300_000,
         });
       }
       return jsonResponse({ error: "unexpected" }, false);
@@ -130,11 +130,7 @@ describe("RunStuckBanner", () => {
       await vi.advanceTimersByTimeAsync(2_000);
     });
 
-    expect(container.textContent).toContain("The agent is still working.");
-    expect(container.textContent).toContain(
-      "The background worker is still alive",
-    );
-    expect(container.textContent).not.toContain("Retrying automatically now.");
+    expect(container.textContent ?? "").toBe("");
     expect(onRetry).not.toHaveBeenCalled();
     expect(
       fetchSpy.mock.calls.some(
@@ -143,6 +139,149 @@ describe("RunStuckBanner", () => {
           init?.method === "POST",
       ),
     ).toBe(false);
+  });
+
+  it("shows the fallback after a heartbeating durable worker exceeds its recovery window", async () => {
+    const fetchSpy = vi.fn(async (url: string) => {
+      if (url.includes("/runs/active")) {
+        return jsonResponse({
+          active: true,
+          runId: "run-background-overdue",
+          status: "running",
+          dispatchMode: "background-processing",
+          heartbeatAt: 799_000,
+          lastProgressAt: 10_000,
+          serverNow: 800_000,
+        });
+      }
+      return jsonResponse({ error: "unexpected" }, false);
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await act(async () => {
+      root.render(<RunStuckBanner threadId="thread-1" autoRetry />);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
+
+    expect(container.textContent).toContain("The agent is still working.");
+    expect(container.textContent).toContain(
+      "The background worker is still alive",
+    );
+    expect(container.textContent).toContain("Retry");
+  });
+
+  it("never auto-retries a background-dispatched run even with a stale heartbeat", async () => {
+    // The server owns recovery for background runs (chained continuations +
+    // lost-handoff sweep). Even when the worker heartbeat looks dead, an
+    // automatic client abort could kill a live server-chained successor —
+    // only the manual controls remain.
+    const onRetry = vi.fn();
+    const fetchSpy = vi.fn(async (url: string) => {
+      if (url.includes("/runs/active")) {
+        return jsonResponse({
+          active: true,
+          runId: "run-background-stale",
+          status: "running",
+          dispatchMode: "background-processing",
+          heartbeatAt: 100_000,
+          lastProgressAt: 10_000,
+          serverNow: 300_000,
+        });
+      }
+      return jsonResponse({ error: "unexpected" }, false);
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await act(async () => {
+      root.render(
+        <RunStuckBanner threadId="thread-1" autoRetry onRetry={onRetry} />,
+      );
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
+
+    expect(container.textContent).toContain("This chat looks stuck.");
+    expect(container.textContent).toContain("Retry");
+    expect(container.textContent).toContain("Cancel");
+    expect(container.textContent).not.toContain("Retrying automatically now.");
+    expect(onRetry).not.toHaveBeenCalled();
+    expect(
+      fetchSpy.mock.calls.some(
+        ([url, init]) =>
+          String(url).includes("/abort") && init?.method === "POST",
+      ),
+    ).toBe(false);
+  });
+
+  it("never auto-retries a foreground self-chained run", async () => {
+    const onRetry = vi.fn();
+    const fetchSpy = vi.fn(async (url: string) => {
+      if (url.includes("/runs/active")) {
+        return jsonResponse({
+          active: true,
+          runId: "run-foreground-self-chain",
+          status: "running",
+          dispatchMode: "foreground-self-chain",
+          heartbeatAt: 100_000,
+          lastProgressAt: 10_000,
+          serverNow: 300_000,
+        });
+      }
+      return jsonResponse({ error: "unexpected" }, false);
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await act(async () => {
+      root.render(
+        <RunStuckBanner threadId="thread-1" autoRetry onRetry={onRetry} />,
+      );
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
+
+    expect(container.textContent).toContain("This chat looks stuck.");
+    expect(container.textContent).not.toContain("Retrying automatically now.");
+    expect(onRetry).not.toHaveBeenCalled();
+    expect(
+      fetchSpy.mock.calls.some(
+        ([url, init]) =>
+          String(url).includes("/abort") && init?.method === "POST",
+      ),
+    ).toBe(false);
+  });
+
+  it("uses the wider 180s stuck threshold for server-continued runs", async () => {
+    // 120s without progress marks a client-continued foreground run stuck (90s
+    // threshold) but must not mark a server-continued run stuck — the server's
+    // recovery machinery is still within its own windows.
+    const fetchSpy = vi.fn(async (url: string) => {
+      if (url.includes("/runs/active")) {
+        return jsonResponse({
+          active: true,
+          runId: "run-background-quiet",
+          status: "running",
+          dispatchMode: "foreground-self-chain",
+          heartbeatAt: 129_000,
+          lastProgressAt: 10_000,
+          serverNow: 130_000,
+        });
+      }
+      return jsonResponse({ error: "unexpected" }, false);
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await act(async () => {
+      root.render(<RunStuckBanner threadId="thread-1" autoRetry />);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
+
+    expect(container.textContent ?? "").toBe("");
   });
 
   it("keeps manual retry/cancel controls when auto retry is disabled", async () => {
@@ -239,6 +378,142 @@ describe("RunStuckBanner", () => {
           init?.method === "POST",
       ),
     ).toHaveLength(1);
+  });
+
+  it("does not auto-abort a run reported to have work in flight", async () => {
+    const onRetry = vi.fn();
+    const fetchSpy = vi.fn(async (url: string) => {
+      if (url.includes("/runs/active")) {
+        return jsonResponse({
+          active: true,
+          runId: "run-inflight",
+          status: "running",
+          heartbeatAt: 10_000,
+          lastProgressAt: 10_000,
+          serverNow: 101_000,
+        });
+      }
+      return jsonResponse({ error: "unexpected" }, false);
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await act(async () => {
+      root.render(
+        <RunStuckBanner
+          threadId="thread-1"
+          autoRetry
+          onRetry={onRetry}
+          hasInFlightWork={() => true}
+        />,
+      );
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
+
+    expect(onRetry).not.toHaveBeenCalled();
+    expect(
+      fetchSpy.mock.calls.some(
+        ([url, init]) =>
+          String(url).includes("/abort") && init?.method === "POST",
+      ),
+    ).toBe(false);
+  });
+
+  it("hides Retry and only offers Cancel while a tool/A2A call is in flight", async () => {
+    const onRetry = vi.fn();
+    const fetchSpy = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.includes("/runs/active")) {
+        return jsonResponse({
+          active: true,
+          runId: "run-inflight-manual",
+          status: "running",
+          heartbeatAt: 10_000,
+          lastProgressAt: 10_000,
+          serverNow: 101_000,
+        });
+      }
+      if (url.includes("/runs/run-inflight-manual/abort")) {
+        return jsonResponse({ ok: true });
+      }
+      return jsonResponse({ error: "unexpected" }, false);
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await act(async () => {
+      root.render(
+        <RunStuckBanner
+          threadId="thread-1"
+          onRetry={onRetry}
+          hasInFlightWork={() => true}
+        />,
+      );
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
+
+    expect(container.textContent).toContain("The agent is still working.");
+    expect(container.textContent).not.toContain("Retry");
+    expect(container.textContent).toContain("Cancel");
+
+    const cancelButton = Array.from(container.querySelectorAll("button")).find(
+      (btn) => btn.textContent?.includes("Cancel"),
+    );
+    expect(cancelButton).toBeTruthy();
+
+    await act(async () => {
+      cancelButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(
+      fetchSpy.mock.calls.some(
+        ([url, init]) =>
+          String(url).includes("/runs/run-inflight-manual/abort") &&
+          init?.method === "POST" &&
+          init?.body === JSON.stringify({ reason: "user_stuck_cancel" }),
+      ),
+    ).toBe(true);
+    expect(onRetry).not.toHaveBeenCalled();
+  });
+
+  it("re-checks hasInFlightWork on every render instead of caching the first value", async () => {
+    // The A2A call finishes between two polls — the banner must recompute
+    // from the live source (e.g. chatHandle.hasInFlightWork()) rather than
+    // freezing whatever it saw when the banner first mounted, or Retry would
+    // stay hidden (or shown) forever after work actually changes state.
+    let inFlight = true;
+    const fetchSpy = vi.fn(async (url: string) => {
+      if (url.includes("/runs/active")) {
+        return jsonResponse({
+          active: true,
+          runId: "run-transitions",
+          status: "running",
+          heartbeatAt: 10_000,
+          lastProgressAt: 10_000,
+          serverNow: 101_000,
+        });
+      }
+      return jsonResponse({ error: "unexpected" }, false);
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await act(async () => {
+      root.render(
+        <RunStuckBanner threadId="thread-1" hasInFlightWork={() => inFlight} />,
+      );
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
+    expect(container.textContent).not.toContain("Retry");
+
+    inFlight = false;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+    expect(container.textContent).toContain("Retry");
   });
 
   it("claims one automatic retry across multiple mounted chat views", async () => {

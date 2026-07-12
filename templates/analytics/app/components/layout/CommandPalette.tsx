@@ -8,6 +8,7 @@ import {
   useT,
 } from "@agent-native/core/client";
 import { extensionPath } from "@agent-native/core/client/extensions";
+import { useOrgRole } from "@agent-native/core/client/org";
 import {
   IconFlask,
   IconTool,
@@ -17,6 +18,7 @@ import {
   IconMoon,
   IconHistory,
   IconLanguage,
+  IconRefresh,
 } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import { useTheme } from "next-themes";
@@ -63,14 +65,34 @@ interface ExtensionSearchItem {
 
 const defaultTools = [
   {
+    id: "agents",
+    nameKey: "navigation.admin",
+    href: "/agents?view=dashboards",
+    keywords: [
+      "agent monitoring",
+      "observability",
+      "evals",
+      "experiments",
+      "feedback",
+      "database",
+      "db admin",
+      "dashboard usage",
+      "dashboard audit",
+      "ab testing",
+      "llm",
+    ],
+  },
+  {
     id: "explorer",
     nameKey: "commandPalette.toolExplorer",
     href: "/dashboards/explorer",
+    keywords: [],
   },
   {
     id: "customer-health",
     nameKey: "commandPalette.toolCustomerHealth",
     href: "/dashboards/customer-health",
+    keywords: [],
   },
 ];
 
@@ -105,70 +127,54 @@ function CommandLoadingGroup({
 }
 
 async function fetchSavedConfigs(): Promise<SavedConfig[]> {
-  try {
-    const rows = await callAction(
-      "list-explorer-configs",
-      {},
-      { method: "GET" },
-    );
-    return (Array.isArray(rows) ? rows : []) as SavedConfig[];
-  } catch {
-    return [];
-  }
+  const rows = await callAction("list-explorer-configs", {}, { method: "GET" });
+  return (Array.isArray(rows) ? rows : []) as SavedConfig[];
 }
 
 async function fetchExplorerDashboards(): Promise<ExplorerDashboard[]> {
-  try {
-    const result = await callAction(
-      "list-explorer-dashboards",
-      {
-        hidden: "all",
-      },
-      { method: "GET" },
-    );
-    const dashboards =
-      result && typeof result === "object" && "dashboards" in result
-        ? (result as { dashboards: unknown[] }).dashboards
-        : [];
-    return (Array.isArray(dashboards) ? dashboards : [])
-      .filter((d: any) => d && d.name)
-      .map((d: any) => ({
-        id: d.id,
-        name: d.name,
-        hiddenAt: typeof d.hiddenAt === "string" ? d.hiddenAt : null,
-      }));
-  } catch {
-    return [];
-  }
+  const result = await callAction(
+    "list-explorer-dashboards",
+    {
+      hidden: "all",
+    },
+    { method: "GET" },
+  );
+  const dashboards =
+    result && typeof result === "object" && "dashboards" in result
+      ? (result as { dashboards: unknown[] }).dashboards
+      : [];
+  return (Array.isArray(dashboards) ? dashboards : [])
+    .filter((d: any) => d && d.name)
+    .map((d: any) => ({
+      id: d.id,
+      name: d.name,
+      hiddenAt: typeof d.hiddenAt === "string" ? d.hiddenAt : null,
+    }));
 }
 
 async function fetchSqlDashboards(
   t: (key: string) => string,
 ): Promise<{ id: string; name: string; hiddenAt: string | null }[]> {
-  try {
-    const rows = await callAction(
-      "list-sql-dashboards",
-      { hidden: "all" },
-      { method: "GET" },
-    );
-    return (Array.isArray(rows) ? rows : [])
-      .filter((d: any) => d && typeof d.id === "string" && d.id.length > 0)
-      .map((d: any) => ({
-        id: d.id,
-        name:
-          typeof d.name === "string" && d.name.trim().length > 0
-            ? d.name
-            : t("commandPalette.untitledDashboard"),
-        hiddenAt: typeof d.hiddenAt === "string" ? d.hiddenAt : null,
-      }));
-  } catch {
-    return [];
-  }
+  const rows = await callAction(
+    "list-sql-dashboards",
+    { hidden: "all" },
+    { method: "GET" },
+  );
+  return (Array.isArray(rows) ? rows : [])
+    .filter((d: any) => d && typeof d.id === "string" && d.id.length > 0)
+    .map((d: any) => ({
+      id: d.id,
+      name:
+        typeof d.name === "string" && d.name.trim().length > 0
+          ? d.name
+          : t("commandPalette.untitledDashboard"),
+      hiddenAt: typeof d.hiddenAt === "string" ? d.hiddenAt : null,
+    }));
 }
 
 async function fetchExtensions(): Promise<ExtensionSearchItem[]> {
   const res = await fetch(agentNativePath("/_agent-native/extensions"));
-  if (!res.ok) return [];
+  if (!res.ok) throw new Error(`Failed to load extensions (${res.status})`);
   const data = await res.json();
   return (Array.isArray(data) ? data : [])
     .filter((extension: any) => {
@@ -200,6 +206,7 @@ function persistThemePreference(theme: "light" | "dark") {
 
 export function CommandPalette() {
   const t = useT();
+  const { canManageOrg } = useOrgRole();
   const [open, setOpen] = useState(false);
   const [changelogOpen, setChangelogOpen] = useState(false);
   const [languageOpen, setLanguageOpen] = useState(false);
@@ -208,7 +215,7 @@ export function CommandPalette() {
   const { resolvedTheme, setTheme } = useTheme();
   const isDark = resolvedTheme === "dark";
 
-  const { data: savedCharts = [], isFetching: savedChartsFetching } = useQuery({
+  const savedChartsQuery = useQuery({
     queryKey: ["explorer-configs-palette"],
     queryFn: fetchSavedConfigs,
     staleTime: 30_000,
@@ -217,10 +224,7 @@ export function CommandPalette() {
 
   const dashboardsSync = useChangeVersions(["dashboards", "action"]);
 
-  const {
-    data: explorerDashboards = [],
-    isFetching: explorerDashboardsFetching,
-  } = useQuery({
+  const explorerDashboardsQuery = useQuery({
     queryKey: ["explorer-dashboards-palette", dashboardsSync],
     queryFn: fetchExplorerDashboards,
     staleTime: 30_000,
@@ -228,24 +232,43 @@ export function CommandPalette() {
     placeholderData: (prev) => prev,
   });
 
-  const { data: sqlDashboards = [], isFetching: sqlDashboardsFetching } =
-    useQuery({
-      queryKey: ["sql-dashboards-palette", dashboardsSync],
-      queryFn: () => fetchSqlDashboards(t),
-      staleTime: 30_000,
-      enabled: open,
-      placeholderData: (prev) => prev,
-    });
+  const sqlDashboardsQuery = useQuery({
+    queryKey: ["sql-dashboards-palette", dashboardsSync],
+    queryFn: () => fetchSqlDashboards(t),
+    staleTime: 30_000,
+    enabled: open,
+    placeholderData: (prev) => prev,
+  });
 
-  const { data: extensions = [], isFetching: extensionsFetching } = useQuery<
-    ExtensionSearchItem[]
-  >({
+  const extensionsQuery = useQuery<ExtensionSearchItem[]>({
     queryKey: ["extensions"],
     queryFn: fetchExtensions,
     staleTime: 30_000,
     enabled: open,
     placeholderData: (prev) => prev,
   });
+
+  const savedCharts = savedChartsQuery.data ?? [];
+  const explorerDashboards = explorerDashboardsQuery.data ?? [];
+  const sqlDashboards = sqlDashboardsQuery.data ?? [];
+  const extensions = extensionsQuery.data ?? [];
+  const savedChartsFetching = savedChartsQuery.isFetching;
+  const explorerDashboardsFetching = explorerDashboardsQuery.isFetching;
+  const sqlDashboardsFetching = sqlDashboardsQuery.isFetching;
+  const extensionsFetching = extensionsQuery.isFetching;
+  const asyncGroupsErrored =
+    savedChartsQuery.isError ||
+    explorerDashboardsQuery.isError ||
+    sqlDashboardsQuery.isError ||
+    extensionsQuery.isError;
+  const retryAsyncGroups = () => {
+    void Promise.all([
+      savedChartsQuery.refetch(),
+      explorerDashboardsQuery.refetch(),
+      sqlDashboardsQuery.refetch(),
+      extensionsQuery.refetch(),
+    ]);
+  };
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -288,6 +311,7 @@ export function CommandPalette() {
     <>
       <CommandDialog
         open={open}
+        motion="instant"
         onOpenChange={(next) => {
           setOpen(next);
           if (!next) setSearchQuery("");
@@ -299,8 +323,21 @@ export function CommandPalette() {
           onValueChange={setSearchQuery}
         />
         <CommandList>
-          {!asyncGroupsLoading && (
+          {!asyncGroupsLoading && !asyncGroupsErrored && (
             <CommandEmpty>{t("commandPalette.noResults")}</CommandEmpty>
+          )}
+
+          {asyncGroupsErrored && (
+            <CommandGroup heading={t("commandPalette.loadFailed")} forceMount>
+              <CommandItem
+                forceMount
+                value="retry failed command palette data"
+                onSelect={retryAsyncGroups}
+              >
+                <IconRefresh className="me-2 h-4 w-4 text-muted-foreground" />
+                {t("sidebar.retry")}
+              </CommandItem>
+            </CommandGroup>
           )}
 
           {explorerDashboardsFetching && explorerDashboards.length === 0 && (
@@ -410,16 +447,22 @@ export function CommandPalette() {
           </CommandGroup>
 
           <CommandGroup heading={t("commandPalette.groupTools")}>
-            {defaultTools.map((tool) => (
-              <CommandItem
-                key={`tool-${tool.id}`}
-                onSelect={() => go(tool.href)}
-                keywords={commandPaletteKeywords(t(tool.nameKey), "tool")}
-              >
-                <IconTool className="me-2 h-4 w-4 text-muted-foreground" />
-                {t(tool.nameKey)}
-              </CommandItem>
-            ))}
+            {defaultTools
+              .filter((tool) => tool.id !== "agents" || canManageOrg)
+              .map((tool) => (
+                <CommandItem
+                  key={`tool-${tool.id}`}
+                  onSelect={() => go(tool.href)}
+                  keywords={commandPaletteKeywords(
+                    t(tool.nameKey),
+                    "tool",
+                    ...tool.keywords,
+                  )}
+                >
+                  <IconTool className="me-2 h-4 w-4 text-muted-foreground" />
+                  {t(tool.nameKey)}
+                </CommandItem>
+              ))}
           </CommandGroup>
 
           <CommandGroup heading={t("commandPalette.groupAppearance")}>

@@ -1,6 +1,5 @@
 import {
   AgentToggleButton,
-  NotificationsBell,
   ShareButton,
   appPath,
   useFormatters,
@@ -717,7 +716,6 @@ export function FormBuilderPage() {
               </DropdownMenuContent>
             </DropdownMenu>
           )}
-          <NotificationsBell />
           <AgentToggleButton />
         </div>
       </div>
@@ -1531,6 +1529,23 @@ function SettingsEditor({
           onChange={(e) => update({ redirectUrl: e.target.value })}
           placeholder="https://..."
           className="h-8 text-sm"
+        />
+      </div>
+
+      <div className="flex items-start justify-between gap-4 rounded-lg border p-3">
+        <div className="space-y-1">
+          <Label htmlFor="anonymous-responses" className="text-xs">
+            {t("builder.settings.anonymousResponses")}
+          </Label>
+          <p className="text-xs leading-5 text-muted-foreground">
+            {t("builder.settings.anonymousResponsesDescription")}
+          </p>
+        </div>
+        <Switch
+          id="anonymous-responses"
+          checked={settings.anonymous === true}
+          onCheckedChange={(anonymous) => update({ anonymous })}
+          aria-label={t("builder.settings.anonymousResponses")}
         />
       </div>
 

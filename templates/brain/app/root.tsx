@@ -25,6 +25,7 @@ import {
 import type { LinksFunction } from "react-router";
 
 import { Layout as AppLayout } from "@/components/layout/Layout";
+import { AppToolkitProvider } from "@/components/ui/toolkit-provider";
 import { useDistillationBridge } from "@/hooks/use-distillation-bridge";
 import { useNavigationState } from "@/hooks/use-navigation-state";
 import { TAB_ID } from "@/lib/tab-id";
@@ -203,9 +204,6 @@ export default function Root() {
           // Brain has a faster sync cadence for source distillation status;
           // 20 s keeps the source list fresh without hammering the server.
           staleTime: 20_000,
-          // Brain shows live ingestion progress — refetch on focus to pick
-          // up background sync jobs that don't emit DB events.
-          refetchOnWindowFocus: true,
           // Flat retry: Brain data fetches are rarely auth failures so a
           // flat count is sufficient.
           retry: 1,
@@ -215,14 +213,16 @@ export default function Root() {
   );
 
   return (
-    <AppProviders
-      queryClient={queryClient}
-      tooltipDelayDuration={250}
-      i18n={{ catalog: i18nCatalog }}
-    >
-      <DbSyncSetup />
-      <AppContent />
-    </AppProviders>
+    <AppToolkitProvider>
+      <AppProviders
+        queryClient={queryClient}
+        tooltipDelayDuration={250}
+        i18n={{ catalog: i18nCatalog }}
+      >
+        <DbSyncSetup />
+        <AppContent />
+      </AppProviders>
+    </AppToolkitProvider>
   );
 }
 

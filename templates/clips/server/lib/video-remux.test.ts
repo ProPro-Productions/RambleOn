@@ -4,7 +4,10 @@ import {
   faststartMp4,
   isFfmpegAvailable,
   makeSeekable,
+  normalizeTimelineToMp4,
+  probeHasAudioStream,
   remuxWebmToSeekable,
+  timelineNormalizationFfmpegArgs,
 } from "./video-remux";
 
 function atom(type: string, payload: Uint8Array = new Uint8Array()) {
@@ -125,5 +128,60 @@ describe("makeSeekable dispatch", () => {
 
   it("reports ffmpeg availability as a boolean", () => {
     expect(typeof isFfmpegAvailable()).toBe("boolean");
+  });
+});
+
+describe("timeline normalization", () => {
+  it("builds a CFR H.264/AAC faststart transcode that preserves optional audio", () => {
+    const args = timelineNormalizationFfmpegArgs(
+      "/tmp/input.webm",
+      "/tmp/output.mp4",
+    );
+
+    expect(args).toContain("+genpts");
+    expect(args).toContain("0:v:0");
+    expect(args).toContain("0:a?");
+    expect(args).toContain("fps=30");
+    expect(args).toContain("libx264");
+    expect(args).toContain("aac");
+    expect(args).toContain("yuv420p");
+    expect(args).toContain("+faststart");
+    expect(args[args.length - 1]).toBe("/tmp/output.mp4");
+  });
+
+  it("leaves empty input untouched", async () => {
+    const input = new Uint8Array();
+    const result = await normalizeTimelineToMp4({
+      mediaBytes: input,
+      videoFormat: "webm",
+    });
+
+    expect(result).toEqual({ bytes: input, changed: false });
+  });
+
+  it("leaves undecodable input untouched", async () => {
+    const input = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]);
+    const result = await normalizeTimelineToMp4({
+      mediaBytes: input,
+      videoFormat: "webm",
+    });
+
+    expect(result.changed).toBe(false);
+    expect(result.bytes).toBe(input);
+  });
+});
+
+describe("probeHasAudioStream", () => {
+  it("returns null for empty input without invoking ffmpeg", async () => {
+    const result = await probeHasAudioStream(new Uint8Array(), "mp4");
+    expect(result).toBeNull();
+  });
+
+  it("returns null (not false) for garbage bytes that ffmpeg can't demux", async () => {
+    // Should never misreport an unreadable file as "confirmed no audio" —
+    // callers treat null as "couldn't verify" and skip hard-fail checks.
+    const garbage = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]);
+    const result = await probeHasAudioStream(garbage, "mp4");
+    expect(result).not.toBe(false);
   });
 });

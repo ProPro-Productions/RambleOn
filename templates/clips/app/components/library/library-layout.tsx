@@ -29,6 +29,7 @@ import {
   IconLayoutSidebarLeftCollapse,
   IconLayoutSidebarLeftExpand,
   IconPlus,
+  IconShare,
   IconSettings,
 } from "@tabler/icons-react";
 import { ReactNode, useEffect, useMemo, useState } from "react";
@@ -133,6 +134,7 @@ export function LibraryLayout({ children }: LibraryLayoutProps) {
   // Clip count for the "Library" nav item — count-only, no row payload or
   // title polling across the app shell.
   const { data: libraryCount } = useRecordingsCount({ view: "library" });
+  const { data: sharedCount } = useRecordingsCount({ view: "shared" });
 
   const libFolderList: FolderNode[] = useMemo(
     () =>
@@ -153,13 +155,20 @@ export function LibraryLayout({ children }: LibraryLayoutProps) {
   );
   const [headerSlot, setHeaderSlot] = useState<HTMLElement | null>(null);
   const showCollapsedSidebar = sidebarCollapsed && !isMobile;
+  const sidebarHasNewRecordingAction = isMobile
+    ? sidebarOpen
+    : !sidebarCollapsed;
 
-  // Routes whose page renders its own h-12 toolbar (with NotificationsBell +
-  // AgentToggleButton). Layout still mounts Sidebar + AgentSidebar, but skips
-  // its own header so there's no double-header.
+  // Routes whose page renders its own h-12 toolbar. Layout still mounts Sidebar
+  // + AgentSidebar, but skips its own header so there's no double-header.
   const pageOwnsToolbar =
     location.pathname === "/extensions" ||
     location.pathname.startsWith("/extensions/");
+  const pageHasHeaderSearch =
+    location.pathname.startsWith("/library") ||
+    location.pathname === "/shared" ||
+    location.pathname === "/archive" ||
+    /^\/spaces\/[^/]+/.test(location.pathname);
 
   useEffect(() => {
     setSidebarOpen(false);
@@ -194,6 +203,13 @@ export function LibraryLayout({ children }: LibraryLayoutProps) {
       icon: IconInbox,
       match: (p) => p.startsWith("/library"),
       count: libraryCount,
+    },
+    {
+      to: "/shared",
+      label: t("navigation.sharedWithMe"),
+      icon: IconShare,
+      match: (p) => p === "/shared",
+      count: sharedCount,
     },
     {
       to: "/spaces",
@@ -369,7 +385,8 @@ export function LibraryLayout({ children }: LibraryLayoutProps) {
             <>
               <div className="px-3 py-3">
                 <Button
-                  className="w-full gap-1.5 bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"
+                  className="w-full gap-1.5"
+                  variant="outline"
                   size="sm"
                   asChild
                 >
@@ -512,7 +529,7 @@ export function LibraryLayout({ children }: LibraryLayoutProps) {
                   {t("navigation.desktopCta")}
                 </CaptureInstallInlineLink>
               )}
-              <SearchBar />
+              {(isMobile || !pageHasHeaderSearch) && <SearchBar />}
             </div>
 
             <div className="shrink-0 px-1 py-1">
@@ -571,7 +588,11 @@ export function LibraryLayout({ children }: LibraryLayoutProps) {
                   {t("navigation.desktopBody")}
                 </span>
               </div>
-              <CaptureInstallButton size="sm" className="shrink-0">
+              <CaptureInstallButton
+                variant="outline"
+                size="sm"
+                className="shrink-0"
+              >
                 Download
               </CaptureInstallButton>
               <Tooltip>
@@ -592,7 +613,10 @@ export function LibraryLayout({ children }: LibraryLayoutProps) {
             </div>
           )}
           <main className="agent-native-app-main flex min-h-0 flex-1 flex-col overflow-y-auto">
-            <PageHeaderSlotProvider slot={headerSlot}>
+            <PageHeaderSlotProvider
+              slot={headerSlot}
+              sidebarHasNewRecordingAction={sidebarHasNewRecordingAction}
+            >
               {children}
             </PageHeaderSlotProvider>
           </main>

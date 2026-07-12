@@ -1,8 +1,6 @@
-import { stripAuthRedirectParamFromUrl } from "./auth-redirect-url.js";
 import { installRouteChunkRecovery } from "./route-chunk-recovery.js";
 
 installRouteChunkRecovery();
-stripAuthRedirectParamFromUrl();
 
 export { getBrowserTabId } from "./browser-tab-id.js";
 
@@ -19,6 +17,9 @@ export {
   requestAgentChatThreadOpen,
   requestAgentTaskOpen,
   sendToAgentChat,
+  sendToAgentChatAndConfirm,
+  reportAgentChatSubmitResult,
+  AGENT_CHAT_SUBMIT_RESULT_EVENT,
   parseSubmitChatMessage,
   setAgentChatContextItem,
   setContextToAgentChat,
@@ -33,6 +34,8 @@ export {
   type AgentChatContextSetOptions,
   type AgentChatContextState,
   type AgentChatMessage,
+  type AgentChatSubmitResult,
+  type SendToAgentChatAndConfirmResult,
   type AgentComposerReference,
   type AgentComposerReferenceInsertOptions,
   type AgentComposerReferenceInsertPayload,
@@ -82,6 +85,7 @@ export {
 } from "./embed-auth.js";
 export {
   codeAgentTranscriptEventsToContent,
+  codeAgentTranscriptHasPendingApproval,
   createCodeAgentChatAdapter,
   type CodeAgentChatController,
   type CodeAgentChatControlResult,
@@ -102,6 +106,10 @@ export {
   type CodeAgentRunStateLike,
   type CodeAgentTranscriptOrderEvent,
 } from "../code-agents/transcript-order.js";
+export {
+  CREDENTIAL_GAP_SIGNAL,
+  isCredentialGapCodeAgentEvent,
+} from "../code-agents/transcript-normalizer.js";
 export { useSendToAgentChat } from "./use-send-to-agent-chat.js";
 export {
   useChatModels,
@@ -163,6 +171,21 @@ export {
   useFileWatcher,
   useScreenRefreshKey,
 } from "./use-db-sync.js";
+export {
+  VisualControlRow,
+  VisualColorPicker,
+  VisualInspectorPanel,
+  VisualInspectorSection,
+  VisualScrubInput,
+  VisualSegmentedControl,
+  VisualSliderControl,
+  VisualSwatchControl,
+  VisualToggleControl,
+  VisualTweakControl,
+  type VisualControlOption,
+  type VisualControlValue,
+  type VisualTweakDefinition,
+} from "./visual-style-controls.js";
 export {
   useChangeVersion,
   useChangeVersions,
@@ -449,6 +472,10 @@ export {
 } from "./MultiTabAssistantChat.js";
 export { RunStuckBanner, type RunStuckBannerProps } from "./RunStuckBanner.js";
 export {
+  KeepTabOpenNotice,
+  type KeepTabOpenNoticeProps,
+} from "./KeepTabOpenNotice.js";
+export {
   useRunStuckDetection,
   useAbortRun,
   type RunStuckState,
@@ -463,6 +490,10 @@ export {
   AgentComposerFrame,
   type AgentComposerFrameProps,
   PromptComposer,
+  RealtimeVoiceModeBoundary,
+  RealtimeVoiceModeProvider,
+  RealtimeVoiceModeDock,
+  RealtimeVoiceModeEntry,
   TiptapComposer,
   AGENT_PROMPT_MAX_INLINE_IMAGE_BYTES,
   AGENT_PROMPT_MAX_INLINE_TEXT_CHARS,
@@ -470,9 +501,28 @@ export {
   formatPromptWithAttachments,
   isInlineableAgentPromptFile,
   readAgentPromptAttachment,
+  createRealtimeVoiceSession,
+  createRealtimeVoiceSessionWithCapability,
+  executeRealtimeVoiceTool,
+  extractRealtimeVoiceFunctionCalls,
+  readRealtimeVoiceContext,
+  useRealtimeVoiceMode,
+  useRealtimeVoiceModeCopy,
+  useRealtimeVoiceModeOptional,
   type PromptComposerProps,
   type PromptComposerFile,
   type PromptComposerSubmitOptions,
+  type RealtimeVoiceModeCopy,
+  type RealtimeVoiceModeDockProps,
+  type RealtimeVoiceModeEntryProps,
+  type RealtimeVoiceSessionAnswer,
+  type RealtimeVoiceModeInlineSettings,
+  type RealtimeVoiceModeSelectSetting,
+  type RealtimeVoiceModeSettingOption,
+  type RealtimeVoiceModeState,
+  type RealtimeVoiceModeApi,
+  type RealtimeVoiceModeProviderProps,
+  type RealtimeVoiceToolResult,
   type ComposerSubmitIntent,
   type AgentPromptAttachment,
   type ReadAgentPromptAttachmentOptions,
@@ -515,6 +565,12 @@ export {
   type ChatThreadShareState,
   type UseChatThreadsOptions,
 } from "./use-chat-threads.js";
+export {
+  ChatHistoryList,
+  type ChatHistoryItem,
+  type ChatHistorySection,
+  type ChatHistoryListProps,
+} from "./chat/ChatHistoryList.js";
 export { AgentChatHome, type AgentChatHomeProps } from "./AgentChatHome.js";
 export {
   AgentChatSurface,
@@ -620,29 +676,23 @@ export { AgentNativeIcon } from "./components/icons/AgentNativeIcon.js";
 export {
   SettingsPanel,
   SettingsTabsPage,
+  SecretsSection,
+  openBuilderConnectPopup,
+  useAgentSettingsTabs,
+  useBuilderConnectFlow,
+  useBuilderStatus,
+  withBuilderConnectTrackingParams,
+  type BuilderConnectFlow,
+  type BuilderConnectFlowOptions,
+  type BuilderConnectStartOptions,
+  type BuilderStatus,
+  type OpenBuilderConnectPopupOptions,
+  type SecretsSectionProps,
   type SettingsPanelProps,
+  type SettingsSearchEntry,
   type SettingsTabItem,
   type SettingsTabsPageProps,
 } from "./settings/index.js";
-export { useBuilderStatus } from "./settings/useBuilderStatus.js";
-export {
-  openBuilderConnectPopup,
-  useBuilderConnectFlow,
-  type BuilderConnectFlow,
-  type BuilderConnectFlowOptions,
-  type OpenBuilderConnectPopupOptions,
-} from "./settings/useBuilderStatus.js";
-// Deprecated — use AgentSidebar + AgentToggleButton instead
-export {
-  ProductionAgentPanel,
-  type ProductionAgentPanelProps,
-} from "./ProductionAgentPanel.js";
-export {
-  useProductionAgent,
-  type ProductionAgentMessage,
-  type UseProductionAgentOptions,
-  type UseProductionAgentResult,
-} from "./useProductionAgent.js";
 export { Turnstile, type TurnstileProps } from "./Turnstile.js";
 export {
   OpenSourceBadge,
@@ -655,11 +705,22 @@ export {
   type StarfieldBackgroundProps,
 } from "./StarfieldBackground.js";
 export { FeedbackButton, type FeedbackButtonProps } from "./FeedbackButton.js";
+export {
+  ErrorReportActions,
+  type ErrorReportActionsProps,
+} from "./ErrorReportActions.js";
+export {
+  buildErrorReportTemplate,
+  buildGitHubIssueUrl,
+  type ErrorReportDebugItem,
+  type ErrorReportTemplateOptions,
+} from "./error-reporting.js";
 export { getClientSurface, type ClientSurface } from "./client-surface.js";
 export {
   DevDatabaseLink,
   type DevDatabaseLinkProps,
 } from "./db-admin/DevDatabaseLink.js";
+export { DbAdminPage } from "./db-admin/DbAdminPage.js";
 export { ErrorBoundary } from "./ErrorBoundary.js";
 export {
   installRouteChunkRecovery,
@@ -699,8 +760,19 @@ export {
   setSentryUser,
   captureError,
   captureClientException,
+  // First-party, Sentry-style error capture (auto + manual API).
+  AGENT_NATIVE_EXCEPTION_EVENT_NAME,
+  addErrorBreadcrumb,
+  captureException,
+  captureMessage,
+  isErrorCaptureInstalled,
+  type CaptureExceptionContext,
+  type CapturedExceptionEvent,
   type ClientCaptureContext,
   type ConfigureTrackingOptions,
+  type ErrorCaptureConfigOptions,
+  type ExceptionBreadcrumb,
+  type ExceptionLevel,
   type FirstTouchAttribution,
   type SessionReplayOptions,
   type SessionReplayStartResult,
@@ -752,6 +824,51 @@ export {
   type ResourceTreeProps,
   type ResourceEditorProps,
 } from "./resources/index.js";
+export {
+  HistoryTimeline,
+  VersionHistoryPanel,
+  useCreateResourceVersion,
+  useResourceHistory,
+  useResourceVersion,
+  useResourceVersions,
+  useRestoreResourceVersion,
+  type CreateResourceVersionInput,
+  type GetResourceVersionInput,
+  type GetResourceVersionResult,
+  type ListResourceHistoryResult,
+  type ListResourceVersionsResult,
+  type ResourceHistoryParams,
+  type ResourceVersionsParams,
+  type RestoreResourceVersionInput,
+  type RestoreResourceVersionResult,
+  type VersionHistoryPanelProps,
+} from "./history/index.js";
+export {
+  ReviewStatusBadge,
+  ReviewThreadPanel,
+  buildReviewThreads,
+  useConsumeReviewFeedback,
+  useCreateReviewComment,
+  useDeleteReviewComment,
+  useReplyReviewComment,
+  useResolveReviewThread,
+  useReviewComments,
+  useReviewFeedback,
+  useSetReviewStatus,
+  type ConsumeReviewFeedbackInput,
+  type CreateReviewCommentInput,
+  type DeleteReviewCommentInput,
+  type GetReviewFeedbackParams,
+  type GetReviewFeedbackResult,
+  type ListReviewCommentsParams,
+  type ListReviewCommentsResult,
+  type ReplyReviewCommentInput,
+  type ResolveReviewThreadInput,
+  type ReviewStatusBadgeProps,
+  type ReviewThread,
+  type ReviewThreadPanelProps,
+  type SetReviewStatusInput,
+} from "./review/index.js";
 export type {
   AppToFrameMessage,
   FrameToAppMessage,
@@ -761,10 +878,10 @@ export type {
 } from "./frame-protocol.js";
 export {
   CommandMenu,
-  useCommandMenuShortcut,
   openAgentSidebar,
   openAgentSettings,
   submitToAgent,
+  useCommandMenuShortcut,
   type CommandMenuProps,
   type CommandMenuDoc,
   type CommandDocsGroupProps,
@@ -772,6 +889,63 @@ export {
   type CommandItemProps,
   type CommandShortcutProps,
 } from "./CommandMenu.js";
+export {
+  buildOpenRouteLink,
+  buildOpenRoutePath,
+  buildResourceRoute,
+  buildSettingsRoute,
+  buildStandardAppRoute,
+  buildTeamRoute,
+  createStandardOpenPathResolver,
+  STANDARD_APP_ROUTES,
+  STANDARD_SETTINGS_TABS,
+  type BuildResourceRouteOptions,
+  type BuildStandardAppRouteOptions,
+  type NavigationLink,
+  type NavigationTarget,
+  type StandardAppRouteId,
+  type StandardOpenPathResolverOptions,
+  type StandardOpenPathRoute,
+  type StandardSettingsTabId,
+} from "../navigation/index.js";
+export {
+  BuilderConnectCard,
+  ProviderReadinessBadge,
+  SetupConnectionsPage,
+  type BuilderConnectCardProps,
+  type ProviderReadinessBadgeProps,
+  type SetupConnectionsPageProps,
+} from "./setup-connections/index.js";
+export {
+  listIntegrationEnvStatuses,
+  listIntegrationStatuses,
+  saveIntegrationEnvVars,
+  setIntegrationEnabled,
+  setupIntegration,
+  disconnectManagedIntegrationInstallation,
+  listManagedIntegrationInstallations,
+  managedIntegrationOAuthUrl,
+  managedSlackAgentManifestUrl,
+  listManagedIntegrationScopes,
+  saveManagedIntegrationScope,
+  listManagedIntegrationBudgets,
+  listManagedIntegrationMemory,
+  forgetManagedIntegrationMemory,
+  saveManagedIntegrationBudget,
+  testManagedIntegrationInstallation,
+  IntegrationClientError,
+  type ClientIntegrationInstallation,
+  type ClientIntegrationScope,
+  type ClientIntegrationUsageBudget,
+  type ClientIntegrationMemory,
+  type ClientIntegrationStatus,
+  type IntegrationEnvStatus,
+  type SavedEnvVarsResult,
+} from "./integrations/index.js";
+export {
+  invokeConfiguredAutomationWorkflow,
+  type InvokeConfiguredAutomationWorkflowInput,
+} from "./automation.js";
 export {
   ChangelogDialog,
   ChangelogSettingsCard,
@@ -802,12 +976,16 @@ export {
   type DevOptionValue,
 } from "./dev-overlay/index.js";
 export {
+  ACTION_KEEPALIVE_BODY_BUDGET_BYTES,
   callAction,
+  tryCallActionKeepalive,
   useActionQuery,
   useActionMutation,
   type ActionRegistry,
   type ClientActionCallOptions,
   type ClientActionMethod,
+  type KeepaliveActionCallRejectionReason,
+  type KeepaliveActionCallResult,
 } from "./use-action.js";
 export { createAgentNativeQueryClient } from "./create-query-client.js";
 export { AppProviders, type AppProvidersProps } from "./app-providers.js";
@@ -853,7 +1031,40 @@ export {
 export {
   RemoteSelectionRings,
   type RemoteSelectionRingsProps,
+  type SelectionDescriptor,
 } from "./components/RemoteSelectionRings.js";
+export {
+  RecentEditHighlights,
+  type RecentEditHighlightsProps,
+} from "./components/RecentEditHighlights.js";
+// Recent-edit attribution (lingering highlights)
+export {
+  appendRecentEdit,
+  collectRecentEdits,
+  publishRecentEdit,
+  useRecentEdits,
+  RECENT_EDITS_MAX,
+  RECENT_EDIT_TTL_MS,
+  type RecentEdit,
+  type RecentEditDescriptor,
+  type AttributedRecentEdit,
+  type UseRecentEditsOptions,
+} from "../collab/recent-edits.js";
+// Per-user undo/redo
+export {
+  useCollabUndo,
+  useLocalOpUndo,
+  createLocalOpUndoController,
+  type UseCollabUndoOptions,
+  type UseCollabUndoResult,
+  type CollabUndoScope,
+  type UseLocalOpUndoOptions,
+  type UseLocalOpUndoResult,
+  type LocalOpUndoEntry,
+  type LocalOpUndoController,
+  type CreateLocalOpUndoOptions,
+  type UndoKeyboardOptions,
+} from "../collab/undo.js";
 // Structured data collaboration hooks
 export {
   useCollaborativeMap,

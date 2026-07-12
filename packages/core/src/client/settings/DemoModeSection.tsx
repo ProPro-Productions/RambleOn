@@ -1,7 +1,7 @@
 /**
- * <DemoModeSection /> — toggle that replaces names, emails, and numbers with
- * realistic fake data everywhere (UI + what the agent sees) while preserving
- * IDs and structure so the app keeps working.
+ * <DemoModeSection /> — toggle that replaces contact/free-text names, emails,
+ * and numbers with realistic fake data everywhere (UI + what the agent sees)
+ * while preserving labels, IDs, and structure so the app keeps working.
  *
  * The toggle is stored in application_state under `demo-mode`
  * (`{ enabled: boolean }`) and written via `PUT
@@ -17,6 +17,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
 import { agentNativePath } from "../api-path.js";
+import { useChangeVersion } from "../use-change-version.js";
 
 interface DemoStatus {
   enabled?: boolean;
@@ -30,9 +31,10 @@ const DEMO_MODE_WRITE_URL = agentNativePath(
 
 export function DemoModeSection() {
   const [enabled, setEnabled] = useState<boolean | null>(null);
+  const demoModeVersion = useChangeVersion("app-state:demo-mode");
 
   const { data } = useQuery({
-    queryKey: ["agent-native", "demo-mode"],
+    queryKey: ["agent-native", "demo-mode", demoModeVersion],
     queryFn: async () => {
       const res = await fetch(DEMO_STATUS_URL, {
         credentials: "same-origin",
@@ -40,8 +42,7 @@ export function DemoModeSection() {
       if (!res.ok) return null;
       return (await res.json()) as DemoStatus | null;
     },
-    refetchInterval: 4_000,
-    staleTime: 2_000,
+    staleTime: Infinity,
   });
 
   const serverEnabled = data?.enabled;
@@ -87,9 +88,9 @@ export function DemoModeSection() {
           Enable demo mode
         </div>
         <p className="text-[10px] text-muted-foreground mt-0.5">
-          Replace names, emails, and numbers with realistic fake data everywhere
-          — in the UI and what the agent sees. IDs and structure are preserved
-          so the app keeps working.
+          Replace contact/free-text names, emails, and numbers with realistic
+          fake data everywhere — in the UI and what the agent sees. Labels, IDs,
+          and structure are preserved so the app keeps working.
         </p>
         {forced && (
           <p className="text-[10px] text-muted-foreground mt-0.5">

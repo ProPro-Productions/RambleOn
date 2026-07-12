@@ -20,18 +20,18 @@ of these two files may be modified.
 
 ## Marker per file
 
-| File     | Marker (appended to the English text)   |
-| -------- | ---------------------------------------- |
-| ar-SA.ts | ` (مترجم)`                                |
-| de-DE.ts | ` (Lokalisiert)`                          |
-| es-ES.ts | ` (Localizado)`                           |
-| fr-FR.ts | ` (Localisé)`                             |
-| hi-IN.ts | ` (स्थानीयकृत)`                             |
-| ja-JP.ts | ` (ローカライズ済み)`                       |
-| ko-KR.ts | ` (현지화됨)`                              |
-| pt-BR.ts | ` (Localizado)`                           |
-| zh-CN.ts | ` (已本地化)`                              |
-| zh-TW.ts | no marker — keys are missing instead      |
+| File     | Marker (appended to the English text) |
+| -------- | ------------------------------------- |
+| ar-SA.ts | ` (مترجم)`                            |
+| de-DE.ts | ` (Lokalisiert)`                      |
+| es-ES.ts | ` (Localizado)`                       |
+| fr-FR.ts | ` (Localisé)`                         |
+| hi-IN.ts | ` (स्थानीयकृत)`                       |
+| ja-JP.ts | ` (ローカライズ済み)`                 |
+| ko-KR.ts | ` (현지화됨)`                         |
+| pt-BR.ts | ` (Localizado)`                       |
+| zh-CN.ts | ` (已本地化)`                         |
+| zh-TW.ts | no marker — keys are missing instead  |
 
 ## Task
 

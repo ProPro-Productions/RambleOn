@@ -51,6 +51,8 @@ export interface EditsJson {
   trims: TrimRange[];
   blurs: BlurBox[];
   thumbnail?: ThumbnailSpec | null;
+  /** Provenance: source recording IDs when this recording was created via stitch-recordings. */
+  stitchedFrom?: string[];
 }
 
 export const DEFAULT_EDITS: EditsJson = {
@@ -76,6 +78,9 @@ export function parseEdits(raw: string | null | undefined): EditsJson {
         : [],
       blurs: Array.isArray(j.blurs) ? (j.blurs as BlurBox[]) : [],
       thumbnail: j.thumbnail ?? null,
+      ...(Array.isArray(j.stitchedFrom)
+        ? { stitchedFrom: j.stitchedFrom as string[] }
+        : {}),
     };
   } catch {
     return { ...DEFAULT_EDITS };

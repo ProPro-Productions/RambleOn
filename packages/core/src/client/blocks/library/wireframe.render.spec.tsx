@@ -5,7 +5,10 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import type { BlockRenderContext } from "../types.js";
-import { HTML_ROUGH_SELECTOR } from "./wireframe-kit.js";
+import {
+  hasDrawableRoughBounds,
+  HTML_ROUGH_SELECTOR,
+} from "./wireframe-kit.js";
 import type { WireframeData } from "./wireframe.config.js";
 import { WireframeBlock } from "./wireframe.js";
 
@@ -26,12 +29,12 @@ import { WireframeBlock } from "./wireframe.js";
 
 const ctx = {} as unknown as BlockRenderContext;
 
-function render(data: WireframeData): string {
+function render(data: WireframeData, renderCtx = ctx): string {
   return renderToStaticMarkup(
     createElement(WireframeBlock, {
       data,
       blockId: "wf-1",
-      ctx,
+      ctx: renderCtx,
     }),
   );
 }
@@ -90,6 +93,15 @@ function roughScopeInnerHtml(html: string): string {
 }
 
 describe("wireframe auto-height frame", () => {
+  it("skips degenerate rough paths after applying their inset", () => {
+    expect(hasDrawableRoughBounds(4, 20, 2)).toBe(false);
+    expect(hasDrawableRoughBounds(20, 4, 2)).toBe(false);
+    expect(hasDrawableRoughBounds(2, 20, 1)).toBe(false);
+    expect(hasDrawableRoughBounds(Number.NaN, 20, 1)).toBe(false);
+    expect(hasDrawableRoughBounds(5, 5, 2)).toBe(true);
+    expect(hasDrawableRoughBounds(3, 3, 1)).toBe(true);
+  });
+
   it("roughens standard wireframe primitives by default", () => {
     expect(HTML_ROUGH_SELECTOR).toContain("[data-rough]");
     expect(HTML_ROUGH_SELECTOR).toContain("button");
@@ -169,6 +181,64 @@ describe("wireframe auto-height frame", () => {
     expect(html).toContain("bg-white");
     expect(html).toContain("text-zinc-950");
     expect(html).toContain("shadow-xl");
+  });
+
+  it("shows the surface frame by default", () => {
+    const html = render({
+      surface: "browser",
+      html: "<div>Framed by default</div>",
+    });
+
+    expect(html).toContain('data-frame="show"');
+  });
+
+  it("lets host context hide the surface frame by default", () => {
+    const html = render(
+      {
+        surface: "browser",
+        html: "<div>Docs-style borderless mockup</div>",
+      },
+      { visualFrame: "hide" },
+    );
+
+    expect(html).toContain('data-frame="hide"');
+  });
+
+  it("lets explicit block data override the host frame default", () => {
+    const html = render(
+      {
+        surface: "browser",
+        frame: "show",
+        html: "<div>Docs block that wants containment</div>",
+      },
+      { visualFrame: "hide" },
+    );
+
+    expect(html).toContain('data-frame="show"');
+  });
+
+  it("removes root HTML padding when the outer frame is hidden", () => {
+    const css = readFileSync("src/styles/blocks.css", "utf8");
+    const borderlessRootRule =
+      css.match(
+        /\.plan-html-frame\[data-frame="hide"\][^{]*>\s*:first-child\s*\{[^}]*\}/s,
+      )?.[0] ?? "";
+
+    expect(borderlessRootRule).toContain("margin: 0 !important");
+    expect(borderlessRootRule).toContain("padding: 0 !important");
+  });
+
+  it("removes root kit padding when the outer frame is hidden", () => {
+    const html = render(
+      {
+        surface: "browser",
+        screen: [{ el: "title", text: "Hi" }],
+      },
+      { visualFrame: "hide" },
+    );
+    const style = classStyle(html, "plan-wf");
+
+    expect(style).toMatch(/padding\s*:\s*0/);
   });
 
   it("floors the artboard with min-height and sets no fixed height (kit tree)", () => {
@@ -260,14 +330,23 @@ describe("wireframe auto-height frame", () => {
     expect(htmlFrameRule).not.toContain("background: var(--wf-paper)");
   });
 
-  it("does not render a static outer artboard border", () => {
+  it("renders the static outer artboard border only when the frame is shown", () => {
     const html = render({
       surface: "browser",
       skeleton: true,
       html: "<div>Skeleton mockup</div>",
     });
+    const borderlessHtml = render({
+      surface: "browser",
+      frame: "hide",
+      skeleton: true,
+      html: "<div>Skeleton mockup</div>",
+    });
 
-    expect(roughScopeInnerHtml(html)).not.toContain("border:1.5px solid");
+    expect(roughScopeInnerHtml(html)).toContain("border:1.5px solid");
+    expect(roughScopeInnerHtml(borderlessHtml)).not.toContain(
+      "border:1.5px solid",
+    );
   });
 
   it("renders a contextual visual style toggle", () => {

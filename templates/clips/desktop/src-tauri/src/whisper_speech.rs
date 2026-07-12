@@ -9,8 +9,10 @@
 //!
 //! Capture is reused from the existing modules:
 //!   - mic    → `native_speech::macos::start_raw_mic_capture` (AVAudioEngine +
-//!              VoiceProcessingIO AEC, other-audio ducking off)
-//!   - system → `system_audio::macos::start_raw_system_capture` (ScreenCaptureKit)
+//!              optional VoiceProcessingIO AEC, other-audio ducking off)
+//!   - meetings on macOS 15+ → one ScreenCaptureKit stream with independent
+//!              microphone + system-audio outputs
+//!   - legacy system audio → `system_audio::macos::start_raw_system_capture`
 //!
 use tauri::AppHandle;
 
@@ -21,6 +23,8 @@ pub async fn whisper_transcription_start(
     mic_device_id: Option<String>,
     mic_device_label: Option<String>,
     capture_system: bool,
+    voice_processing: bool,
+    owner: Option<String>,
 ) -> Result<(), String> {
     if !crate::config::feature_config(&app).whisper_model_enabled {
         return Err("whisper-model-disabled".into());
@@ -33,6 +37,8 @@ pub async fn whisper_transcription_start(
             mic_device_id,
             mic_device_label,
             capture_system,
+            voice_processing,
+            macos::SessionOwner::from_param(owner),
         )
         .await
     }
@@ -44,6 +50,8 @@ pub async fn whisper_transcription_start(
             mic_device_id,
             mic_device_label,
             capture_system,
+            voice_processing,
+            owner,
         );
         Err("Whisper transcription is only supported on macOS.".into())
     }
@@ -82,6 +90,15 @@ pub async fn whisper_transcription_stop(app: AppHandle) -> Result<(), String> {
     }
 }
 
+#[tauri::command]
+pub async fn whisper_transcription_reset_timeline() -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        macos::reset_timeline();
+    }
+    Ok(())
+}
+
 #[cfg(target_os = "macos")]
 mod macos {
     use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
@@ -92,8 +109,13 @@ mod macos {
     use tauri::{AppHandle, Emitter};
     use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
-    use crate::native_speech::macos::{start_raw_mic_capture, RawMicCapture};
-    use crate::system_audio::macos::{start_raw_system_capture, RawSystemCapture};
+    use crate::native_speech::macos::{
+        start_raw_mic_capture, MicVoiceProcessingMode, RawMicCapture,
+    };
+    use crate::system_audio::macos::{
+        start_raw_meeting_capture, start_raw_system_capture, supports_sck_microphone_capture,
+        RawSckAudioCapture,
+    };
     use crate::whisper_model::{ensure_model, model_file};
 
     /// One transcript segment with real timestamps from whisper, already
@@ -113,6 +135,11 @@ mod macos {
         source: &'static str,
         /// Per-segment real timestamps (empty for the SFSpeech fallback path).
         segments: Vec<Segment>,
+    }
+
+    struct StreamTimeline {
+        stream_start: Instant,
+        buffer_start: Instant,
     }
 
     /// Process-wide whisper context, loaded once and reused across meetings.
@@ -192,11 +219,15 @@ mod macos {
         /// Capture start — t=0 of the meeting timeline. Mic and system streams
         /// start within a few ms of each other, so their segment timestamps
         /// share one timeline.
-        stream_start: Instant,
-        /// When the CURRENT buffer began (reset on each finalize/clear). Whisper
-        /// timestamps are relative to the buffer, so this is the offset onto the
-        /// meeting timeline.
-        buffer_start: Mutex<Instant>,
+        ///
+        /// Native recordings can warm this capture before the countdown ends;
+        /// they reset this timeline when ScreenCaptureKit actually attaches the
+        /// recording output so transcript timestamps stay video-relative.
+        timeline: Mutex<StreamTimeline>,
+        /// Incremented when the timeline and buffer are reset. The worker has
+        /// local counters that must be reset after the realtime callback clears
+        /// the shared sample buffer.
+        reset_generation: AtomicU32,
     }
 
     impl WhisperStream {
@@ -217,8 +248,11 @@ mod macos {
                 running: Arc::new(AtomicBool::new(true)),
                 done: done.clone(),
                 app,
-                stream_start,
-                buffer_start: Mutex::new(stream_start),
+                timeline: Mutex::new(StreamTimeline {
+                    stream_start,
+                    buffer_start: stream_start,
+                }),
+                reset_generation: AtomicU32::new(0),
             });
             let worker_stream = stream.clone();
             std::thread::spawn(move || {
@@ -248,9 +282,14 @@ mod macos {
 
         /// Offset (ms) of the current buffer onto the meeting timeline.
         fn offset_ms(&self) -> i64 {
-            self.buffer_start
+            self.timeline
                 .lock()
-                .map(|b| b.duration_since(self.stream_start).as_millis() as i64)
+                .map(|timeline| {
+                    timeline
+                        .buffer_start
+                        .saturating_duration_since(timeline.stream_start)
+                        .as_millis() as i64
+                })
                 .unwrap_or(0)
         }
 
@@ -258,9 +297,23 @@ mod macos {
         /// on finalize) so the next utterance's whisper timestamps offset
         /// correctly onto the meeting timeline.
         fn reset_buffer_start(&self) {
-            if let Ok(mut b) = self.buffer_start.lock() {
-                *b = Instant::now();
+            if let Ok(mut timeline) = self.timeline.lock() {
+                timeline.buffer_start = Instant::now();
             }
+        }
+
+        /// Rebase timestamps to "now" and discard any audio captured while the
+        /// recorder was warming up/counting down.
+        fn reset_timeline(&self) {
+            if let Ok(mut buf) = self.buf.lock() {
+                buf.clear();
+            }
+            let now = Instant::now();
+            if let Ok(mut timeline) = self.timeline.lock() {
+                timeline.stream_start = now;
+                timeline.buffer_start = now;
+            }
+            self.reset_generation.fetch_add(1, Ordering::SeqCst);
         }
 
         /// Clean an inference result and, if it survives, emit it on `event`
@@ -383,9 +436,20 @@ mod macos {
         // threshold. Whisper hallucinates filler ("you", "thank you") on
         // silent audio, so we NEVER run inference on a buffer with no voice.
         let mut had_voice = false;
+        let mut seen_reset_generation = stream.reset_generation.load(Ordering::SeqCst);
 
         while stream.running.load(Ordering::SeqCst) {
             std::thread::sleep(Duration::from_millis(250));
+
+            let reset_generation = stream.reset_generation.load(Ordering::SeqCst);
+            if reset_generation != seen_reset_generation {
+                seen_reset_generation = reset_generation;
+                last_len = 0;
+                last_voice = Instant::now();
+                last_infer = Instant::now() - Duration::from_secs(10);
+                had_voice = false;
+                continue;
+            }
 
             // Clone the raw buffer (cheap relative to inference), then resample
             // to 16 kHz here on the worker rather than on the audio thread.
@@ -395,6 +459,9 @@ mod macos {
             };
             let src_rate = stream.src_rate.load(Ordering::SeqCst) as f64;
             let samples = resample_to_16k(&raw, src_rate);
+            if stream.reset_generation.load(Ordering::SeqCst) != seen_reset_generation {
+                continue;
+            }
             let len = samples.len();
 
             // Track voice activity over the newly-arrived region.
@@ -489,13 +556,75 @@ mod macos {
 
     // ---- session ----------------------------------------------------------
 
+    /// Who owns an in-flight whisper `Session`. Mirrors
+    /// `native_speech::macos::SessionOwner` — meeting beats dictation; all
+    /// other combinations (same owner replacing itself, or a meeting evicting
+    /// a dictation session) keep the original unconditional stop+replace
+    /// behavior.
+    #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+    pub(crate) enum SessionOwner {
+        Dictation,
+        Meeting,
+    }
+
+    impl SessionOwner {
+        /// Parses the Tauri command's `owner` string param, defaulting to
+        /// `Dictation` for back-compat with callers that omit it.
+        pub(crate) fn from_param(owner: Option<String>) -> Self {
+            match owner.as_deref() {
+                Some("meeting") => SessionOwner::Meeting,
+                _ => SessionOwner::Dictation,
+            }
+        }
+    }
+
+    fn should_use_combined_sck_capture(
+        owner: SessionOwner,
+        microphone_capture_supported: bool,
+    ) -> bool {
+        owner == SessionOwner::Meeting && microphone_capture_supported
+    }
+
+    #[derive(Debug, PartialEq, Eq)]
+    struct SplitMicCaptureOptions {
+        voice_processing: MicVoiceProcessingMode,
+        reuse_voice_processing_engine: bool,
+    }
+
+    fn split_mic_capture_options(
+        owner: SessionOwner,
+        capture_system: bool,
+        requested_voice_processing: bool,
+    ) -> SplitMicCaptureOptions {
+        let voice_processing = match owner {
+            // If SCK microphone capture is unavailable or fails, keep a VPIO
+            // allocation so Zoom/Meet/Teams cannot starve Clips of mic buffers,
+            // but bypass its uplink processing to preserve call volume/quality.
+            SessionOwner::Meeting => MicVoiceProcessingMode::Bypassed,
+            SessionOwner::Dictation if requested_voice_processing => {
+                MicVoiceProcessingMode::Enabled
+            }
+            SessionOwner::Dictation => MicVoiceProcessingMode::Disabled,
+        };
+        SplitMicCaptureOptions {
+            voice_processing,
+            reuse_voice_processing_engine: owner == SessionOwner::Dictation
+                && !capture_system
+                && voice_processing == MicVoiceProcessingMode::Enabled,
+        }
+    }
+
     struct Session {
-        mic_cap: RawMicCapture,
+        // macOS 15+ meetings use a combined SCK capture, so there is no
+        // competing AVAudioEngine / VoiceProcessingIO mic input to stop.
+        mic_cap: Option<RawMicCapture>,
         // System capture is optional — skipped when the user turns system
         // audio off, so neither the recording nor the transcript include it.
-        sys_cap: Option<RawSystemCapture>,
+        sys_cap: Option<RawSckAudioCapture>,
         mic: Arc<WhisperStream>,
         sys: Option<Arc<WhisperStream>>,
+        /// Who started this session — see `SessionOwner`.
+        owner: SessionOwner,
     }
 
     // SAFETY: the capture handles hold refcounted ObjC objects (already
@@ -514,8 +643,25 @@ mod macos {
         mic_device_id: Option<String>,
         mic_device_label: Option<String>,
         capture_system: bool,
+        voice_processing: bool,
+        owner: SessionOwner,
     ) -> Result<(), String> {
-        // Tear down any prior session first.
+        // Priority rule (D10): a meeting-owned session must never be
+        // silently evicted by a dictation takeover. Check (without taking)
+        // BEFORE calling `stop()`, so a refused dictation start leaves the
+        // meeting's session completely untouched.
+        {
+            let slot = session_slot().lock().map_err(|e| e.to_string())?;
+            if let Some(prev) = slot.as_ref() {
+                if prev.owner == SessionOwner::Meeting && owner == SessionOwner::Dictation {
+                    return Err("speech-engine-busy-meeting".into());
+                }
+            }
+        }
+
+        // Tear down any prior session first. (Any other owner combination —
+        // same-owner replacement, or meeting evicting dictation — keeps this
+        // unconditional stop+replace behavior.)
         stop(&app);
 
         // Download (first run) + load the model before opening any capture so a
@@ -543,8 +689,10 @@ mod macos {
         let _ = language;
         let lang: Option<String> = None;
 
-        // Mic stream + capture. The real hardware rate is read back from the
-        // capture handle and pushed into the stream (default 48 kHz until then).
+        // Create both Whisper streams first. On macOS 15+ meetings, one
+        // ScreenCaptureKit stream feeds both callbacks without opening a
+        // competing VoiceProcessingIO mic input. Older macOS versions (and a
+        // failed SCK start) keep the existing split-capture fallback.
         let session_start = Instant::now();
         let mic_stream = WhisperStream::new(
             app.clone(),
@@ -554,47 +702,92 @@ mod macos {
             ctx.clone(),
             session_start,
         );
-        let mic_for_cb = mic_stream.clone();
-        let mic_cap = start_raw_mic_capture(
-            app.clone(),
-            mic_device_id,
-            mic_device_label,
-            Arc::new(move |s: &[f32]| mic_for_cb.push(s)),
-        )
-        .map_err(|e| {
-            mic_stream.stop();
-            format!("mic capture failed: {e}")
-        })?;
-        mic_stream.set_src_rate(mic_cap.sample_rate());
-
-        // System stream + capture (SCK delivers 48 kHz). Skipped entirely when
-        // system audio is off.
-        let (sys_stream, sys_cap) = if capture_system {
-            let sys_stream = WhisperStream::new(
+        let sys_stream = capture_system.then(|| {
+            WhisperStream::new(
                 app.clone(),
                 "system",
                 48000.0,
                 lang.clone(),
                 ctx.clone(),
                 session_start,
-            );
-            let sys_for_cb = sys_stream.clone();
-            let sys_cap = match start_raw_system_capture(
+            )
+        });
+        let mic_for_cb = mic_stream.clone();
+        let mic_callback: Arc<dyn Fn(&[f32]) + Send + Sync> =
+            Arc::new(move |samples: &[f32]| mic_for_cb.push(samples));
+        let system_callback: Option<Arc<dyn Fn(&[f32]) + Send + Sync>> =
+            sys_stream.as_ref().map(|stream| {
+                let stream = stream.clone();
+                Arc::new(move |samples: &[f32]| stream.push(samples))
+                    as Arc<dyn Fn(&[f32]) + Send + Sync>
+            });
+
+        let combined_cap = if should_use_combined_sck_capture(
+            owner,
+            supports_sck_microphone_capture(),
+        ) {
+            match start_raw_meeting_capture(
                 app.clone(),
-                Arc::new(move |s: &[f32]| sys_for_cb.push(s)),
+                mic_device_id.clone(),
+                mic_device_label.clone(),
+                capture_system,
+                mic_callback.clone(),
+                system_callback.clone(),
             ) {
-                Ok(cap) => cap,
-                Err(e) => {
-                    // Roll back the mic side so we don't leave a half-open meeting.
-                    sys_stream.stop();
-                    mic_stream.stop();
-                    mic_cap.stop();
-                    return Err(format!("system capture failed: {e}"));
+                Ok(cap) => {
+                    eprintln!("[whisper] using combined ScreenCaptureKit mic + system capture");
+                    Some(cap)
                 }
-            };
-            (Some(sys_stream), Some(sys_cap))
+                Err(e) => {
+                    eprintln!(
+                        "[whisper] combined ScreenCaptureKit meeting capture failed: {e}; falling back to split capture"
+                    );
+                    None
+                }
+            }
         } else {
-            (None, None)
+            None
+        };
+
+        let (mic_cap, sys_cap) = if let Some(combined_cap) = combined_cap {
+            // Both SCK outputs are configured at 48 kHz.
+            mic_stream.set_src_rate(48000.0);
+            (None, Some(combined_cap))
+        } else {
+            let mic_options = split_mic_capture_options(owner, capture_system, voice_processing);
+            let mic_cap = start_raw_mic_capture(
+                app.clone(),
+                mic_device_id,
+                mic_device_label,
+                mic_options.voice_processing,
+                mic_options.reuse_voice_processing_engine,
+                mic_callback,
+            )
+            .map_err(|e| {
+                mic_stream.stop();
+                if let Some(sys_stream) = &sys_stream {
+                    sys_stream.stop();
+                }
+                format!("mic capture failed: {e}")
+            })?;
+            mic_stream.set_src_rate(mic_cap.sample_rate());
+
+            let sys_cap = if let Some(system_callback) = system_callback {
+                match start_raw_system_capture(app.clone(), system_callback) {
+                    Ok(cap) => Some(cap),
+                    Err(e) => {
+                        if let Some(sys_stream) = &sys_stream {
+                            sys_stream.stop();
+                        }
+                        mic_stream.stop();
+                        mic_cap.stop();
+                        return Err(format!("system capture failed: {e}"));
+                    }
+                }
+            } else {
+                None
+            };
+            (Some(mic_cap), sys_cap)
         };
 
         let mut slot = session_slot().lock().map_err(|e| e.to_string())?;
@@ -603,12 +796,33 @@ mod macos {
             sys_cap,
             mic: mic_stream,
             sys: sys_stream,
+            owner,
         });
         eprintln!(
             "[whisper] transcription started (mic{})",
             if capture_system { " + system" } else { "" }
         );
         Ok(())
+    }
+
+    pub fn reset_timeline() {
+        let session = match session_slot().lock() {
+            Ok(slot) => slot.as_ref().map(|session| {
+                (
+                    session.mic.clone(),
+                    session.sys.as_ref().map(|stream| stream.clone()),
+                )
+            }),
+            Err(_) => None,
+        };
+        let Some((mic, sys)) = session else {
+            return;
+        };
+        mic.reset_timeline();
+        if let Some(sys) = sys {
+            sys.reset_timeline();
+        }
+        eprintln!("[whisper] transcription timeline reset");
     }
 
     pub fn stop(_app: &AppHandle) {
@@ -625,7 +839,9 @@ mod macos {
             sys.stop();
         }
         // Stop captures so no more samples arrive while workers flush.
-        session.mic_cap.stop();
+        if let Some(mic_cap) = session.mic_cap {
+            mic_cap.stop();
+        }
         if let Some(sys_cap) = session.sys_cap {
             sys_cap.stop();
         }
@@ -643,5 +859,67 @@ mod macos {
             std::thread::sleep(Duration::from_millis(50));
         }
         eprintln!("[whisper] meeting transcription stopped");
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::{should_use_combined_sck_capture, split_mic_capture_options, SessionOwner};
+        use crate::native_speech::macos::MicVoiceProcessingMode;
+
+        #[test]
+        fn combined_sck_capture_is_only_selected_for_supported_meetings() {
+            assert!(should_use_combined_sck_capture(SessionOwner::Meeting, true));
+            assert!(!should_use_combined_sck_capture(
+                SessionOwner::Meeting,
+                false
+            ));
+            assert!(!should_use_combined_sck_capture(
+                SessionOwner::Dictation,
+                true
+            ));
+        }
+
+        #[test]
+        fn meeting_split_capture_uses_bypassed_voice_processing() {
+            assert_eq!(
+                split_mic_capture_options(SessionOwner::Meeting, true, false),
+                super::SplitMicCaptureOptions {
+                    voice_processing: MicVoiceProcessingMode::Bypassed,
+                    reuse_voice_processing_engine: false,
+                }
+            );
+            assert_eq!(
+                split_mic_capture_options(SessionOwner::Meeting, false, true),
+                super::SplitMicCaptureOptions {
+                    voice_processing: MicVoiceProcessingMode::Bypassed,
+                    reuse_voice_processing_engine: false,
+                }
+            );
+        }
+
+        #[test]
+        fn dictation_split_capture_preserves_requested_processing() {
+            assert_eq!(
+                split_mic_capture_options(SessionOwner::Dictation, false, true),
+                super::SplitMicCaptureOptions {
+                    voice_processing: MicVoiceProcessingMode::Enabled,
+                    reuse_voice_processing_engine: true,
+                }
+            );
+            assert_eq!(
+                split_mic_capture_options(SessionOwner::Dictation, true, false),
+                super::SplitMicCaptureOptions {
+                    voice_processing: MicVoiceProcessingMode::Disabled,
+                    reuse_voice_processing_engine: false,
+                }
+            );
+            assert_eq!(
+                split_mic_capture_options(SessionOwner::Dictation, true, true),
+                super::SplitMicCaptureOptions {
+                    voice_processing: MicVoiceProcessingMode::Enabled,
+                    reuse_voice_processing_engine: false,
+                }
+            );
+        }
     }
 }

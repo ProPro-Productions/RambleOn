@@ -1532,7 +1532,7 @@ function ThreadLoadingState({
       <div className="flex-1 overflow-y-auto px-3 sm:px-5 pb-4">
         <div className="mx-auto max-w-3xl space-y-3 pt-1.5">
           {preview ? (
-            <div className="rounded-lg bg-card dark:bg-[hsl(220,5%,10%)] overflow-hidden px-3 sm:px-4 py-3 sm:py-4">
+            <div className="rounded-lg bg-card dark:bg-[var(--mail-message-surface)] overflow-hidden px-3 sm:px-4 py-3 sm:py-4">
               <div className="flex items-start gap-3">
                 <Skeleton className="h-9 w-9 rounded-full shrink-0" />
                 <div className="flex-1 min-w-0 space-y-3">
@@ -1583,7 +1583,7 @@ function ThreadMessageSkeleton({ compact = false }: { compact?: boolean }) {
   }
 
   return (
-    <div className="rounded-lg bg-card dark:bg-[hsl(220,5%,10%)] overflow-hidden px-4 py-4">
+    <div className="rounded-lg bg-card dark:bg-[var(--mail-message-surface)] overflow-hidden px-4 py-4">
       <div className="flex items-start gap-3">
         <Skeleton className="h-9 w-9 rounded-full shrink-0" />
         <div className="flex-1 space-y-3">
@@ -1719,7 +1719,7 @@ const ExpandedMessageCard = forwardRef<
       ref={ref}
       onClick={onFocus}
       className={cn(
-        "rounded-lg bg-card dark:bg-[hsl(220,5%,10%)] overflow-hidden cursor-pointer",
+        "rounded-lg bg-card dark:bg-[var(--mail-message-surface)] overflow-hidden cursor-pointer",
         isFocused
           ? "ring-1 ring-primary/40"
           : "ring-1 ring-transparent hover:ring-border/30",
@@ -2204,8 +2204,9 @@ function PlainTextBody({
 
 // ─── HTML email body (iframe) ────────────────────────────────────────────────
 
-// Match the expanded card bg: hsl(220, 5%, 10%) ≈ #17181a
-const IFRAME_BG_DARK = "#17181a";
+// Let normalized dark-mode emails inherit the message card's themed surface.
+// The iframe and its document are transparent, so theme token changes stay in sync.
+const IFRAME_BG_DARK = "transparent";
 const IFRAME_BG_LIGHT = "#ffffff";
 
 // ─── Color utilities for dark-mode email processing ─────────────────────────
@@ -3041,6 +3042,7 @@ function HtmlEmailBody({
       } catch {}
     });
 
+    let handleRsvpClick: ((e: MouseEvent) => void) | null = null;
     if (calEventId && rsvpLinks.length > 0) {
       const eventId = calEventId;
       rsvpLinks.forEach((a) => {
@@ -3082,7 +3084,7 @@ function HtmlEmailBody({
       });
 
       // Handle RSVP clicks inline
-      const handleRsvpClick = async (e: MouseEvent) => {
+      handleRsvpClick = async (e: MouseEvent) => {
         const anchor = (e.target as Element)?.closest?.(
           'a[href*="calendar.google.com/calendar/event"]',
         ) as HTMLElement | null;
@@ -3188,6 +3190,7 @@ function HtmlEmailBody({
 
     return () => {
       doc.removeEventListener("click", handleLinkClick);
+      if (handleRsvpClick) doc.removeEventListener("click", handleRsvpClick);
       doc.removeEventListener("keydown", forwardKey);
       clearTimeout(timer);
       clearTimeout(timer2);

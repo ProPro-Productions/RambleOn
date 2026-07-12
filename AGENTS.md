@@ -71,6 +71,12 @@ step is still pending. Use `🔴` only when blocked on user input.
   have a safe way to call it directly through the provider API substrate. If an
   app stores provider credentials on resource/share rows, add a scoped resolver
   that preserves those access checks before exposing raw provider requests.
+- Treat Clay as a credentialed GTM provider API, not as a messaging channel.
+  Hosted access uses `CLAY_PUBLIC_API_KEY` through the provider API substrate;
+  the optional local Clay CLI/MCP plugin has a separate browser-login session
+  and must not be required, auto-installed, or vendored by default. Its public
+  repository currently declares no license. Use n8n and Zapier as
+  automation/workflow or remote MCP connections rather than provider presets.
 - For composable workspace workflows, prefer many focused headless or small-UI
   mini-apps that discover and call each other over A2A instead of one oversized
   app. Pass artifact ids, URLs, and bounded summaries between apps instead of
@@ -108,6 +114,13 @@ instructions, and application state.
 
 - Schema changes must be additive. Never drop, rename, truncate, or destructively
   alter tables or columns in migrations or startup code.
+- SQL stores structured app state, metadata, references, and searchable text. Do
+  not store large raw payloads — files, images, videos, audio, PDFs, ZIPs,
+  screenshots, session replay chunks, thumbnails, `data:` URLs, or base64 file
+  bodies — in SQL tables, `application_state`, `settings`, or `resources`. Use
+  configured file/blob storage (`uploadFile`, `putPrivateBlob`, provider object
+  storage) and persist only URLs, ids, or opaque handles. In hosted or persistent
+  DB mode, fail closed with setup guidance instead of falling back to SQL blobs.
 - Never use `drizzle-kit push` against production databases.
 - Tables with `ownableColumns()` require scoped reads and writes through
   `accessFilter`, `resolveAccess`, or `assertAccess`. Custom Nitro routes must
@@ -189,6 +202,7 @@ Read the relevant skill before making changes in that area:
 - `adding-a-feature` for the four-area checklist.
 - `context-xray` for inspecting and managing the live agent context window.
 - `actions` for action definitions and invocation.
+- `data-programs` for stored, cached data-source scripts bound to app panels.
 - `storing-data`, `portability`, `security`, `sharing` for data work.
 - `audit-log` for the automatic action-level audit trail (who changed what,
   when, agent vs human) and the scoped `list-audit-events` read surface.
@@ -201,12 +215,19 @@ Read the relevant skill before making changes in that area:
 - `client-methods` for browser/client APIs that must use named helpers instead
   of raw REST calls.
 - `delegate-to-agent` for LLM/agent delegation.
+- `agent-native-toolkit` for deciding whether settings, app chrome,
+  collaboration, sharing, navigation, organization, comments, or history belong
+  in reusable framework/toolkit primitives.
 - `composable-mini-apps` for many one-job headless apps that discover siblings
   and compose through `invoke` / `call-agent`.
 - `visual-answer` for code/product questions answered as visual Plan artifacts.
 - `harness-agents` for full agent runtimes like Claude Code, Codex, Pi,
   Cursor, or Mastra.
 - `self-modifying-code` for source edits by the agent.
+- `upgrade-agent-native` for bringing an older app/workspace to current
+  `@agent-native/*` packages without patching core/dispatch.
+- `upgrade-agent-native` for bringing an older app/workspace to current
+  `@agent-native/*` packages without patching core/dispatch.
 - `server-plugins` for `/_agent-native/*` routes and plugins.
 - `authentication`, `onboarding`, `secrets` for setup/auth/credentials.
 - `automations`, `recurring-jobs`, `integration-webhooks` for background work.

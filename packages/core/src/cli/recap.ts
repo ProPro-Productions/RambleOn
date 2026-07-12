@@ -40,6 +40,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import { normalizeOpenAiBaseUrl } from "../agent/engine/openai-compatible-endpoint.js";
 import {
   DEFAULT_PLAN_APP_URL,
   fetchPlanBlockCatalog,
@@ -99,7 +100,9 @@ export const PR_VISUAL_RECAP_SETUP: string[] = [
   "  ANTHROPIC_API_KEY  — the LLM key for the default Claude Code backend",
   "Optional (only if you change defaults):",
   "  OPENAI_API_KEY (secret) + VISUAL_RECAP_AGENT=codex (variable) — use Codex instead of Claude",
-  "  VISUAL_RECAP_MODEL / VISUAL_RECAP_REASONING (variables) — pin the model (e.g. gpt-5.5) and reasoning depth (none|minimal|low|medium|high|xhigh; Codex only)",
+  "  VISUAL_RECAP_API_KEY (secret) + VISUAL_RECAP_AGENT=openai-compatible + VISUAL_RECAP_BASE_URL (variable) — use DeepSeek, Kimi, or any OpenAI-compatible API",
+  "  VISUAL_RECAP_MODEL (variable, required for openai-compatible) — provider model id; optional override for Claude/Codex",
+  "  VISUAL_RECAP_REASONING (variable) — reasoning depth (none|minimal|low|medium|high|xhigh; Codex only)",
   "  VISUAL_RECAP_SKILL_SOURCE=repo (variable) — pin CI to the repo-local visual-recap skill instead of latest bundled guidance",
   "  VISUAL_RECAP_SECRET_SCAN=off|high-confidence|strict (variable) — default high-confidence; strict restores generic TOKEN/SECRET assignment suppression",
   "  PLAN_RECAP_APP_URL (secret) — only when self-hosting the plan app (defaults to https://plan.agent-native.com)",
@@ -198,10 +201,12 @@ export function buildReusableCallerWorkflow(
     `      PLAN_RECAP_TOKEN: \${{ secrets.PLAN_RECAP_TOKEN }}\n` +
     `      ANTHROPIC_API_KEY: \${{ secrets.ANTHROPIC_API_KEY }}\n` +
     `      OPENAI_API_KEY: \${{ secrets.OPENAI_API_KEY }}\n` +
+    `      VISUAL_RECAP_API_KEY: \${{ secrets.VISUAL_RECAP_API_KEY }}\n` +
     `      PLAN_RECAP_APP_URL: \${{ secrets.PLAN_RECAP_APP_URL }}\n` +
     `    with:\n` +
     `      agent: ${agentValue}\n` +
     `      model: ${modelValue}\n` +
+    `      base-url: \${{ vars.VISUAL_RECAP_BASE_URL || '' }}\n` +
     `      reasoning: \${{ vars.VISUAL_RECAP_REASONING || '' }}\n` +
     `      skill-source: \${{ vars.VISUAL_RECAP_SKILL_SOURCE || 'auto' }}\n` +
     `      secret-scan: \${{ vars.VISUAL_RECAP_SECRET_SCAN || 'high-confidence' }}\n` +
@@ -253,9 +258,9 @@ export function writePrVisualRecapReusableCallerWorkflow(
 
 // Narrow type used only where it's needed (avoids importing the full
 // RecapAgent type before it is defined below).
-type RecapAgentValue = "claude" | "codex";
+type RecapAgentValue = "claude" | "codex" | "openai-compatible";
 
-export type RecapAgent = "claude" | "codex";
+export type RecapAgent = "claude" | "codex" | "openai-compatible";
 
 const DEFAULT_RECAP_APP_URL = DEFAULT_PLAN_APP_URL;
 
@@ -263,15 +268,26 @@ export function normalizeRecapAgent(value: string | undefined): RecapAgent {
   const agent = (value || "claude").toLowerCase();
   if (agent === "codex") return "codex";
   if (agent === "claude") return "claude";
+  if (
+    ["openai-compatible", "deepseek", "kimi", "moonshot", "custom"].includes(
+      agent,
+    )
+  ) {
+    return "openai-compatible";
+  }
   throw new Error(
-    `Unsupported recap agent "${value}" (expected "claude" or "codex").`,
+    `Unsupported recap agent "${value}" (expected "claude", "codex", or "openai-compatible").`,
   );
 }
 
 export function recapRequiredSecrets(agent: RecapAgent): string[] {
   return [
     "PLAN_RECAP_TOKEN",
-    agent === "codex" ? "OPENAI_API_KEY" : "ANTHROPIC_API_KEY",
+    agent === "codex"
+      ? "OPENAI_API_KEY"
+      : agent === "openai-compatible"
+        ? "VISUAL_RECAP_API_KEY"
+        : "ANTHROPIC_API_KEY",
   ];
 }
 
@@ -431,8 +447,69 @@ export interface RecapSetupPlan {
   workflowPath: string;
   workflowExists: boolean;
   requiredSecrets: string[];
+  requiredVariables: readonly RecapVariableRequirement[];
+  variableProblems: RecapVariableProblem[];
   variableValues: Record<string, string>;
   secretValues: Record<string, string | undefined>;
+}
+
+export interface RecapVariableRequirement {
+  name: "VISUAL_RECAP_BASE_URL" | "VISUAL_RECAP_MODEL";
+  example: string;
+}
+
+export interface RecapVariableProblem {
+  requirement: RecapVariableRequirement;
+  reason: string;
+}
+
+const OPENAI_COMPATIBLE_VARIABLE_REQUIREMENTS = [
+  {
+    name: "VISUAL_RECAP_BASE_URL",
+    example: "https://provider.example/v1",
+  },
+  { name: "VISUAL_RECAP_MODEL", example: "provider-model-id" },
+] as const satisfies readonly RecapVariableRequirement[];
+
+const RECAP_MODEL_PATTERN = /^[a-zA-Z0-9._-]{1,80}$/;
+const OPENAI_COMPATIBLE_RECAP_MODEL_PATTERN = /^[^\p{C}\p{Z}]{1,200}$/u;
+
+export function validateOpenAiCompatibleRecapVariables(input: {
+  baseUrl?: string;
+  model?: string;
+}): RecapVariableProblem[] {
+  const [baseUrlRequirement, modelRequirement] =
+    OPENAI_COMPATIBLE_VARIABLE_REQUIREMENTS;
+  const problems: RecapVariableProblem[] = [];
+  const baseUrl = input.baseUrl?.trim() || "";
+  const rawModel = input.model || "";
+  const model = rawModel.trim();
+
+  try {
+    const parsed = normalizeOpenAiBaseUrl(baseUrl);
+    if (!parsed) throw new Error("empty");
+  } catch {
+    problems.push({
+      requirement: baseUrlRequirement,
+      reason:
+        "VISUAL_RECAP_BASE_URL must be a valid http(s) URL without credentials",
+    });
+  }
+
+  if (!model) {
+    problems.push({
+      requirement: modelRequirement,
+      reason: "VISUAL_RECAP_MODEL is required (openai-compatible backend)",
+    });
+  } else if (!OPENAI_COMPATIBLE_RECAP_MODEL_PATTERN.test(rawModel)) {
+    problems.push({
+      requirement: modelRequirement,
+      reason:
+        "invalid VISUAL_RECAP_MODEL value (must be 1-200 characters without whitespace or controls)",
+    });
+  }
+
+  return problems;
 }
 
 export function buildRecapSetupPlan(input: {
@@ -448,10 +525,18 @@ export function buildRecapSetupPlan(input: {
   );
   const agent = normalizeRecapAgent(input.agent || env.VISUAL_RECAP_AGENT);
   const requiredSecrets = recapRequiredSecrets(agent);
+  const requiredVariables =
+    agent === "openai-compatible"
+      ? OPENAI_COMPATIBLE_VARIABLE_REQUIREMENTS
+      : [];
   const planToken =
     envValue(env, "PLAN_RECAP_TOKEN") ?? planTokenFromLocalStore(appUrl);
   const llmSecretName =
-    agent === "codex" ? "OPENAI_API_KEY" : "ANTHROPIC_API_KEY";
+    agent === "codex"
+      ? "OPENAI_API_KEY"
+      : agent === "openai-compatible"
+        ? "VISUAL_RECAP_API_KEY"
+        : "ANTHROPIC_API_KEY";
   const variableValues: Record<string, string> = {};
   if (agent !== "claude") variableValues.VISUAL_RECAP_AGENT = agent;
   for (const key of [
@@ -462,6 +547,17 @@ export function buildRecapSetupPlan(input: {
     const value = envValue(env, key);
     if (value) variableValues[key] = value;
   }
+  if (agent === "openai-compatible") {
+    const baseUrl = envValue(env, "VISUAL_RECAP_BASE_URL");
+    if (baseUrl) variableValues.VISUAL_RECAP_BASE_URL = baseUrl;
+  }
+  const variableProblems =
+    agent === "openai-compatible"
+      ? validateOpenAiCompatibleRecapVariables({
+          baseUrl: variableValues.VISUAL_RECAP_BASE_URL,
+          model: variableValues.VISUAL_RECAP_MODEL,
+        })
+      : [];
   return {
     agent,
     appUrl,
@@ -472,6 +568,8 @@ export function buildRecapSetupPlan(input: {
     ),
     workflowExists: fs.existsSync(recapWorkflowFile(input.baseDir)),
     requiredSecrets,
+    requiredVariables,
+    variableProblems,
     variableValues,
     secretValues: {
       PLAN_RECAP_TOKEN: planToken,
@@ -592,7 +690,12 @@ function runSetup(args: Record<string, string | boolean>): void {
       }
     }
 
+    const invalidVariableNames = new Set(
+      plan.variableProblems.map((problem) => problem.requirement.name),
+    );
     for (const [name, value] of Object.entries(plan.variableValues)) {
+      if (invalidVariableNames.has(name as RecapVariableRequirement["name"]))
+        continue;
       const status = setGithubVariable(name, value, repo, dryRun);
       if (status === "set") {
         lines.push(`  ${name}: set to ${value}.`);
@@ -604,6 +707,21 @@ function runSetup(args: Record<string, string | boolean>): void {
           `    Set manually: ${commandForMissingVariable(name, value, repo)}`,
         );
       }
+    }
+    for (const problem of plan.variableProblems) {
+      const { requirement } = problem;
+      const hasValue = Boolean(plan.variableValues[requirement.name]);
+      lines.push(
+        `  ${requirement.name}: ${hasValue ? "invalid value" : "missing value"}.`,
+      );
+      lines.push(`    ${problem.reason}.`);
+      lines.push(
+        `    Set manually: ${commandForMissingVariable(
+          requirement.name,
+          requirement.example,
+          repo,
+        )}`,
+      );
     }
   }
 
@@ -695,6 +813,36 @@ function runDoctor(args: Record<string, string | boolean>): void {
   } else {
     const configuredAgent = variables.get("VISUAL_RECAP_AGENT") || "claude";
     lines.push(`[ok] Recap backend variable: ${configuredAgent}.`);
+    const remoteVariableProblems =
+      plan.agent === "openai-compatible"
+        ? validateOpenAiCompatibleRecapVariables({
+            baseUrl: variables.get("VISUAL_RECAP_BASE_URL"),
+            model: variables.get("VISUAL_RECAP_MODEL"),
+          })
+        : [];
+    const problemsByName = new Map(
+      remoteVariableProblems.map((problem) => [
+        problem.requirement.name,
+        problem,
+      ]),
+    );
+    for (const requirement of plan.requiredVariables) {
+      const problem = problemsByName.get(requirement.name);
+      if (!problem) {
+        lines.push(`[ok] GitHub variable configured: ${requirement.name}.`);
+      } else {
+        ok = false;
+        const hasValue = Boolean(variables.get(requirement.name)?.trim());
+        lines.push(`[${hasValue ? "invalid" : "missing"}] ${problem.reason}.`);
+        lines.push(
+          `  Set it with: ${commandForMissingVariable(
+            requirement.name,
+            requirement.example,
+            repo,
+          )}`,
+        );
+      }
+    }
   }
 
   process.stdout.write(`${lines.join("\n")}\n`);
@@ -988,6 +1136,7 @@ function agentLabel(agent: string): string {
   const normalized = agent.toLowerCase();
   if (normalized === "codex") return "Codex";
   if (normalized === "claude") return "Claude";
+  if (normalized === "openai-compatible") return "OpenAI-compatible";
   return agent || "Agent";
 }
 
@@ -1028,7 +1177,7 @@ function readTextIfExists(file: string): string | null {
 }
 
 function localAgentResultCandidates(agent: string): Array<{
-  agent: "claude" | "codex";
+  agent: string;
   resultFile: string;
   stderrFile: string;
   exitCodeFile: string;
@@ -1046,9 +1195,16 @@ function localAgentResultCandidates(agent: string): Array<{
       stderrFile: "codex-stderr.log",
       exitCodeFile: "codex-exit-code.txt",
     },
+    {
+      agent: "openai-compatible",
+      resultFile: "openai-compatible-result.txt",
+      stderrFile: "openai-compatible-stderr.log",
+      exitCodeFile: "openai-compatible-exit-code.txt",
+    },
   ];
   const normalized = agent.toLowerCase();
-  if (normalized === "codex") return [all[1], all[0]];
+  if (normalized === "codex") return [all[1], all[0], all[2]];
+  if (normalized === "openai-compatible") return [all[2], all[0], all[1]];
   return all;
 }
 
@@ -1634,12 +1790,40 @@ type GitHubComment = {
 
 type GitHubPullRequest = {
   head?: { sha?: string | null } | null;
+  user?: { login?: string | null; type?: string | null } | null;
+};
+
+type GitHubUserProfile = {
+  login?: string | null;
+  name?: string | null;
+  email?: string | null;
+};
+
+type GitHubPullRequestCommit = {
+  author?: { login?: string | null } | null;
+  commit?: {
+    author?: { name?: string | null; email?: string | null } | null;
+  } | null;
 };
 
 function repoParts(repoFullName: string): { owner: string; repo: string } {
   const [owner, repo] = repoFullName.split("/");
   if (!owner || !repo) throw new Error(`Invalid --repo: ${repoFullName}`);
   return { owner, repo };
+}
+
+function nonEmptyTrimmed(value: string | null | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed || undefined;
+}
+
+function normalizeSourceAuthorEmail(
+  email: string | null | undefined,
+): string | undefined {
+  const trimmed = email?.trim().toLowerCase();
+  if (!trimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) return undefined;
+  if (trimmed.endsWith("@users.noreply.github.com")) return undefined;
+  return trimmed;
 }
 
 async function githubRequest<T>(
@@ -1665,6 +1849,71 @@ async function githubRequest<T>(
   }
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
+}
+
+export async function resolveGitHubPullRequestAuthor(input: {
+  token: string;
+  repo: string;
+  pr: string;
+  fetchFn?: typeof fetch;
+}): Promise<{
+  email?: string;
+  name?: string;
+  login?: string;
+}> {
+  const fn = input.fetchFn ?? fetch;
+  const { owner, repo } = repoParts(input.repo);
+  const pr = await githubRequest<GitHubPullRequest>(
+    input.token,
+    `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(
+      repo,
+    )}/pulls/${encodeURIComponent(input.pr)}`,
+    {},
+    fn,
+  );
+  const login = nonEmptyTrimmed(pr.user?.login);
+  const profile = login
+    ? await githubRequest<GitHubUserProfile>(
+        input.token,
+        `/users/${encodeURIComponent(login)}`,
+        {},
+        fn,
+      ).catch(() => null)
+    : null;
+  const profileEmail = normalizeSourceAuthorEmail(profile?.email);
+  const profileName = nonEmptyTrimmed(profile?.name);
+  let commitEmail: string | undefined;
+  let commitName: string | undefined;
+  if (!profileEmail) {
+    const commits = await githubRequest<GitHubPullRequestCommit[]>(
+      input.token,
+      `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(
+        repo,
+      )}/pulls/${encodeURIComponent(input.pr)}/commits?per_page=100`,
+      {},
+      fn,
+    ).catch(() => []);
+    for (const commit of commits) {
+      const commitLogin = nonEmptyTrimmed(commit.author?.login);
+      if (
+        login &&
+        commitLogin &&
+        commitLogin.toLowerCase() !== login.toLowerCase()
+      ) {
+        continue;
+      }
+      const email = normalizeSourceAuthorEmail(commit.commit?.author?.email);
+      if (!email) continue;
+      commitEmail = email;
+      commitName = nonEmptyTrimmed(commit.commit?.author?.name);
+      break;
+    }
+  }
+  return {
+    email: profileEmail ?? commitEmail,
+    name: profileName ?? commitName ?? login,
+    login,
+  };
 }
 
 export async function isPullRequestHeadCurrent(input: {
@@ -1995,14 +2244,15 @@ export function buildCommentBody(env: NodeJS.ProcessEnv = process.env): string {
 
   lines.push(`Here's a [visual recap](${safeUrl}) of what changed:`);
   lines.push("");
-  lines.push(`<picture>`);
+  const pictureParts = [`<picture>`];
   if (lightImageUrl && darkImageUrl) {
-    lines.push(
+    pictureParts.push(
       `  <source media="(prefers-color-scheme: dark)" srcset="${darkImageUrl}">`,
     );
   }
-  lines.push(`  <img alt="Visual recap" src="${fallbackImageUrl}">`);
-  lines.push(`</picture>`);
+  pictureParts.push(`  <img alt="Visual recap" src="${fallbackImageUrl}">`);
+  pictureParts.push(`</picture>`);
+  lines.push(`<a href="${safeUrl}">${pictureParts.join("")}</a>`);
   lines.push("");
   lines.push(`**Open the [full interactive recap](${safeUrl})**`);
   if (env.DIFF_HUGE === "true") {
@@ -2297,6 +2547,7 @@ function recapPublishIdempotencyKey(input: {
 export async function publishRecapSource(input: {
   appUrl: string;
   token: string;
+  githubToken?: string;
   sourcePath?: string;
   out?: string;
   prevPlanId?: string;
@@ -2308,6 +2559,9 @@ export async function publishRecapSource(input: {
   sourcePrNumber?: string;
   sourcePrState?: string;
   sourcePrMergedAt?: string;
+  sourceAuthorEmail?: string;
+  sourceAuthorName?: string;
+  sourceAuthorLogin?: string;
   fetchFn?: typeof fetch;
   cwd?: string;
 }): Promise<{ ok: true; url: string; out: string }> {
@@ -2330,6 +2584,34 @@ export async function publishRecapSource(input: {
     (sourceRepo && sourcePrNumber ? "pull-request" : undefined);
   const sourcePrState =
     input.sourcePrState ?? (input.sourcePrMergedAt ? "merged" : undefined);
+  const explicitSourceAuthor = {
+    email: normalizeSourceAuthorEmail(input.sourceAuthorEmail),
+    name: nonEmptyTrimmed(input.sourceAuthorName),
+    login: nonEmptyTrimmed(input.sourceAuthorLogin),
+  };
+  let resolvedSourceAuthor:
+    | Awaited<ReturnType<typeof resolveGitHubPullRequestAuthor>>
+    | undefined;
+  if (
+    input.githubToken &&
+    sourceRepo &&
+    sourcePrNumber &&
+    (!explicitSourceAuthor.email ||
+      !explicitSourceAuthor.name ||
+      !explicitSourceAuthor.login)
+  ) {
+    resolvedSourceAuthor = await resolveGitHubPullRequestAuthor({
+      token: input.githubToken,
+      repo: sourceRepo,
+      pr: sourcePrNumber,
+      fetchFn: input.fetchFn,
+    }).catch(() => undefined);
+  }
+  const sourceAuthor = {
+    email: explicitSourceAuthor.email ?? resolvedSourceAuthor?.email,
+    name: explicitSourceAuthor.name ?? resolvedSourceAuthor?.name,
+    login: explicitSourceAuthor.login ?? resolvedSourceAuthor?.login,
+  };
   const idempotencyKey = recapPublishIdempotencyKey({
     prevPlanId: input.prevPlanId,
     repo: input.repo,
@@ -2353,6 +2635,9 @@ export async function publishRecapSource(input: {
     ...(input.sourcePrMergedAt
       ? { sourcePrMergedAt: input.sourcePrMergedAt }
       : {}),
+    ...(sourceAuthor.email ? { sourceAuthorEmail: sourceAuthor.email } : {}),
+    ...(sourceAuthor.name ? { sourceAuthorName: sourceAuthor.name } : {}),
+    ...(sourceAuthor.login ? { sourceAuthorLogin: sourceAuthor.login } : {}),
     currentFocus: "visual recap review",
     status: "review",
     mdx: source.mdx,
@@ -2470,6 +2755,10 @@ async function runPublish(
     const result = await publishRecapSource({
       appUrl,
       token,
+      githubToken:
+        optionalArg(args, "github-token") ??
+        process.env.GH_TOKEN ??
+        process.env.GITHUB_TOKEN,
       sourcePath: optionalArg(args, "source") ?? RECAP_SOURCE_FILENAME,
       out,
       prevPlanId: optionalArg(args, "prev-plan-id"),
@@ -2481,6 +2770,14 @@ async function runPublish(
       sourcePrNumber: optionalArg(args, "source-pr-number"),
       sourcePrState: optionalArg(args, "source-pr-state"),
       sourcePrMergedAt: optionalArg(args, "source-pr-merged-at"),
+      sourceAuthorEmail:
+        optionalArg(args, "source-author-email") ?? process.env.PR_AUTHOR_EMAIL,
+      sourceAuthorName:
+        optionalArg(args, "source-author-name") ?? process.env.PR_AUTHOR_NAME,
+      sourceAuthorLogin:
+        optionalArg(args, "source-author-login") ??
+        process.env.PR_AUTHOR_LOGIN ??
+        process.env.GITHUB_ACTOR,
     });
     writeGitHubOutput("ok", "true");
     writeGitHubOutput("plan_url", result.url);
@@ -2846,10 +3143,24 @@ export async function runShot(
       });
     }
     const page = await context.newPage();
-    await page.goto(captureUrl, {
+    const navigationResponse = await page.goto(captureUrl, {
       waitUntil: "domcontentloaded",
       timeout: 45_000,
     });
+    if (!navigationResponse) {
+      throw new Error("recap page did not return an HTTP response");
+    }
+    if (!navigationResponse.ok()) {
+      throw new Error(
+        `recap page returned HTTP ${navigationResponse.status()} while loading ${navigationResponse.url()}`,
+      );
+    }
+    const contentType = navigationResponse.headers()["content-type"] ?? "";
+    if (contentType && !/\btext\/html\b/i.test(contentType)) {
+      throw new Error(
+        `recap page returned unexpected content type ${contentType} while loading ${navigationResponse.url()}`,
+      );
+    }
     await page.waitForLoadState("load", { timeout: 15_000 }).catch(() => {
       // The selectors below are the real readiness signal for screenshots.
       // Some recap pages keep long-lived/background requests open.
@@ -3100,10 +3411,14 @@ export interface RecapGateInput {
   hasAnthropic: boolean;
   /** OPENAI_API_KEY present. */
   hasOpenai: boolean;
+  /** VISUAL_RECAP_API_KEY present for OpenAI-compatible backends. */
+  hasOpenaiCompatible?: boolean;
   /** Raw VISUAL_RECAP_AGENT value (may be undefined / mis-cased). */
   agentRaw: string | undefined;
   /** Raw VISUAL_RECAP_MODEL value (may be undefined). */
   model: string | undefined;
+  /** Raw VISUAL_RECAP_BASE_URL value for OpenAI-compatible backends. */
+  baseUrl?: string;
   /** Raw VISUAL_RECAP_SKILL_SOURCE value (auto/latest/repo; may be undefined). */
   skillSource: string | undefined;
   /** Filenames changed by the PR (for the self-modifying guard). */
@@ -3205,23 +3520,41 @@ export function evaluateRecapGate(input: RecapGateInput): {
   // The chosen backend's API key must be present. Normalize the agent value once
   // here and validate it: an unknown or mis-cased value (e.g. "Claude", "gpt")
   // must NOT silently pass the gate and then match neither agent step.
-  const agent = (input.agentRaw || "claude").toLowerCase();
-  if (agent !== "claude" && agent !== "codex") {
+  const rawAgent = (input.agentRaw || "claude").toLowerCase();
+  const agent = ["deepseek", "kimi", "moonshot", "custom"].includes(rawAgent)
+    ? "openai-compatible"
+    : rawAgent;
+  if (!["claude", "codex", "openai-compatible"].includes(agent)) {
     reasons.push(
-      `unsupported VISUAL_RECAP_AGENT "${input.agentRaw}" (expected "claude" or "codex")`,
+      `unsupported VISUAL_RECAP_AGENT "${input.agentRaw}" (expected "claude", "codex", or "openai-compatible")`,
     );
   } else if (agent === "codex") {
     if (!input.hasOpenai)
       reasons.push("OPENAI_API_KEY not configured (codex backend)");
-  } else {
+  } else if (agent === "claude") {
     if (!input.hasAnthropic)
       reasons.push("ANTHROPIC_API_KEY not configured (claude backend)");
+  } else {
+    if (!input.hasOpenaiCompatible)
+      reasons.push(
+        "VISUAL_RECAP_API_KEY not configured (openai-compatible backend)",
+      );
+    reasons.push(
+      ...validateOpenAiCompatibleRecapVariables({
+        baseUrl: input.baseUrl,
+        model: input.model,
+      }).map((problem) => problem.reason),
+    );
   }
 
   // Validate VISUAL_RECAP_MODEL if set — an unchecked value could be injected by
   // a repo settings writer and passed straight to the agent CLI.
   const model = input.model || "";
-  if (model && !/^[a-zA-Z0-9._-]{1,80}$/.test(model)) {
+  if (
+    agent !== "openai-compatible" &&
+    model &&
+    !RECAP_MODEL_PATTERN.test(model)
+  ) {
     reasons.push(
       "invalid VISUAL_RECAP_MODEL value (must match [a-zA-Z0-9._-]{1,80})",
     );
@@ -3359,8 +3692,10 @@ async function runGate(): Promise<void> {
     hasPlan: process.env.HAS_PLAN === "true",
     hasAnthropic: process.env.HAS_ANTHROPIC === "true",
     hasOpenai: process.env.HAS_OPENAI === "true",
+    hasOpenaiCompatible: process.env.HAS_COMPATIBLE === "true",
     agentRaw: process.env.AGENT,
     model: process.env.VISUAL_RECAP_MODEL,
+    baseUrl: process.env.VISUAL_RECAP_BASE_URL,
     skillSource: process.env.VISUAL_RECAP_SKILL_SOURCE,
     changedFiles,
   });
@@ -3948,6 +4283,49 @@ export function parseCodexUsage(jsonl: string): ParsedUsage | null {
   };
 }
 
+/** Parse the usage sidecar emitted by an Agent-Native Code run. */
+export function parseOpenAiCompatibleUsage(json: string): ParsedUsage | null {
+  const obj = parseLastJsonObject(json);
+  const usage = obj?.usage ?? obj;
+  if (!usage || typeof usage !== "object") return null;
+
+  const input =
+    usage.inputTokens ?? usage.input_tokens ?? usage.prompt_tokens ?? undefined;
+  const output =
+    usage.outputTokens ??
+    usage.output_tokens ??
+    usage.completion_tokens ??
+    undefined;
+  if (input == null && output == null) return null;
+
+  const asCount = (value: unknown): number => {
+    const parsed = Number(value ?? 0);
+    return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+  };
+  const inputDetails = usage.inputTokenDetails;
+  return {
+    inputTokens: asCount(input),
+    outputTokens: asCount(output),
+    cacheReadTokens: asCount(
+      usage.cacheReadTokens ??
+        usage.cachedInputTokens ??
+        usage.cache_read_input_tokens ??
+        inputDetails?.cacheReadTokens,
+    ),
+    cacheWriteTokens: asCount(
+      usage.cacheWriteTokens ??
+        usage.cache_write_tokens ??
+        inputDetails?.cacheWriteTokens,
+    ),
+    model:
+      typeof obj?.model === "string"
+        ? obj.model
+        : typeof usage.model === "string"
+          ? usage.model
+          : undefined,
+  };
+}
+
 /**
  * `recap usage` — parse the agent's run output for token usage and POST it to
  * the plan app's record-recap-usage action so the recap row carries cost. The
@@ -3979,7 +4357,12 @@ async function runUsage(args: Record<string, string | boolean>): Promise<void> {
       path.resolve(stringArg(args, "result-file")),
       "utf8",
     );
-    parsed = agent === "codex" ? parseCodexUsage(raw) : parseClaudeUsage(raw);
+    parsed =
+      agent === "codex"
+        ? parseCodexUsage(raw)
+        : agent === "openai-compatible"
+          ? parseOpenAiCompatibleUsage(raw)
+          : parseClaudeUsage(raw);
   } catch (err) {
     done({ ok: false, reason: `could not read/parse usage: ${String(err)}` });
     return;
@@ -3994,10 +4377,18 @@ async function runUsage(args: Record<string, string | boolean>): Promise<void> {
   const model =
     parsed.model ??
     optionalArg(args, "model") ??
-    (agent === "codex" ? "gpt-5.5" : "claude");
+    (agent === "codex"
+      ? "gpt-5.6-sol"
+      : agent === "openai-compatible"
+        ? "openai-compatible"
+        : "claude");
+  const usageAgent =
+    agent === "claude" || agent === "codex" || agent === "openai-compatible"
+      ? agent
+      : undefined;
   const body: Record<string, unknown> = {
     planId,
-    ...(agent === "codex" || agent === "claude" ? { agent } : {}),
+    ...(usageAgent ? { agent: usageAgent } : {}),
     model,
     inputTokens: parsed.inputTokens,
     outputTokens: parsed.outputTokens,
@@ -4075,16 +4466,16 @@ function runAgentSummary(args: Record<string, string | boolean>): void {
 const HELP = `npx @agent-native/core@latest recap — PR visual recap helpers (used by the GitHub Action)
 
 Usage:
-  npx @agent-native/core@latest recap setup [--repo owner/name] [--agent claude|codex] [--app-url <url>] [--skip-secrets] [--dry-run] [--force]
-  npx @agent-native/core@latest recap doctor [--repo owner/name] [--agent claude|codex] [--app-url <url>]
+  npx @agent-native/core@latest recap setup [--repo owner/name] [--agent claude|codex|openai-compatible] [--app-url <url>] [--skip-secrets] [--dry-run] [--force]
+  npx @agent-native/core@latest recap doctor [--repo owner/name] [--agent claude|codex|openai-compatible] [--app-url <url>]
   npx @agent-native/core@latest recap collect-diff --base <baseSha> --head <headSha> [--out recap.diff] [--stat recap.stat]
   npx @agent-native/core@latest recap block-reference [--app-url <url>] [--out recap-blocks.md]
   npx @agent-native/core@latest recap scan --diff <path> [--mode off|high-confidence|strict]
   npx @agent-native/core@latest recap build-prompt --pr <n> [--repo owner/name] [--head <sha>] [--app-url <url>] [--diff <path>] [--stat <path>] [--block-reference recap-blocks.md] [--prev-plan-id <id>] [--huge] [--local-files] [--local-dir <folder>] [--skill-source auto|latest|repo] [--out <path>]
-  npx @agent-native/core@latest recap publish [--source recap-source.json] [--out recap-url.txt] [--repo owner/name] [--pr <n>] [--prev-plan-id <id>] [--source-pr-state open|closed|merged] [--source-pr-merged-at <iso>] [--app-url <url>] [--token <planToken>]
+  npx @agent-native/core@latest recap publish [--source recap-source.json] [--out recap-url.txt] [--repo owner/name] [--pr <n>] [--prev-plan-id <id>] [--source-pr-state open|closed|merged] [--source-pr-merged-at <iso>] [--source-author-email <email>] [--source-author-name <name>] [--source-author-login <login>] [--app-url <url>] [--token <planToken>] [--github-token <ghToken>]
   npx @agent-native/core@latest recap shot --url <planUrl> [--token <planToken>] [--app-url <url>] [--out recap.png] [--theme light|dark] [--image-cache-key <key>]
-  npx @agent-native/core@latest recap usage --plan-url <planUrl> --result-file <path> --app-url <url> --token <planToken> [--agent claude|codex] [--model <id>]
-  npx @agent-native/core@latest recap agent-summary --result-file <path> [--stderr-file <path>] [--exit-code-file <path>] [--agent claude|codex]
+  npx @agent-native/core@latest recap usage --plan-url <planUrl> --result-file <path> --app-url <url> --token <planToken> [--agent claude|codex|openai-compatible] [--model <id>]
+  npx @agent-native/core@latest recap agent-summary --result-file <path> [--stderr-file <path>] [--exit-code-file <path>] [--agent claude|codex|openai-compatible]
   npx @agent-native/core@latest recap comment <find-plan-id|upsert> --repo owner/name --issue <n> --token <github-token>
   npx @agent-native/core@latest recap check start [--repo owner/name] [--sha <headSha>] [--token <github-token>] [--workflow-url <url>]
     Create the in-progress "Visual Recap" GitHub check run and write its id to
@@ -4101,16 +4492,16 @@ Usage:
     The PR Visual Recap security gate. Decides whether to run the recap at all
     and which (normalized) backend agent to use. Reads the pull_request payload
     from $GITHUB_EVENT_PATH, the secret-presence/agent/model signals from the
-    environment (HAS_PLAN / HAS_ANTHROPIC / HAS_OPENAI === 'true', AGENT,
-    VISUAL_RECAP_MODEL), the repo from $GITHUB_REPOSITORY, and the PR's changed
+    environment (HAS_PLAN / HAS_ANTHROPIC / HAS_OPENAI / HAS_COMPATIBLE === 'true', AGENT,
+    VISUAL_RECAP_MODEL / VISUAL_RECAP_BASE_URL), the repo from $GITHUB_REPOSITORY, and the PR's changed
     files from the GitHub REST API (paged, with GH_TOKEN/GITHUB_TOKEN). Skips
     drafts, forks without secret access, bot authors, the missing-secret case, an
     invalid agent/model, and any untrusted PR that touches recap-control files
     (repo-pinned skill instructions, .claude/**, root CLAUDE.md, root AGENTS.md,
     root .mcp.json) — failing CLOSED on any file-list error. Writes
-    run=<true|false> and agent=<claude|codex> to $GITHUB_OUTPUT.
+    run=<true|false> and agent=<claude|codex|openai-compatible> to $GITHUB_OUTPUT.
   npx @agent-native/core@latest recap agent-summary
-    Read the captured Claude/Codex result file and write a sanitized one-line
+    Read the captured agent result file and write a sanitized one-line
     summary to stdout and $GITHUB_OUTPUT (summary). Used only when no plan URL
     was produced, so PR comments/checks explain the actual failure.
   npx @agent-native/core@latest recap scan
@@ -4131,7 +4522,8 @@ Usage:
     commands; secret values are sent to gh through stdin, never argv.
   npx @agent-native/core@latest recap doctor
     Check workflow presence/drift, local Plans publish-token availability, gh
-    repo access, and required GitHub Actions secrets for the selected backend.
+    repo access, and required GitHub Actions secrets and variables for the
+    selected backend, including provider-variable validity.
 `;
 
 export async function runRecap(argv: string[]): Promise<void> {

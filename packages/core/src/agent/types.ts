@@ -178,6 +178,20 @@ export interface AgentChatRequest {
      * boundary and refuses to chain past `MAX_BACKGROUND_RUN_CONTINUATIONS`.
      */
     continuationCount?: number;
+    /**
+     * True when the dispatcher expects the self-POST to land in a real
+     * Netlify `-background` function rather than the ~60s synchronous function.
+     * This is diagnostic only; the 15-minute budget is unlocked by the worker's
+     * actual runtime marker.
+     */
+    backgroundFunctionRuntimeExpected?: boolean;
+    /**
+     * True when the dispatch body carries ONLY this marker and the worker
+     * must rehydrate the full request body from the run row's
+     * `dispatch_payload` column (`readRunDispatchPayload`). Keeps the
+     * self-POST under Netlify's 256KB background-function body cap.
+     */
+    payloadRef?: boolean;
   };
   /**
    * Stable identity for the logical assistant turn this request belongs to.
@@ -259,6 +273,29 @@ export type AgentChatEvent =
       type: "agent_call";
       agent: string;
       status: "start" | "done" | "error";
+    }
+  | {
+      /**
+       * Periodic liveness for an in-flight cross-app A2A call. Emitted by the
+       * `call-agent` action once per throttle window ONLY when a real poll
+       * round-trip to the remote agent succeeds and reports a non-terminal
+       * state — never on a timer, so a hung/dead remote emits nothing and the
+       * stuck-detector can still fire. Counts as real progress in
+       * `run-manager`'s `shouldBumpProgressForEvent` (any non-special event
+       * type does), which keeps `last_progress_at` fresh so a slow-but-healthy
+       * sub-agent call doesn't trip the client's stuck banner. A distinct
+       * event type (not an `agent_call` status) so existing `agent_call`
+       * consumers that treat "not start/done" as a failure don't render an
+       * in-flight tick as an error.
+       */
+      type: "agent_call_progress";
+      agent: string;
+      /** Remote A2A task state for this poll, e.g. "working" | "submitted". */
+      state: string;
+      /** Elapsed wall-clock seconds since the cross-app call began. */
+      elapsedSeconds: number;
+      /** Optional short text surfaced from the remote poll, when present. */
+      detail?: string;
     }
   | { type: "agent_call_text"; agent: string; text: string }
   | {

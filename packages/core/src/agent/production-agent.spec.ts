@@ -11,12 +11,17 @@ import {
   getRequestRunContext,
   runWithRequestContext,
 } from "../server/request-context.js";
-import type { AgentEngine, EngineEvent } from "./engine/types.js";
+import type {
+  AgentEngine,
+  EngineEvent,
+  EngineStreamOptions,
+} from "./engine/types.js";
 import { EngineError } from "./engine/types.js";
 import {
   AGENT_INTERNAL_CONTINUE_PROMPT,
   appendAgentLoopContinuation,
   backgroundContinuationReasonForRun,
+  buildFirstRequestPayloadDetail,
   buildUserContentWithAttachments,
   claimBackgroundWorkerRunEarly,
   createPlanModeActionRegistry,
@@ -24,12 +29,16 @@ import {
   isContextTooLongError,
   isRetryableError,
   actionsToEngineTools,
+  filterInitialEngineTools,
   MAX_BACKGROUND_RUN_CONTINUATIONS,
   lastUnfinishedPreparingActionToolFromEvents,
+  markBackgroundContinuationChunkTerminal,
   resolveAgentOwnerEmail,
   resolveBackgroundDispatchOutcome,
+  resolveAgentRequestReasoningEffort,
   resolveSkillReferenceContent,
   runAgentLoop,
+  runAgentLoopWithMainChatInternalContinuations,
   shouldChainBackgroundContinuation,
   shouldGuardRepeatedSourceSweep,
   structuredHistoryToEngineMessages,
@@ -38,12 +47,13 @@ import {
   type AgentLoopFinalResponseGuardContext,
 } from "./production-agent.js";
 import type { ActiveRun } from "./run-manager.js";
-import { attachToolSearch } from "./tool-search.js";
+import { attachToolSearch, searchToolRegistry } from "./tool-search.js";
 import type { AgentChatEvent, RunEvent } from "./types.js";
 
 function actionEntry(opts: {
   description?: string;
   readOnly?: boolean;
+  allowInPlanMode?: boolean;
   parallelSafe?: boolean;
   actions?: string[];
 }): ActionEntry {
@@ -67,12 +77,33 @@ function actionEntry(opts: {
           },
     },
     ...(typeof opts.readOnly === "boolean" ? { readOnly: opts.readOnly } : {}),
+    ...(typeof opts.allowInPlanMode === "boolean"
+      ? { allowInPlanMode: opts.allowInPlanMode }
+      : {}),
     ...(typeof opts.parallelSafe === "boolean"
       ? { parallelSafe: opts.parallelSafe }
       : {}),
     run: async (args) => `ran:${JSON.stringify(args)}`,
   };
 }
+
+describe("resolveAgentRequestReasoningEffort", () => {
+  it("defaults missing reasoning to Medium", () => {
+    expect(
+      resolveAgentRequestReasoningEffort({ model: "claude-sonnet-5" }),
+    ).toBe("medium");
+  });
+
+  it("preserves explicit none through the production request path", () => {
+    expect(
+      resolveAgentRequestReasoningEffort({
+        model: "claude-sonnet-5",
+        requestEffort: "none",
+        configuredEffort: "high",
+      }),
+    ).toBe("none");
+  });
+});
 
 describe("resolveSkillReferenceContent", () => {
   it("does not resolve scope: dev codebase skills for runtime agent references", async () => {
@@ -217,6 +248,43 @@ describe("buildUserContentWithAttachments", () => {
     );
     expect(text).not.toContain("<attachment name=transcript.txt>");
     expect(text).toContain("Summarize the transcript");
+  });
+
+  it("caps the aggregate text from multiple attachments", () => {
+    const content = buildUserContentWithAttachments({
+      text: "Compare these files",
+      attachments: [
+        {
+          type: "file",
+          name: "first.md",
+          contentType: "text/markdown",
+          text: "A".repeat(60_000),
+        },
+        {
+          type: "file",
+          name: "second.md",
+          contentType: "text/markdown",
+          text: "B".repeat(60_000),
+        },
+        {
+          type: "file",
+          name: "third.md",
+          contentType: "text/markdown",
+          text: "C".repeat(10_000),
+        },
+      ],
+    });
+
+    const text = content[0].type === "text" ? content[0].text : "";
+    expect(text).toContain("A".repeat(60_000));
+    expect(text).toContain("B".repeat(20_000));
+    expect(text).not.toContain("B".repeat(20_001));
+    expect(text).toContain(
+      "[Attachment content omitted from the initial request; 10,000 characters available.",
+    );
+    expect(text).toContain(
+      'Use the `read-attachment` tool with name="third.md" to read the rest.',
+    );
   });
 
   it("adds binary file attachments before the prompt text", () => {
@@ -541,9 +609,13 @@ describe("buildUserContentWithAttachments", () => {
     ]);
   });
 
-  it("builds a plan-mode registry with only read-only tools", async () => {
+  it("builds a plan-mode registry with read-only tools and blocked stubs", async () => {
     const registry = attachToolSearch({
       read: actionEntry({ readOnly: true }),
+      "read-but-act-only": actionEntry({
+        readOnly: true,
+        allowInPlanMode: false,
+      }),
       write: actionEntry({ readOnly: false }),
       bash: actionEntry({ readOnly: false }),
       "set-url-path": actionEntry({ readOnly: true }),
@@ -554,12 +626,25 @@ describe("buildUserContentWithAttachments", () => {
 
     const planRegistry = createPlanModeActionRegistry(registry);
 
-    expect(Object.keys(planRegistry).sort()).toEqual([
+    expect(
+      actionsToEngineTools(planRegistry)
+        .map((tool) => tool.name)
+        .sort(),
+    ).toEqual([
       "bash",
       "read",
+      "read-but-act-only",
       "resources",
+      "set-url-path",
       "tool-search",
+      "write",
     ]);
+    await expect(planRegistry.write.run({})).resolves.toContain(
+      "Plan mode blocked `write`",
+    );
+    await expect(planRegistry["read-but-act-only"].run({})).resolves.toContain(
+      "Plan mode blocked `read-but-act-only`",
+    );
     expect(
       planRegistry.resources.tool.parameters?.properties.action.enum,
     ).toEqual(["list", "read"]);
@@ -582,9 +667,174 @@ describe("buildUserContentWithAttachments", () => {
     const searchResult = await planRegistry["tool-search"].run({
       query: "write file",
     } as any);
-    expect(searchResult.results.map((tool: any) => tool.name)).not.toContain(
+    expect(searchResult.results.map((tool: any) => tool.name)).toContain(
       "write",
     );
+    const writeTool = searchResult.results.find(
+      (tool: any) => tool.name === "write",
+    );
+    expect(writeTool.description).toContain("Plan mode blocked");
+  });
+
+  it("keeps the default initial catalog to discovery/runtime tools", () => {
+    const tools = actionsToEngineTools(
+      attachToolSearch({
+        starter: actionEntry({ readOnly: true }),
+        "provider-api-request": actionEntry({ readOnly: true }),
+        "provider-api-docs": actionEntry({ readOnly: true }),
+        "run-code": actionEntry({ readOnly: true }),
+        "get-extension": actionEntry({ readOnly: true }),
+        "update-extension": actionEntry({ readOnly: false }),
+        "account-deep-dive": actionEntry({ readOnly: true }),
+        "hubspot-deals": actionEntry({ readOnly: true }),
+        "hubspot-metrics": actionEntry({ readOnly: true }),
+        "gong-calls": actionEntry({ readOnly: true }),
+        gcloud: actionEntry({ readOnly: true }),
+        "ordinary-rare-tool": actionEntry({ readOnly: true }),
+      }),
+    );
+
+    const initialTools = filterInitialEngineTools(tools, ["starter"]).map(
+      (tool) => tool.name,
+    );
+
+    expect(initialTools).toContain("starter");
+    expect(initialTools).toContain("tool-search");
+    expect(initialTools).not.toContain("provider-api-request");
+    expect(initialTools).not.toContain("provider-api-docs");
+    expect(initialTools).not.toContain("run-code");
+    expect(initialTools).not.toContain("get-extension");
+    expect(initialTools).not.toContain("update-extension");
+    expect(initialTools).not.toContain("account-deep-dive");
+    expect(initialTools).not.toContain("hubspot-deals");
+    expect(initialTools).not.toContain("hubspot-metrics");
+    expect(initialTools).not.toContain("gong-calls");
+    expect(initialTools).not.toContain("gcloud");
+    expect(initialTools).not.toContain("ordinary-rare-tool");
+  });
+
+  it("adds universal discovery tools to a configured starter list", () => {
+    const tools = actionsToEngineTools(
+      attachToolSearch({
+        resources: actionEntry({ readOnly: true }),
+        "docs-search": actionEntry({ readOnly: true }),
+        "get-framework-context": actionEntry({ readOnly: true }),
+        "read-attachment": actionEntry({ readOnly: true }),
+        "mcp__huge__rare-tool": actionEntry({ readOnly: true }),
+      }),
+    );
+
+    expect(
+      filterInitialEngineTools(tools, ["mcp__huge__rare-tool"]).map(
+        (tool) => tool.name,
+      ),
+    ).toEqual([
+      "resources",
+      "docs-search",
+      "get-framework-context",
+      "read-attachment",
+      "mcp__huge__rare-tool",
+      "tool-search",
+    ]);
+  });
+
+  it("records first-request prompt and tool payload sizes without content", () => {
+    const detail = buildFirstRequestPayloadDetail({
+      isFirstRequest: true,
+      systemPrompt: "system",
+      messages: [{ role: "user", content: [{ type: "text", text: "hello" }] }],
+      tools: [
+        {
+          name: "hello",
+          description: "Say hello",
+          inputSchema: { type: "object", properties: {} },
+        },
+      ],
+      availableToolCount: 500,
+    });
+
+    expect(detail).toContain("first_request_system_chars=6");
+    expect(detail).toContain("first_request_tool_count=1");
+    expect(detail).toContain("first_request_available_tool_count=500");
+    expect(detail).not.toContain("hello");
+  });
+
+  it("compacts repeated identical tool-search calls within one agent run", async () => {
+    const registry = attachToolSearch({
+      "hubspot-deals": actionEntry({
+        readOnly: true,
+        description: "Search HubSpot deals",
+      }),
+      "hubspot-records": actionEntry({
+        readOnly: true,
+        description: "Read HubSpot records",
+      }),
+    });
+
+    await runWithRequestContext(
+      { userEmail: "agent@example.com", run: {} },
+      () => {
+        const first = searchToolRegistry(registry, {
+          query: "hubspot",
+        } as any);
+        const second = searchToolRegistry(registry, {
+          query: "hubspot",
+        } as any) as any;
+
+        expect(first.results.map((result) => result.name)).toEqual([
+          "hubspot-deals",
+          "hubspot-records",
+        ]);
+        expect(second.repeated).toBe(true);
+        expect(second.message).toContain("already ran");
+        expect(second.results.map((result: any) => result.name)).toEqual([
+          "hubspot-deals",
+          "hubspot-records",
+        ]);
+      },
+    );
+  });
+
+  it("does not compact repeated includeSchemas tool-search calls", async () => {
+    const registry = attachToolSearch({
+      "hubspot-deals": actionEntry({
+        readOnly: true,
+        description: "Search HubSpot deals",
+      }),
+    });
+
+    await runWithRequestContext(
+      { userEmail: "agent@example.com", run: {} },
+      () => {
+        const first = searchToolRegistry(registry, {
+          query: "hubspot",
+          includeSchemas: true,
+        } as any) as any;
+        const second = searchToolRegistry(registry, {
+          query: "hubspot",
+          includeSchemas: true,
+        } as any) as any;
+
+        expect(first.repeated).toBeUndefined();
+        expect(second.repeated).toBeUndefined();
+        expect(second.results[0].inputSchema).toBeDefined();
+      },
+    );
+  });
+
+  it("warns that no-query tool-search menu results do not load schemas", () => {
+    const registry = attachToolSearch({
+      "hubspot-deals": actionEntry({
+        readOnly: true,
+        description: "Search HubSpot deals",
+      }),
+    });
+
+    const result = searchToolRegistry(registry, {});
+
+    expect(result.results.map((tool) => tool.name)).toContain("hubspot-deals");
+    expect(result.message).toContain("does not load schemas");
+    expect(result.message).toContain("tool-search again with a specific query");
   });
 
   it("treats mixed tools as read-only only for allowed arguments", () => {
@@ -598,6 +848,14 @@ describe("buildUserContentWithAttachments", () => {
 
     const urlTool = actionEntry({ readOnly: true });
     expect(isPlanModeToolCallAllowed("set-url-path", {}, urlTool)).toBe(false);
+
+    const readOnlyActOnlyTool = actionEntry({
+      readOnly: true,
+      allowInPlanMode: false,
+    });
+    expect(
+      isPlanModeToolCallAllowed("deep-analysis", {}, readOnlyActOnlyTool),
+    ).toBe(false);
 
     const bashTool = actionEntry({ readOnly: false });
     expect(
@@ -645,6 +903,81 @@ describe("resolveAgentOwnerEmail", () => {
 });
 
 describe("runAgentLoop", () => {
+  it("does not expand the active tool list after no-query tool-search menu results", async () => {
+    const actions = attachToolSearch({
+      starter: actionEntry({
+        description: "Starter tool",
+        readOnly: true,
+      }),
+      "hidden-tool": {
+        ...actionEntry({
+          description: "Hidden forms sharing tool",
+          readOnly: true,
+        }),
+        run: async () => "hidden ran",
+      },
+    });
+    const allTools = actionsToEngineTools(actions);
+    const initialTools = allTools.filter((tool) =>
+      ["starter", "tool-search"].includes(tool.name),
+    );
+    const seenTools: string[][] = [];
+    let streamCalls = 0;
+
+    const engine: AgentEngine = {
+      name: "test",
+      label: "Test",
+      defaultModel: "test-model",
+      supportedModels: ["test-model"],
+      capabilities: {
+        thinking: false,
+        promptCaching: false,
+        vision: false,
+        computerUse: false,
+        parallelToolCalls: false,
+      },
+      async *stream(opts): AsyncIterable<EngineEvent> {
+        streamCalls += 1;
+        seenTools.push(opts.tools.map((tool) => tool.name));
+        if (streamCalls === 1) {
+          yield {
+            type: "assistant-content",
+            parts: [
+              {
+                type: "tool-call" as const,
+                id: "tool-search-menu",
+                name: "tool-search",
+                input: {},
+              },
+            ],
+          };
+          yield { type: "stop", reason: "tool_use" };
+          return;
+        }
+        yield {
+          type: "assistant-content",
+          parts: [{ type: "text" as const, text: "done" }],
+        };
+        yield { type: "stop", reason: "end_turn" };
+      },
+    };
+
+    await runAgentLoop({
+      engine,
+      model: "test-model",
+      systemPrompt: "system",
+      tools: initialTools,
+      availableTools: allTools,
+      messages: [{ role: "user", content: [{ type: "text", text: "go" }] }],
+      actions,
+      send: () => {},
+      signal: new AbortController().signal,
+    });
+
+    expect(seenTools[0]).toEqual(["starter", "tool-search"]);
+    expect(seenTools[1]).toEqual(["starter", "tool-search"]);
+  });
+
   it("expands the provider tool list after tool-search returns matches", async () => {
     const actions = attachToolSearch({
       starter: actionEntry({
@@ -983,6 +1316,406 @@ describe("runAgentLoop", () => {
     expect(events).not.toContainEqual(
       expect.objectContaining({ type: "text", text: "should not continue" }),
     );
+  });
+
+  it("continues main chat internally after a no-progress action preparation checkpoint", async () => {
+    let now = 1_000_000;
+    let attempts = 0;
+    const dateNow = vi.spyOn(Date, "now").mockImplementation(() => now);
+    const engine: AgentEngine = {
+      name: "test",
+      label: "Test",
+      defaultModel: "test-model",
+      supportedModels: ["test-model"],
+      capabilities: {
+        thinking: false,
+        promptCaching: false,
+        vision: false,
+        computerUse: false,
+        parallelToolCalls: true,
+      },
+      async *stream(): AsyncIterable<EngineEvent> {
+        attempts++;
+        if (attempts === 1) {
+          yield {
+            type: "tool-input-start",
+            id: "tool-edit",
+            name: "edit-design",
+          };
+          now += 91_000;
+          yield { type: "gateway-heartbeat" };
+          yield { type: "text-delta", text: "should not continue" };
+          return;
+        }
+        yield { type: "text-delta", text: "continued" };
+        yield {
+          type: "assistant-content",
+          parts: [{ type: "text" as const, text: "continued" }],
+        };
+        yield { type: "stop", reason: "end_turn" };
+      },
+    };
+    const events: AgentChatEvent[] = [];
+    const messages = [
+      {
+        role: "user" as const,
+        content: [{ type: "text" as const, text: "go" }],
+      },
+    ];
+
+    try {
+      await runAgentLoopWithMainChatInternalContinuations({
+        engine,
+        model: "test-model",
+        systemPrompt: "system",
+        tools: [],
+        messages,
+        actions: {
+          "edit-design": actionEntry({ readOnly: false }),
+        },
+        send: (event) => events.push(event),
+        signal: new AbortController().signal,
+      });
+    } finally {
+      dateNow.mockRestore();
+    }
+
+    expect(attempts).toBe(2);
+    const continuationText = messages
+      .map((message) =>
+        message.content[0]?.type === "text" ? message.content[0].text : "",
+      )
+      .find((text) => text.includes(AGENT_INTERNAL_CONTINUE_PROMPT));
+    expect(continuationText).toContain(AGENT_INTERNAL_CONTINUE_PROMPT);
+    expect(continuationText).toContain(
+      "preparing the `edit-design` action input",
+    );
+    expect(events).toContainEqual({ type: "clear" });
+    expect(events).toContainEqual({ type: "text", text: "continued" });
+    expect(events).toContainEqual({ type: "done" });
+    expect(events).not.toContainEqual({
+      type: "auto_continue",
+      reason: "no_progress",
+    });
+    expect(events).not.toContainEqual(
+      expect.objectContaining({ type: "text", text: "should not continue" }),
+    );
+  });
+
+  it("checkpoints when zero-byte action input preparation goes silent", async () => {
+    vi.useFakeTimers({ now: 1_000_000 });
+    const engine: AgentEngine = {
+      name: "test",
+      label: "Test",
+      defaultModel: "test-model",
+      supportedModels: ["test-model"],
+      capabilities: {
+        thinking: false,
+        promptCaching: false,
+        vision: false,
+        computerUse: false,
+        parallelToolCalls: true,
+      },
+      async *stream(): AsyncIterable<EngineEvent> {
+        yield {
+          type: "tool-input-delta",
+          id: "tool-edit",
+          name: "edit-design",
+          text: "",
+        };
+        await new Promise(() => {});
+      },
+    };
+    const events: AgentChatEvent[] = [];
+
+    try {
+      const run = runAgentLoop({
+        engine,
+        model: "test-model",
+        systemPrompt: "system",
+        tools: [],
+        messages: [{ role: "user", content: [{ type: "text", text: "go" }] }],
+        actions: {
+          "edit-design": actionEntry({ readOnly: false }),
+        },
+        send: (event) => events.push(event),
+        signal: new AbortController().signal,
+      });
+
+      await vi.advanceTimersByTimeAsync(0);
+      expect(events).toContainEqual({
+        type: "activity",
+        label: "Preparing edit-design action",
+        tool: "edit-design",
+        id: "tool-edit",
+        progressBytes: 0,
+      });
+
+      await vi.advanceTimersByTimeAsync(90_000);
+      await run;
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(events.at(-1)).toEqual({
+      type: "auto_continue",
+      reason: "no_progress",
+    });
+    expect(events).not.toContainEqual(
+      expect.objectContaining({ type: "tool_start" }),
+    );
+  });
+
+  it("clears the action-preparation timeout when the stream rejects", async () => {
+    vi.useFakeTimers({ now: 1_000_000 });
+    const engine: AgentEngine = {
+      name: "test",
+      label: "Test",
+      defaultModel: "test-model",
+      supportedModels: ["test-model"],
+      capabilities: {
+        thinking: false,
+        promptCaching: false,
+        vision: false,
+        computerUse: false,
+        parallelToolCalls: true,
+      },
+      async *stream(): AsyncIterable<EngineEvent> {
+        yield {
+          type: "tool-input-start",
+          id: "tool-edit",
+          name: "edit-design",
+        };
+        throw new Error("fatal stream exploded");
+      },
+    };
+    const events: AgentChatEvent[] = [];
+
+    try {
+      await expect(
+        runAgentLoop({
+          engine,
+          model: "test-model",
+          systemPrompt: "system",
+          tools: [],
+          messages: [{ role: "user", content: [{ type: "text", text: "go" }] }],
+          actions: {
+            "edit-design": actionEntry({ readOnly: false }),
+          },
+          send: (event) => events.push(event),
+          signal: new AbortController().signal,
+        }),
+      ).rejects.toThrow("fatal stream exploded");
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(events).toContainEqual({
+      type: "activity",
+      label: "Preparing edit-design action",
+      tool: "edit-design",
+      id: "tool-edit",
+    });
+  });
+
+  it("closes the event stream after an action-preparation stall", async () => {
+    let now = 1_000_000;
+    const dateNow = vi.spyOn(Date, "now").mockImplementation(() => now);
+    const returnSpy = vi.fn(async () => ({ done: true, value: undefined }));
+    const engine: AgentEngine = {
+      name: "test",
+      label: "Test",
+      defaultModel: "test-model",
+      supportedModels: ["test-model"],
+      capabilities: {
+        thinking: false,
+        promptCaching: false,
+        vision: false,
+        computerUse: false,
+        parallelToolCalls: true,
+      },
+      stream(): AsyncIterable<EngineEvent> {
+        let step = 0;
+        return {
+          [Symbol.asyncIterator]() {
+            return {
+              async next() {
+                if (step === 0) {
+                  step += 1;
+                  return {
+                    done: false,
+                    value: {
+                      type: "tool-input-start",
+                      id: "tool-edit",
+                      name: "edit-design",
+                    },
+                  };
+                }
+                now += 91_000;
+                return {
+                  done: false,
+                  value: { type: "gateway-heartbeat" },
+                };
+              },
+              return: returnSpy,
+            };
+          },
+        };
+      },
+    };
+    const events: AgentChatEvent[] = [];
+
+    try {
+      await runAgentLoop({
+        engine,
+        model: "test-model",
+        systemPrompt: "system",
+        tools: [],
+        messages: [{ role: "user", content: [{ type: "text", text: "go" }] }],
+        actions: {
+          "edit-design": actionEntry({ readOnly: false }),
+        },
+        send: (event) => events.push(event),
+        signal: new AbortController().signal,
+      });
+    } finally {
+      dateNow.mockRestore();
+    }
+
+    expect(returnSpy).toHaveBeenCalledTimes(1);
+    expect(events.at(-1)).toEqual({
+      type: "auto_continue",
+      reason: "no_progress",
+    });
+    expect(events).not.toContainEqual({ type: "stream_keepalive" });
+  });
+
+  it("checkpoints when the model stream goes keepalive-only after a tool result", async () => {
+    let now = 1_000_000;
+    const dateNow = vi.spyOn(Date, "now").mockImplementation(() => now);
+    let streamCount = 0;
+    const engine: AgentEngine = {
+      name: "test",
+      label: "Test",
+      defaultModel: "test-model",
+      supportedModels: ["test-model"],
+      capabilities: {
+        thinking: false,
+        promptCaching: false,
+        vision: false,
+        computerUse: false,
+        parallelToolCalls: true,
+      },
+      async *stream(): AsyncIterable<EngineEvent> {
+        streamCount += 1;
+        if (streamCount === 1) {
+          yield {
+            type: "assistant-content",
+            parts: [
+              {
+                type: "tool-call" as const,
+                id: "tool-snapshot",
+                name: "get-design-snapshot",
+                input: { designId: "design-1", fileId: "file-1" },
+              },
+            ],
+          };
+          yield { type: "stop", reason: "tool_use" };
+          return;
+        }
+        now += 91_000;
+        yield { type: "gateway-heartbeat" };
+        yield { type: "text-delta", text: "should not continue" };
+      },
+    };
+    const events: AgentChatEvent[] = [];
+
+    try {
+      await runAgentLoop({
+        engine,
+        model: "test-model",
+        systemPrompt: "system",
+        tools: [],
+        messages: [{ role: "user", content: [{ type: "text", text: "go" }] }],
+        actions: {
+          "get-design-snapshot": actionEntry({ readOnly: true }),
+        },
+        send: (event) => events.push(event),
+        signal: new AbortController().signal,
+      });
+    } finally {
+      dateNow.mockRestore();
+    }
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "tool_done",
+        tool: "get-design-snapshot",
+      }),
+    );
+    expect(events.at(-1)).toEqual({
+      type: "auto_continue",
+      reason: "no_progress",
+    });
+    expect(events).not.toContainEqual({ type: "stream_keepalive" });
+    expect(events).not.toContainEqual(
+      expect.objectContaining({ type: "text", text: "should not continue" }),
+    );
+  });
+
+  it("keeps a model stream alive when non-heartbeat events continue", async () => {
+    let now = 1_000_000;
+    const dateNow = vi.spyOn(Date, "now").mockImplementation(() => now);
+    const engine: AgentEngine = {
+      name: "test",
+      label: "Test",
+      defaultModel: "test-model",
+      supportedModels: ["test-model"],
+      capabilities: {
+        thinking: false,
+        promptCaching: false,
+        vision: false,
+        computerUse: false,
+        parallelToolCalls: true,
+      },
+      async *stream(): AsyncIterable<EngineEvent> {
+        now += 45_000;
+        yield { type: "gateway-heartbeat" };
+        now += 44_000;
+        yield { type: "text-delta", text: "still alive" };
+        now += 89_000;
+        yield { type: "gateway-heartbeat" };
+        yield {
+          type: "assistant-content",
+          parts: [{ type: "text" as const, text: "still alive" }],
+        };
+        yield { type: "stop", reason: "end_turn" };
+      },
+    };
+    const events: AgentChatEvent[] = [];
+
+    try {
+      await runAgentLoop({
+        engine,
+        model: "test-model",
+        systemPrompt: "system",
+        tools: [],
+        messages: [{ role: "user", content: [{ type: "text", text: "go" }] }],
+        actions: {},
+        send: (event) => events.push(event),
+        signal: new AbortController().signal,
+      });
+    } finally {
+      dateNow.mockRestore();
+    }
+
+    expect(events).toContainEqual({ type: "text", text: "still alive" });
+    expect(events).toContainEqual({ type: "done" });
+    expect(events).not.toContainEqual({
+      type: "auto_continue",
+      reason: "no_progress",
+    });
   });
 
   it("keeps tracking a stalled action input across assistant snapshots", async () => {
@@ -1665,6 +2398,82 @@ describe("runAgentLoop", () => {
         id: "search-replacement",
         progressBytes: 43,
       }),
+    );
+    expect(events).not.toContainEqual({
+      type: "auto_continue",
+      reason: "no_progress",
+    });
+    expect(events.at(-1)).toEqual({ type: "done" });
+  });
+
+  it("keeps a different tool streaming after an abandoned zero-byte tool", async () => {
+    let now = 1_000_000;
+    const dateNow = vi.spyOn(Date, "now").mockImplementation(() => now);
+    const engine: AgentEngine = {
+      name: "test",
+      label: "Test",
+      defaultModel: "test-model",
+      supportedModels: ["test-model"],
+      capabilities: {
+        thinking: false,
+        promptCaching: false,
+        vision: false,
+        computerUse: false,
+        parallelToolCalls: true,
+      },
+      async *stream(): AsyncIterable<EngineEvent> {
+        yield {
+          type: "tool-input-delta",
+          id: "edit-abandoned",
+          name: "edit-design",
+          text: "",
+        };
+        now += 89_000;
+        yield {
+          type: "tool-input-delta",
+          id: "generate-replacement",
+          name: "generate-design",
+          text: '{"prompt":"fresh generated screen',
+        };
+        now += 2_000;
+        yield { type: "text-delta", text: "still preparing" };
+        yield {
+          type: "assistant-content",
+          parts: [{ type: "text" as const, text: "done" }],
+        };
+        yield { type: "stop", reason: "end_turn" };
+      },
+    };
+    const events: AgentChatEvent[] = [];
+
+    try {
+      await runAgentLoop({
+        engine,
+        model: "test-model",
+        systemPrompt: "system",
+        tools: [],
+        messages: [{ role: "user", content: [{ type: "text", text: "go" }] }],
+        actions: {
+          "edit-design": actionEntry({ readOnly: false }),
+          "generate-design": actionEntry({ readOnly: false }),
+        },
+        send: (event) => events.push(event),
+        signal: new AbortController().signal,
+      });
+    } finally {
+      dateNow.mockRestore();
+    }
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "activity",
+        tool: "generate-design",
+        id: "generate-replacement",
+        progressBytes: 33,
+      }),
+    );
+    expect(events).toContainEqual(
+      expect.objectContaining({ type: "text", text: "still preparing" }),
     );
     expect(events).not.toContainEqual({
       type: "auto_continue",
@@ -2609,6 +3418,178 @@ describe("runAgentLoop", () => {
         type: "tool_done",
         tool: "no-args",
         result: expect.stringContaining("must be object"),
+      }),
+    );
+  });
+
+  it("coerces scalar raw JSON Schema parameters before running a tool", async () => {
+    const run = vi.fn(async (args) => `includeContent=${args.includeContent}`);
+    const engine: AgentEngine = {
+      name: "test",
+      label: "Test",
+      defaultModel: "test-model",
+      supportedModels: ["test-model"],
+      capabilities: {
+        thinking: false,
+        promptCaching: false,
+        vision: false,
+        computerUse: false,
+        parallelToolCalls: false,
+      },
+      async *stream(): AsyncIterable<EngineEvent> {
+        yield {
+          type: "assistant-content",
+          parts: [
+            {
+              type: "tool-call" as const,
+              id: "tool-schema-coerce",
+              name: "get-extension",
+              input: { id: "ext-1", includeContent: "true" },
+            },
+          ],
+        };
+        yield { type: "stop", reason: "tool_use" };
+      },
+    };
+    const events: any[] = [];
+
+    await runAgentLoop({
+      engine,
+      model: "test-model",
+      systemPrompt: "system",
+      tools: [],
+      messages: [{ role: "user", content: [{ type: "text", text: "go" }] }],
+      actions: {
+        "get-extension": {
+          tool: {
+            description: "Get extension",
+            parameters: {
+              type: "object",
+              properties: {
+                id: { type: "string" },
+                includeContent: { type: "boolean" },
+              },
+              required: ["id"],
+            },
+          },
+          readOnly: true,
+          run,
+        },
+      },
+      send: (event) => events.push(event),
+      signal: new AbortController().signal,
+    });
+
+    expect(run).toHaveBeenCalledWith(
+      expect.objectContaining({ includeContent: true }),
+      expect.anything(),
+    );
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "tool_done",
+        tool: "get-extension",
+        result: "includeContent=true",
+      }),
+    );
+  });
+
+  it("does not seed read-only duplicate cache from invalid parameter results", async () => {
+    const run = vi.fn(async () => "should not run");
+    const engine: AgentEngine = {
+      name: "test",
+      label: "Test",
+      defaultModel: "test-model",
+      supportedModels: ["test-model"],
+      capabilities: {
+        thinking: false,
+        promptCaching: false,
+        vision: false,
+        computerUse: false,
+        parallelToolCalls: false,
+      },
+      async *stream(): AsyncIterable<EngineEvent> {
+        yield {
+          type: "assistant-content",
+          parts: [
+            {
+              type: "tool-call" as const,
+              id: "tool-schema-repeat",
+              name: "get-extension",
+              input: { id: "ext-1", includeContent: "yes" },
+            },
+          ],
+        };
+        yield { type: "stop", reason: "tool_use" };
+      },
+    };
+    const events: any[] = [];
+
+    await runAgentLoop({
+      engine,
+      model: "test-model",
+      systemPrompt: "system",
+      tools: [],
+      messages: [
+        { role: "user", content: [{ type: "text", text: "fix extension" }] },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool-call",
+              id: "prior-invalid",
+              name: "get-extension",
+              input: { id: "ext-1", includeContent: "yes" },
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool-result",
+              toolCallId: "prior-invalid",
+              toolName: "get-extension",
+              toolInput: '{"id":"ext-1","includeContent":"yes"}',
+              content:
+                "Invalid action parameters for get-extension: input/includeContent must be boolean.",
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [{ type: "text", text: AGENT_INTERNAL_CONTINUE_PROMPT }],
+        },
+      ],
+      actions: {
+        "get-extension": {
+          tool: {
+            description: "Get extension",
+            parameters: {
+              type: "object",
+              properties: {
+                id: { type: "string" },
+                includeContent: { type: "boolean" },
+              },
+              required: ["id"],
+            },
+          },
+          readOnly: true,
+          run,
+        },
+      },
+      send: (event) => events.push(event),
+      signal: new AbortController().signal,
+    });
+
+    expect(run).not.toHaveBeenCalled();
+    expect(JSON.stringify(events)).not.toContain("Skipped duplicate read-only");
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "tool_done",
+        tool: "get-extension",
+        result: expect.stringContaining(
+          "Invalid action parameters for get-extension",
+        ),
       }),
     );
   });
@@ -3939,9 +4920,15 @@ describe("runAgentLoop", () => {
 
     expect(streamCalls).toBe(1);
     expect(events).toEqual([
-      { type: "tool_start", tool: "bigquery", input: { sql: "select nope" } },
+      {
+        type: "tool_start",
+        id: "query-1",
+        tool: "bigquery",
+        input: { sql: "select nope" },
+      },
       {
         type: "tool_done",
+        id: "query-1",
         tool: "bigquery",
         input: { sql: "select nope" },
         result: JSON.stringify({
@@ -4018,12 +5005,14 @@ describe("runAgentLoop", () => {
     expect(streamCalls).toBe(2);
     expect(events).toContainEqual({
       type: "tool_start",
+      id: "bad-call",
       tool: "add-slide",
       input: { deckId: "deck-1", content: "<div></div>", position: "x" },
     });
     const toolDone = events.find(
       (event) => event.type === "tool_done" && event.tool === "add-slide",
     );
+    expect(toolDone?.id).toBe("bad-call");
     expect(toolDone?.result).toContain("Invalid action parameters");
     expect(toolDone?.result).toContain("position must be a number");
     expect(events).toContainEqual({
@@ -4141,6 +5130,7 @@ describe("runAgentLoop", () => {
     expect(streamCalls).toBe(2);
     expect(events).toContainEqual({
       type: "tool_done",
+      id: "mcp-call",
       tool: "mcp__x__fail",
       input: {},
       result: "Error calling MCP tool mcp__x__fail: boom",
@@ -4253,6 +5243,7 @@ describe("runAgentLoop", () => {
     ]);
     expect(events).toContainEqual({
       type: "tool_start",
+      id: "query-1",
       tool: "query-data",
       input: { sql: "select count(*)" },
     });
@@ -4461,11 +5452,128 @@ describe("runAgentLoop", () => {
     expect(events.at(-1)).toEqual({ type: "done" });
   });
 
-  it("surfaces a fallback message when the engine ends with no text or tool calls", async () => {
+  it("allows a final-response guard to request additional corrective retries", async () => {
+    let streamCalls = 0;
+    const engine: AgentEngine = {
+      name: "test",
+      label: "Test",
+      defaultModel: "test-model",
+      supportedModels: ["test-model"],
+      capabilities: {
+        thinking: false,
+        promptCaching: false,
+        vision: false,
+        computerUse: false,
+        parallelToolCalls: false,
+      },
+      async *stream(): AsyncIterable<EngineEvent> {
+        streamCalls += 1;
+        const text = `ungrounded answer ${streamCalls}`;
+        yield { type: "text-delta", text };
+        yield {
+          type: "assistant-content",
+          parts: [{ type: "text" as const, text }],
+        };
+        yield { type: "stop", reason: "end_turn" };
+      },
+    };
+    const events: any[] = [];
+    const guard = vi.fn(() => ({
+      retryMessage: "Query a real source before answering.",
+      fallbackMessage: "No grounded result is available.",
+      maxRetries: 2,
+    }));
+
+    await runAgentLoop({
+      engine,
+      model: "test-model",
+      systemPrompt: "system",
+      tools: [],
+      messages: [{ role: "user", content: [{ type: "text", text: "go" }] }],
+      actions: {},
+      send: (event) => events.push(event),
+      signal: new AbortController().signal,
+      finalResponseGuard: guard,
+    });
+
+    expect(streamCalls).toBe(3);
+    expect(guard).toHaveBeenCalledTimes(3);
+    expect(guard.mock.calls.map(([context]) => context.retryCount)).toEqual([
+      0, 1, 2,
+    ]);
+    expect(events).toContainEqual({
+      type: "text",
+      text: "No grounded result is available.",
+    });
+    expect(events.at(-1)).toEqual({ type: "done" });
+  });
+
+  it("continues once when the engine ends with no text or tool calls", async () => {
     // Mirrors OpenAI Responses gpt-5+ producing reasoning-only content with
     // zero `output_text` items: the engine still emits a clean `end_turn`
-    // stop, but parts contains only thinking. Without the fallback the run
-    // would render as a silent empty assistant bubble.
+    // stop, but parts contains only thinking. Retry once so a transient
+    // reasoning-budget miss does not surface as a manual retry prompt.
+    let streamCalls = 0;
+    const seenMessages: any[] = [];
+    const engine: AgentEngine = {
+      name: "test",
+      label: "Test",
+      defaultModel: "test-model",
+      supportedModels: ["test-model"],
+      capabilities: {
+        thinking: true,
+        promptCaching: false,
+        vision: false,
+        computerUse: false,
+        parallelToolCalls: false,
+      },
+      async *stream(opts): AsyncIterable<EngineEvent> {
+        streamCalls += 1;
+        seenMessages.push(JSON.stringify(opts.messages));
+        if (streamCalls > 1) {
+          yield { type: "text-delta", text: "Recovered answer." };
+          yield {
+            type: "assistant-content",
+            parts: [{ type: "text" as const, text: "Recovered answer." }],
+          };
+          yield { type: "stop", reason: "end_turn" };
+          return;
+        }
+        yield { type: "thinking-delta", text: "thinking out loud..." };
+        yield {
+          type: "assistant-content",
+          parts: [{ type: "thinking" as const, text: "thinking out loud..." }],
+        };
+        yield { type: "stop", reason: "end_turn" };
+      },
+    };
+    const events: any[] = [];
+
+    await runAgentLoop({
+      engine,
+      model: "test-model",
+      systemPrompt: "system",
+      tools: [],
+      messages: [{ role: "user", content: [{ type: "text", text: "go" }] }],
+      actions: {},
+      send: (event) => events.push(event),
+      signal: new AbortController().signal,
+    });
+
+    expect(streamCalls).toBe(2);
+    expect(seenMessages.at(-1)).toContain("output-token cap");
+    expect(events.map((event) => event.type)).toEqual([
+      "thinking",
+      "clear",
+      "text",
+      "done",
+    ]);
+    const textEvents = events.filter((e) => e.type === "text");
+    expect(textEvents).toHaveLength(1);
+    expect(textEvents[0].text).toBe("Recovered answer.");
+  });
+
+  it("surfaces a fallback message after an empty-response retry also ends empty", async () => {
     const engine: AgentEngine = {
       name: "test",
       label: "Test",
@@ -4504,6 +5612,80 @@ describe("runAgentLoop", () => {
     expect(textEvents).toHaveLength(1);
     expect(textEvents[0].text).toMatch(/empty response/i);
     expect(textEvents[0].text).toMatch(/different model/i);
+    expect(events.map((event) => event.type)).toEqual([
+      "thinking",
+      "clear",
+      "thinking",
+      "clear",
+      "thinking",
+      "clear",
+      "text",
+      "done",
+    ]);
+  });
+
+  it("adapts each empty-response retry: raises maxOutputTokens and steps reasoning effort down a tier", async () => {
+    const seenOpts: EngineStreamOptions[] = [];
+    const engine: AgentEngine = {
+      name: "test",
+      label: "Test",
+      defaultModel: "test-model",
+      supportedModels: ["test-model"],
+      capabilities: {
+        thinking: true,
+        promptCaching: false,
+        vision: false,
+        computerUse: false,
+        parallelToolCalls: false,
+      },
+      async *stream(opts): AsyncIterable<EngineEvent> {
+        seenOpts.push(opts);
+        yield { type: "thinking-delta", text: "thinking out loud..." };
+        yield {
+          type: "assistant-content",
+          parts: [{ type: "thinking" as const, text: "thinking out loud..." }],
+        };
+        yield { type: "stop", reason: "end_turn" };
+      },
+    };
+    const events: any[] = [];
+
+    await runAgentLoop({
+      engine,
+      model: "claude-sonnet-5",
+      systemPrompt: "system",
+      tools: [],
+      messages: [{ role: "user", content: [{ type: "text", text: "go" }] }],
+      actions: {},
+      send: (event) => events.push(event),
+      signal: new AbortController().signal,
+      maxOutputTokens: 8_000,
+      reasoningEffort: "high",
+    });
+
+    // Initial attempt + 2 retries: EMPTY_FINAL_RESPONSE_RETRY_LIMIT is 2 now
+    // that each retry actually adapts instead of repeating the same request.
+    expect(seenOpts).toHaveLength(3);
+
+    // First attempt uses exactly what the caller asked for.
+    expect(seenOpts[0].maxOutputTokens).toBe(8_000);
+    expect(seenOpts[0].reasoningEffort).toBe("high");
+
+    // First retry: tokens raised well above the first attempt, effort down
+    // one tier (high -> medium).
+    expect(seenOpts[1].maxOutputTokens).toBeGreaterThan(
+      seenOpts[0].maxOutputTokens!,
+    );
+    expect(seenOpts[1].reasoningEffort).toBe("medium");
+
+    // Second retry: effort steps down again (medium -> low); tokens stay at
+    // the raised ceiling rather than climbing indefinitely.
+    expect(seenOpts[2].reasoningEffort).toBe("low");
+    expect(seenOpts[2].maxOutputTokens).toBe(seenOpts[1].maxOutputTokens);
+
+    const textEvents = events.filter((e) => e.type === "text");
+    expect(textEvents).toHaveLength(1);
+    expect(textEvents[0].text).toMatch(/empty response/i);
   });
 
   it("does not surface the empty-response fallback when text was streamed", async () => {
@@ -4945,6 +6127,19 @@ describe("isRetryableError", () => {
     expect(isRetryableError(err)).toBe(true);
   });
 
+  it("retries on the http_429 errorCode", () => {
+    const err = new EngineError("429 status code (no body)", {
+      errorCode: "http_429",
+    });
+    expect(isRetryableError(err)).toBe(true);
+  });
+
+  it("retries on a bare '429 status code (no body)' message with no structured status", () => {
+    // The Anthropic/AI-SDK empty-body rate-limit format historically slipped
+    // past retries because the keyword list matched "529"/"502" but not 429.
+    expect(isRetryableError(new Error("429 status code (no body)"))).toBe(true);
+  });
+
   it("retries on HTTP 529 (Anthropic overloaded) from statusCode field", () => {
     const err = new EngineError("overloaded", { statusCode: 529 });
     expect(isRetryableError(err)).toBe(true);
@@ -4970,6 +6165,21 @@ describe("isRetryableError", () => {
   it("does not retry when providerRetryable is false and no other signals", () => {
     const err = new EngineError("not retryable", { providerRetryable: false });
     expect(isRetryableError(err)).toBe(false);
+  });
+
+  it("retries on Anthropic bare 'Connection error.' transport failures", () => {
+    // Anthropic SDK APIConnectionError defaults to this exact message with no
+    // HTTP status. Slides prod was dying in ~3s on this and storming client
+    // POSTs because neither in-run retry nor run-level resume recognized it.
+    expect(isRetryableError(new Error("Connection error."))).toBe(true);
+    expect(
+      isRetryableError(
+        new EngineError("Connection error.", {
+          errorCode: "provider_network_error",
+          providerRetryable: true,
+        }),
+      ),
+    ).toBe(true);
   });
 
   it("retries on Anthropic 'overloaded' message keyword", () => {
@@ -5257,6 +6467,82 @@ describe("shouldChainBackgroundContinuation (server-driven background chain)", (
     ).toBe(true);
   });
 
+  // ── Foreground self-chain (AGENT_CHAT_FOREGROUND_SELF_CHAIN) ─────────────
+  // The boolean passed to shouldChainBackgroundContinuation is the already
+  // resolved gate (hosted + A2A_SECRET + not explicitly opted out).
+
+  it("does NOT chain a foreground run when the resolved self-chain gate is false", () => {
+    expect(
+      shouldChainBackgroundContinuation({
+        isBackgroundWorker: false,
+        run: makeRun([{ type: "auto_continue", reason: "run_timeout" }]),
+        continuationCount: 0,
+        foregroundSelfChainEligible: false,
+      }),
+    ).toBe(false);
+  });
+
+  it("CHAINS a foreground run at a continuation boundary when self-chain is opted in", () => {
+    expect(
+      shouldChainBackgroundContinuation({
+        isBackgroundWorker: false,
+        run: makeRun([{ type: "auto_continue", reason: "run_timeout" }]),
+        continuationCount: 0,
+        foregroundSelfChainEligible: true,
+      }),
+    ).toBe(true);
+  });
+
+  it("does NOT foreground-self-chain a run that was dispatched to the durable background worker", () => {
+    // A background-dispatched run's recovery is owned by the circuit-breaker
+    // + isBackgroundWorker chain — the foreground flag must never double up.
+    expect(
+      shouldChainBackgroundContinuation({
+        isBackgroundWorker: false,
+        run: makeRun([{ type: "auto_continue", reason: "run_timeout" }]),
+        continuationCount: 0,
+        foregroundSelfChainEligible: true,
+        dispatchedToBackground: true,
+      }),
+    ).toBe(false);
+  });
+
+  it("does NOT foreground-self-chain an aborted (user-stopped) run", () => {
+    expect(
+      shouldChainBackgroundContinuation({
+        isBackgroundWorker: false,
+        run: makeRun(
+          [{ type: "auto_continue", reason: "run_timeout" }],
+          "aborted",
+        ),
+        continuationCount: 0,
+        foregroundSelfChainEligible: true,
+      }),
+    ).toBe(false);
+  });
+
+  it("does NOT foreground-self-chain a cleanly finished run", () => {
+    expect(
+      shouldChainBackgroundContinuation({
+        isBackgroundWorker: false,
+        run: makeRun([{ type: "text", text: "all done" }, { type: "done" }]),
+        continuationCount: 0,
+        foregroundSelfChainEligible: true,
+      }),
+    ).toBe(false);
+  });
+
+  it("foreground self-chain respects the continuation budget", () => {
+    expect(
+      shouldChainBackgroundContinuation({
+        isBackgroundWorker: false,
+        run: makeRun([{ type: "auto_continue", reason: "run_timeout" }]),
+        continuationCount: MAX_BACKGROUND_RUN_CONTINUATIONS,
+        foregroundSelfChainEligible: true,
+      }),
+    ).toBe(false);
+  });
+
   it("preserves the specific continuation reason for recoverable background errors", () => {
     expect(
       backgroundContinuationReasonForRun(
@@ -5427,6 +6713,83 @@ describe("shouldChainBackgroundContinuation (server-driven background chain)", (
       }),
     ).toBe(true);
   });
+
+  it("marks a successfully chained background chunk terminal before the worker returns", async () => {
+    const updateRunStatusIfRunning = vi.fn(async () => true);
+    const setRunError = vi.fn(async () => {});
+    const setRunTerminalReason = vi.fn(async () => {});
+
+    await expect(
+      markBackgroundContinuationChunkTerminal({
+        runId: "run-old",
+        continuationReason: "no_progress",
+        deps: { updateRunStatusIfRunning, setRunError, setRunTerminalReason },
+      }),
+    ).resolves.toBe(true);
+
+    expect(updateRunStatusIfRunning).toHaveBeenCalledWith(
+      "run-old",
+      "completed",
+    );
+    expect(setRunTerminalReason).toHaveBeenCalledWith("run-old", "no_progress");
+    expect(setRunError).not.toHaveBeenCalled();
+  });
+
+  it("marks a recoverable error continuation chunk errored with its durable failure details", async () => {
+    const updateRunStatusIfRunning = vi.fn(async () => true);
+    const setRunError = vi.fn(async () => {});
+    const setRunTerminalReason = vi.fn(async () => {});
+
+    await expect(
+      markBackgroundContinuationChunkTerminal({
+        runId: "run-error-boundary",
+        continuationReason: "run_timeout",
+        terminalEvent: {
+          type: "error",
+          error: "Provider connection failed",
+          errorCode: "provider_failed",
+          details: "upstream returned 500",
+          recoverable: true,
+        },
+        deps: { updateRunStatusIfRunning, setRunError, setRunTerminalReason },
+      }),
+    ).resolves.toBe(true);
+
+    expect(updateRunStatusIfRunning).toHaveBeenCalledWith(
+      "run-error-boundary",
+      "errored",
+    );
+    expect(setRunTerminalReason).toHaveBeenCalledWith(
+      "run-error-boundary",
+      "error:provider_failed",
+    );
+    expect(setRunError).toHaveBeenCalledWith(
+      "run-error-boundary",
+      "provider_failed",
+      "upstream returned 500",
+    );
+  });
+
+  it("does not overwrite terminal reason when another process already finished the chunk", async () => {
+    const updateRunStatusIfRunning = vi.fn(async () => false);
+    const setRunError = vi.fn(async () => {});
+    const setRunTerminalReason = vi.fn(async () => {});
+
+    await expect(
+      markBackgroundContinuationChunkTerminal({
+        runId: "run-old",
+        continuationReason: "run_timeout",
+        deps: { updateRunStatusIfRunning, setRunError, setRunTerminalReason },
+      }),
+    ).resolves.toBe(false);
+
+    expect(updateRunStatusIfRunning).toHaveBeenCalledWith(
+      "run-old",
+      "completed",
+    );
+    expect(setRunTerminalReason).not.toHaveBeenCalled();
+    expect(setRunError).not.toHaveBeenCalled();
+  });
 });
 
 describe("appendAgentLoopContinuation", () => {
@@ -5442,7 +6805,9 @@ describe("appendAgentLoopContinuation", () => {
     expect(text).toContain("preparing the `edit-design` action input");
     expect(text).toContain("smaller `edit-design` payload");
     expect(text).toContain("exact search/replace edits");
-    expect(text).toContain("avoid `replacementContent`");
+    expect(text).toContain("reuse the existing `fileId`");
+    expect(text).toContain("do not call `list-files`");
+    expect(text).toContain("`replacementContent`");
   });
 });
 
@@ -5783,5 +7148,102 @@ describe("resolveBackgroundDispatchOutcome (durable circuit-breaker)", () => {
     });
     // Bounded by the reaper-anchored cap (liveness+50 → iter4), not unbounded.
     expect(readClaim).toHaveBeenCalledTimes(4);
+  });
+});
+
+describe("runAgentLoop tool-result images", () => {
+  it("attaches _agentImages to the tool-result part, strips the field from the text, and persists only notes", async () => {
+    const oversize = "A".repeat(2_000_001);
+    const actions: Record<string, ActionEntry> = {
+      screenshot: {
+        ...actionEntry({ description: "Take a screenshot", readOnly: true }),
+        run: async () => ({
+          ok: true,
+          page: "dashboard",
+          _agentImages: [
+            { url: "https://cdn.example.com/shot.png", label: "before" },
+            { data: oversize, mediaType: "image/png", label: "too-big" },
+          ],
+        }),
+      },
+    };
+    const tools = actionsToEngineTools(actions);
+    let streamCalls = 0;
+    let secondCallMessages: any[] = [];
+
+    const engine: AgentEngine = {
+      name: "test",
+      label: "Test",
+      defaultModel: "test-model",
+      supportedModels: ["test-model"],
+      capabilities: {
+        thinking: false,
+        promptCaching: false,
+        vision: true,
+        computerUse: false,
+        parallelToolCalls: false,
+      },
+      async *stream(opts): AsyncIterable<EngineEvent> {
+        streamCalls += 1;
+        if (streamCalls === 1) {
+          yield {
+            type: "assistant-content",
+            parts: [
+              {
+                type: "tool-call" as const,
+                id: "shot-1",
+                name: "screenshot",
+                input: {},
+              },
+            ],
+          };
+          yield { type: "stop", reason: "tool_use" };
+          return;
+        }
+        secondCallMessages = opts.messages as any[];
+        yield {
+          type: "assistant-content",
+          parts: [{ type: "text" as const, text: "looks good" }],
+        };
+        yield { type: "stop", reason: "end_turn" };
+      },
+    };
+
+    const events: AgentChatEvent[] = [];
+    await runAgentLoop({
+      engine,
+      model: "test-model",
+      systemPrompt: "system",
+      tools,
+      messages: [{ role: "user", content: [{ type: "text", text: "go" }] }],
+      actions,
+      send: (e) => events.push(e),
+      signal: new AbortController().signal,
+    });
+
+    const toolResult = secondCallMessages
+      .flatMap((m: any) => m.content ?? [])
+      .find((p: any) => p.type === "tool-result");
+    expect(toolResult).toBeDefined();
+    // Valid image rides the part; the oversize one was dropped.
+    expect(toolResult.images).toEqual([
+      { url: "https://cdn.example.com/shot.png", label: "before" },
+    ]);
+    // The field is stripped from the JSON the model reads…
+    expect(toolResult.content).not.toContain("_agentImages");
+    expect(toolResult.content).toContain('"page": "dashboard"');
+    // …the url note and the oversize drop note are appended as text…
+    expect(toolResult.content).toContain("https://cdn.example.com/shot.png");
+    expect(toolResult.content).toContain("exceeds");
+    // …and the base64 payload never reaches the text.
+    expect(toolResult.content).not.toContain("A".repeat(100));
+
+    // The persisted tool_done event carries only the string result (with the
+    // notes), never an images array.
+    const toolDone = events.find((e) => e.type === "tool_done") as any;
+    expect(toolDone).toBeDefined();
+    expect(toolDone.result).toContain("https://cdn.example.com/shot.png");
+    expect(toolDone.result).not.toContain("A".repeat(100));
+    expect(toolDone.images).toBeUndefined();
   });
 });

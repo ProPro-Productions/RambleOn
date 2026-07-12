@@ -8,6 +8,7 @@ import {
 } from "@agent-native/core/client";
 import { ExtensionsSidebarSection } from "@agent-native/core/client/extensions";
 import { OrgSwitcher } from "@agent-native/core/client/org";
+import { HeaderActionsProvider } from "@agent-native/toolkit/app-shell";
 import {
   IconFlame,
   IconLoader2,
@@ -36,7 +37,6 @@ import { apiFetch } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 import { Header } from "./Header";
-import { HeaderActionsProvider } from "./HeaderActions";
 
 const navItems = [
   { icon: IconFlame, labelKey: "navigation.entry", href: "/" },
@@ -80,7 +80,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     }).catch(() => {});
   }, [location.pathname, isAnalytics, isSettings]);
 
-  // Poll for navigate commands from the agent
+  // useDbSync invalidates this key when the agent writes a navigate command.
   const { data: navCommand } = useQuery({
     queryKey: ["navigate-command"],
     queryFn: async () => {
@@ -94,7 +94,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         return null;
       }
     },
-    refetchInterval: 2000,
   });
 
   useEffect(() => {

@@ -32,6 +32,8 @@ import {
 import type { LinksFunction, LoaderFunctionArgs } from "react-router";
 import { Toaster } from "sonner";
 
+import { AppToolkitProvider } from "@/components/ui/toolkit-provider";
+
 import changelog from "../CHANGELOG.md?raw";
 import { i18nCatalog } from "./i18n";
 
@@ -228,6 +230,7 @@ export default function Root() {
           // Calendar aggressively refetches on focus because external
           // calendar events can change without a DB sync event (e.g. Google
           // Calendar webhooks with a processing delay).
+          // request-storm-allow: one user-driven focus refresh for provider data.
           refetchOnWindowFocus: true,
           // Flat retry: calendar data fetches don't need the auth-aware
           // retry function — auth errors surface through the booking flow.
@@ -241,21 +244,23 @@ export default function Root() {
   const isPublicPath = isPublicBookingPath(location.pathname);
 
   return (
-    <AppProviders
-      queryClient={queryClient}
-      isPublicPath={isPublicPath}
-      clientOnlyFallback={<DefaultSpinner />}
-      toaster={<Toaster richColors position="bottom-center" />}
-      i18n={{
-        catalog: i18nCatalog,
-        initialLocale: loaderData.locale,
-        initialPreference: loaderData.preference,
-        initialMessages: loaderData.messages,
-        persistPreference: !isPublicPath,
-      }}
-    >
-      <AppContent />
-    </AppProviders>
+    <AppToolkitProvider>
+      <AppProviders
+        queryClient={queryClient}
+        isPublicPath={isPublicPath}
+        clientOnlyFallback={<DefaultSpinner />}
+        toaster={<Toaster richColors position="bottom-center" />}
+        i18n={{
+          catalog: i18nCatalog,
+          initialLocale: loaderData.locale,
+          initialPreference: loaderData.preference,
+          initialMessages: loaderData.messages,
+          persistPreference: !isPublicPath,
+        }}
+      >
+        <AppContent />
+      </AppProviders>
+    </AppToolkitProvider>
   );
 }
 

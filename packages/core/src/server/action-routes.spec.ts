@@ -9,6 +9,8 @@ vi.mock("h3", () => ({
   getMethod: (event: any) => event._method ?? "GET",
   getQuery: (event: any) => event._query ?? {},
   getHeader: (event: any, name: string) => event._headers?.[name.toLowerCase()],
+  getRequestURL: (event: any) =>
+    new URL(event.req?.url ?? "http://localhost/_agent-native/actions/test"),
   setResponseStatus: (event: any, status: number) => {
     event._status = status;
   },
@@ -525,6 +527,7 @@ describe("mountActionRoutes", () => {
     const allowHeaders =
       event._responseHeaders["access-control-allow-headers"].toLowerCase();
     expect(allowHeaders).toContain("x-agent-native-embed-target");
+    expect(allowHeaders).toContain("x-request-source");
     expect(allowHeaders).toContain("x-user-timezone");
     expect(getOwnerFromEvent).not.toHaveBeenCalled();
     expect(actions.mutate.run).not.toHaveBeenCalled();
@@ -550,11 +553,13 @@ describe("mountActionRoutes", () => {
 
     await mounted[0].handler({
       _method: "GET",
+      _headers: { "x-request-source": "browser-tab-1" },
       req: { url: "http://app.test/_agent-native/actions/mutating-read" },
     });
 
     expect(mockNotifyActionChange).toHaveBeenCalledWith({
       actionName: "mutating-read",
+      requestSource: "browser-tab-1",
     });
   });
 

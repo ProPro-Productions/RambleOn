@@ -781,6 +781,7 @@ dependencies = [
  "tauri-plugin-single-instance",
  "tauri-plugin-updater",
  "tokio",
+ "unicode-segmentation",
  "url",
  "whisper-rs",
  "windows 0.62.2",

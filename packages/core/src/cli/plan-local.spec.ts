@@ -373,6 +373,12 @@ describe("local plan CLI helpers", () => {
     expect(result.stdout).toContain(
       "agent-native plan local serve --dir <folder>",
     );
+    expect(result.stdout).toContain(
+      "re-enable Local Network access in the plan.agent-native.com site",
+    );
+    expect(result.stdout).toContain(
+      "Keep the bridge command running while the page is open.",
+    );
   });
 
   it("starts the bridge through both plan serve and plan local serve", async () => {
@@ -425,6 +431,101 @@ describe("local plan CLI helpers", () => {
       expect(captured.stderr, label).toContain("Local Plan bridge running at");
       expect(captured.stderr, label).toContain(
         `Open URL written to ${urlFile}`,
+      );
+      expect(captured.stderr, label).toContain(
+        "Chrome/Edge will ask for Local Network access",
+      );
+      expect(captured.stderr, label).toContain(
+        "re-enable Local Network access in the plan.example.com site settings",
+      );
+      expect(captured.stderr, label).toContain(
+        "Keep this bridge command running while the Plan page is open",
+      );
+      expect(captured.stderr, label).toContain("Safari may block");
+    }
+  });
+
+  it("persists local comments through the tokenized bridge", async () => {
+    const dir = path.join(tmpDir(), "checkout");
+    writeSamplePlan(dir);
+    const bridge = await startLocalPlanBridge({
+      dir,
+      appUrl: "https://plan.example.com",
+      urlFile: false,
+    });
+    const commentsUrl = new URL(bridge.result.bridgeUrl);
+    commentsUrl.pathname = "/local-plan-comments.json";
+
+    try {
+      const preflight = await fetch(commentsUrl, { method: "OPTIONS" });
+      expect(preflight.status).toBe(204);
+      expect(preflight.headers.get("access-control-allow-methods")).toContain(
+        "POST",
+      );
+
+      const initial = (await (await fetch(bridge.result.bridgeUrl)).json()) as {
+        comments?: unknown[];
+      };
+      expect(initial.comments).toEqual([]);
+
+      const badTokenUrl = new URL(commentsUrl);
+      badTokenUrl.searchParams.set("token", "bad");
+      const rejected = await fetch(badTokenUrl, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          comments: [{ id: "cmt_bad", message: "Must not write." }],
+        }),
+      });
+      expect(rejected.status).toBe(403);
+
+      const written = await fetch(commentsUrl, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          comments: [
+            {
+              id: "cmt_local",
+              kind: "annotation",
+              status: "open",
+              message: "Tighten this local recap note.",
+              anchor: JSON.stringify({ kind: "document", blockId: "wf" }),
+            },
+          ],
+        }),
+      });
+      expect(written.status).toBe(200);
+      const payload = (await written.json()) as {
+        comments?: Array<{
+          id: string;
+          message: string;
+          resolutionTarget: string;
+        }>;
+      };
+      expect(payload.comments).toMatchObject([
+        {
+          id: "cmt_local",
+          message: "Tighten this local recap note.",
+          resolutionTarget: "agent",
+        },
+      ]);
+
+      const onDisk = JSON.parse(
+        fs.readFileSync(path.join(dir, "comments.json"), "utf-8"),
+      ) as Array<{ id: string; message: string }>;
+      expect(onDisk).toMatchObject([
+        { id: "cmt_local", message: "Tighten this local recap note." },
+      ]);
+
+      const reloaded = (await (
+        await fetch(bridge.result.bridgeUrl)
+      ).json()) as { comments?: Array<{ id: string }> };
+      expect(reloaded.comments?.map((comment) => comment.id)).toEqual([
+        "cmt_local",
+      ]);
+    } finally {
+      await new Promise<void>((resolve) =>
+        bridge.server.close(() => resolve()),
       );
     }
   });
@@ -709,7 +810,7 @@ describe("local plan CLI helpers", () => {
     }) as typeof fetch;
   }
 
-  it("verifies the localhost bridge headlessly and reports Safari guidance", async () => {
+  it("verifies the localhost bridge headlessly and reports browser guidance", async () => {
     const dir = path.join(tmpDir(), "checkout");
     writeSamplePlan(dir);
 
@@ -729,6 +830,12 @@ describe("local plan CLI helpers", () => {
     expect(result.bridge.mdxFiles).toContain("plan.mdx");
     expect(result.validation.ran).toBe(true);
     expect(result.validation.valid).toBe(true);
+    expect(result.warnings.join("\n")).toContain(
+      "Chrome/Edge will ask for Local Network access",
+    );
+    expect(result.warnings.join("\n")).toContain(
+      "re-enable Local Network access in the plan.example.com site settings",
+    );
     expect(result.warnings.join("\n")).toContain("Safari may block");
     expect(fs.existsSync(path.join(dir, ".plan-url"))).toBe(false);
   });
