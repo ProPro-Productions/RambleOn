@@ -8,7 +8,7 @@ import {
   IconZoomOut,
   IconPlayerPlay,
   IconPlayerPause,
-  IconScissors,
+  IconEdit,
   IconPhotoEdit,
   IconBookmarks,
   IconPuzzle,
@@ -63,6 +63,8 @@ import {
 } from "@/lib/timestamp-mapping";
 import { cn } from "@/lib/utils";
 
+import { IconSplitSegment } from "./split-icon";
+
 export interface EditorToolbarProps {
   recordingId: string;
   playheadMs: number;
@@ -84,6 +86,7 @@ export interface EditorToolbarProps {
   onOpenThumbnailPicker: () => void;
   onOpenChapters: () => void;
   onOpenStitch: () => void;
+  onAddMarker?: (ms: number, kind: string) => void;
   chaptersOpen?: boolean;
 }
 
@@ -103,6 +106,7 @@ export function EditorToolbar({
   onOpenThumbnailPicker,
   onOpenChapters,
   onOpenStitch,
+  onAddMarker,
   chaptersOpen,
 }: EditorToolbarProps) {
   const t = useT();
@@ -256,7 +260,7 @@ export function EditorToolbar({
   };
 
   return (
-    <div className="flex h-11 min-w-0 items-center gap-1 overflow-hidden border-b border-border bg-card/40 px-2">
+    <div className="flex h-11 min-w-0 items-center gap-1 overflow-hidden border-y border-border bg-card/40 px-2">
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
@@ -272,6 +276,10 @@ export function EditorToolbar({
       </Tooltip>
       <Separator orientation="vertical" className="mx-1 h-6" />
 
+      {/* The Actions dropdown used to live here — removed by request: the
+          registry actions apply at a position, and a toolbar menu gives
+          them no positional context. The same actions remain on the
+          timeline's right-click menus, anchored where you click. */}
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
@@ -301,6 +309,36 @@ export function EditorToolbar({
           </span>
         )}
       </div>
+
+      {/* The prominent Split button — splitting at the playhead is the
+          primary segmentation gesture (the playhead itself is deliberately
+          not selectable). */}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            size="sm"
+            variant="secondary"
+            className="gap-1.5"
+            disabled={split.isPending}
+            onClick={() =>
+              split
+                .mutateAsync({
+                  recordingId,
+                  atMs: Math.round(playheadMs),
+                })
+                .catch((err: any) =>
+                  toast.error(err?.message ?? t("editorToolbar.trimFailed")),
+                )
+            }
+          >
+            <IconSplitSegment className="h-4 w-4" />
+            {t("editorToolbar.split")}
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>
+          {t("editorToolbar.splitAtTime", { time: formatMs(playheadMs) })}
+        </TooltipContent>
+      </Tooltip>
 
       <DropdownMenu>
         <Tooltip>
@@ -352,7 +390,7 @@ export function EditorToolbar({
                 onClick={handleTrimSelection}
                 disabled={trim.isPending}
               >
-                <IconScissors className="mr-1 h-4 w-4" />
+                <IconCut className="mr-1 h-4 w-4" />
                 {t("editorToolbar.cutSelection")}
               </Button>
             </TooltipTrigger>
@@ -370,7 +408,7 @@ export function EditorToolbar({
             variant={chaptersOpen ? "secondary" : "ghost"}
             className="gap-1.5"
           >
-            <IconScissors className="h-4 w-4" />
+            <IconEdit className="h-4 w-4" />
             {t("editorToolbar.edit")}
             <IconChevronDown className="h-3.5 w-3.5 opacity-70" />
           </Button>
@@ -389,14 +427,14 @@ export function EditorToolbar({
             disabled={trim.isPending || playheadMs < 500}
             onSelect={handleTrimStart}
           >
-            <IconScissors className="mr-2 h-4 w-4" />
+            <IconCut className="mr-2 h-4 w-4" />
             {t("editorToolbar.cutBeforePlayhead")}
           </DropdownMenuItem>
           <DropdownMenuItem
             disabled={trim.isPending || durationMs - playheadMs < 500}
             onSelect={handleTrimEnd}
           >
-            <IconScissors className="mr-2 h-4 w-4" />
+            <IconCut className="mr-2 h-4 w-4" />
             {t("editorToolbar.cutAfterPlayhead")}
           </DropdownMenuItem>
           <DropdownMenuSeparator />

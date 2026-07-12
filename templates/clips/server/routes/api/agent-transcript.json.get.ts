@@ -39,7 +39,7 @@ export default defineEventHandler(async (event: H3Event) => {
   }
 
   const recording = accessResult.access.recording;
-  const { transcript, agentSegments } = await loadAgentTranscript(
+  const { transcript, agentSegments, fullText } = await loadAgentTranscript(
     recording.id,
     recording.durationMs,
   );
@@ -74,7 +74,7 @@ export default defineEventHandler(async (event: H3Event) => {
       language: transcript?.language ?? null,
       failureReason: transcript?.failureReason ?? null,
       retryAfterSeconds: transcript?.status === "pending" ? 15 : null,
-      fullText: transcript?.fullText ?? "",
+      fullText,
       segments: agentSegments,
       segmentCount: agentSegments.length,
     },

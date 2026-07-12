@@ -18,6 +18,8 @@ import {
   queryString,
   RecordingMediaFetchError,
   type PublicAgentAccess,
+  isInsideExcludedRange,
+  loadAgentExcludedRanges,
 } from "../../lib/public-agent-context.js";
 import {
   extractJpegFrame,
@@ -116,6 +118,20 @@ export default defineEventHandler(async (event: H3Event) => {
     durationMs > 0
       ? Math.min(requestedMs, Math.max(0, durationMs - 1))
       : requestedMs;
+
+  // Respect the owner's cut: frames inside excluded (ignored/trimmed) ranges
+  // are footage a share viewer never sees — don't hand them to agents either.
+  const excludedRanges = await loadAgentExcludedRanges(recording.id);
+  if (isInsideExcludedRange(atMs, excludedRanges)) {
+    setResponseStatus(event, 404);
+    setResponseHeader(event, "Content-Type", "application/json; charset=utf-8");
+    setResponseHeader(event, "X-Content-Type-Options", "nosniff");
+    return {
+      error: "This timestamp falls inside a range the owner cut from the clip.",
+      excluded: true,
+    };
+  }
+
   const key = cacheKey({
     recordingId: recording.id,
     updatedAt: recording.updatedAt,

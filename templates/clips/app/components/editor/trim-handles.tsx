@@ -1,3 +1,4 @@
+import { IconGripHorizontal } from "@tabler/icons-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { formatMs } from "@/lib/timestamp-mapping";
@@ -13,8 +14,10 @@ export interface TrimHandlesProps {
   /** Fires when the user releases the mouse after drag. */
   onCommit?: (value: { startMs: number; endMs: number }) => void;
   durationMs: number;
+  /** Visual tone: segment selections use the brand color, free ranges the
+   * Descript-style violet so the two selection kinds read differently. */
+  tone?: "segment" | "range";
   /** Scroll offset of the parent container so handles track with zoom. */
-  scrollLeft?: number;
   className?: string;
 }
 
@@ -46,21 +49,24 @@ export function TrimHandles({
   onChange,
   onCommit,
   durationMs,
-  scrollLeft = 0,
+  tone = "range",
   className,
 }: TrimHandlesProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [dragMode, setDragMode] = useState<DragMode>(null);
   const dragOffsetRef = useRef(0);
 
+  // The root lives inside the timeline's translated (scrolled) wrapper, so
+  // its bounding rect already reflects the scroll offset — clientX-rect.left
+  // IS the content-space position. Adding scrollLeft would double-count.
   const toMs = useCallback(
     (clientX: number) => {
       const rect = rootRef.current?.getBoundingClientRect();
       if (!rect) return 0;
-      const x = clientX - rect.left + scrollLeft;
+      const x = clientX - rect.left;
       return Math.max(0, Math.min(durationMs, (x / width) * durationMs));
     },
-    [scrollLeft, durationMs, width],
+    [durationMs, width],
   );
 
   const startDrag = (mode: DragMode) => (e: React.PointerEvent) => {
@@ -101,7 +107,7 @@ export function TrimHandles({
     const toMsFromEvent = (e: PointerEvent) => {
       const rect = rootRef.current?.getBoundingClientRect();
       if (!rect) return null;
-      const x = e.clientX - rect.left + scrollLeft;
+      const x = e.clientX - rect.left;
       return Math.max(0, Math.min(durationMs, (x / width) * durationMs));
     };
     window.addEventListener("pointermove", handleMove);
@@ -110,7 +116,14 @@ export function TrimHandles({
       window.removeEventListener("pointermove", handleMove);
       window.removeEventListener("pointerup", handleUp);
     };
-  }, [dragMode, value, onChange, onCommit, scrollLeft, durationMs, width]);
+  }, [dragMode, value, onChange, onCommit, durationMs, width]);
+
+  const RANGE_COLOR = "hsl(258 88% 66%)";
+  const color = tone === "range" ? RANGE_COLOR : getBrandColor();
+  const colorAlpha = (alpha: number) =>
+    tone === "range"
+      ? `hsl(258 88% 66% / ${alpha})`
+      : getBrandColorAlpha(alpha);
 
   const startX = (value.startMs / Math.max(durationMs, 1)) * width;
   const endX = (value.endMs / Math.max(durationMs, 1)) * width;
@@ -127,15 +140,19 @@ export function TrimHandles({
         style={{
           left: startX,
           width: Math.max(2, endX - startX),
-          background: getBrandColorAlpha(0.18),
-          borderTop: `1px solid ${getBrandColor()}`,
-          borderBottom: `1px solid ${getBrandColor()}`,
+          background: colorAlpha(0.18),
+          borderTop: `1px solid ${color}`,
+          borderBottom: `1px solid ${color}`,
         }}
         onPointerDown={startDrag("range")}
       >
         <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-full bg-foreground text-background text-[10px] px-1.5 py-0.5 rounded font-mono whitespace-nowrap">
           {formatMs(value.endMs - value.startMs)}
         </div>
+        {/* Grip affordance so the bar visibly reads as draggable, not just
+            a static highlight — Descript shows the same cue on its
+            selection range. */}
+        <IconGripHorizontal className="absolute top-1 left-1/2 -translate-x-1/2 h-3 w-3 text-white/70" />
       </div>
 
       {/* Left handle */}
@@ -144,7 +161,7 @@ export function TrimHandles({
         style={{
           left: startX - HANDLE_WIDTH / 2,
           width: HANDLE_WIDTH,
-          background: getBrandColor(),
+          background: color,
           borderRadius: "2px 0 0 2px",
         }}
         onPointerDown={startDrag("start")}
@@ -158,7 +175,7 @@ export function TrimHandles({
         style={{
           left: endX - HANDLE_WIDTH / 2,
           width: HANDLE_WIDTH,
-          background: getBrandColor(),
+          background: color,
           borderRadius: "0 2px 2px 0",
         }}
         onPointerDown={startDrag("end")}

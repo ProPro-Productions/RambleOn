@@ -822,6 +822,36 @@ const migrations = runMigrations(
         `ALTER TABLE recording_comments ADD COLUMN annotation_id TEXT`,
       ].join("; "),
     },
+    {
+      version: 48,
+      sql: [
+        `CREATE TABLE IF NOT EXISTS clips_edit_versions (
+          id TEXT PRIMARY KEY,
+          recording_id TEXT NOT NULL,
+          organization_id TEXT,
+          target_kind TEXT NOT NULL DEFAULT 'recording-edits',
+          title TEXT NOT NULL DEFAULT 'Untitled version',
+          note TEXT,
+          edits_json TEXT NOT NULL DEFAULT '',
+          author_email TEXT,
+          author_name TEXT,
+          author_kind TEXT NOT NULL DEFAULT 'user',
+          status TEXT NOT NULL DEFAULT 'proposed',
+          reviewed_at TEXT,
+          reviewed_by TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )`,
+        `CREATE INDEX IF NOT EXISTS clips_edit_versions_recording_idx ON clips_edit_versions (recording_id, created_at)`,
+      ].join("; "),
+    },
+    {
+      version: 49,
+      sql: [
+        `ALTER TABLE recording_transcripts ADD COLUMN raw_full_text TEXT`,
+        `ALTER TABLE recording_transcripts ADD COLUMN raw_segments_json TEXT`,
+      ].join("; "),
+    },
   ],
   { table: "clips_migrations" },
 );

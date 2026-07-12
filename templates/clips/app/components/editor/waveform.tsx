@@ -20,12 +20,20 @@ export interface WaveformProps {
   excludedRanges?: Array<{ startMs: number; endMs: number }>;
   /** Optional selection range (original time) highlighted in brand color. */
   selectionRange?: { startMs: number; endMs: number } | null;
+  /** Segment selections paint brand color, free ranges Descript violet. */
+  selectionType?: "segment" | "range";
   /** Transcript-backed activity ranges used when browser audio decoding fails. */
   activityRanges?: Array<{ startMs: number; endMs: number }>;
   /** Click handler — returns the original ms at the click position. */
   onSeek?: (originalMs: number) => void;
   /** Called on scroll so the parent can sync ruler / chapter markers. */
   onScroll?: (scrollLeft: number, totalWidth: number) => void;
+  /**
+   * Controlled scroll offset: the waveform is the timeline's one native
+   * scroller, so zoom-around-cursor (which must set a computed offset)
+   * writes here and every other layer follows through onScroll.
+   */
+  scrollLeft?: number;
   className?: string;
 }
 
@@ -86,9 +94,11 @@ export function Waveform({
   durationMs,
   excludedRanges,
   selectionRange,
+  selectionType = "range",
   activityRanges = [],
   onSeek,
   onScroll,
+  scrollLeft,
   className,
 }: WaveformProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -96,6 +106,16 @@ export function Waveform({
 
   // The total drawable width (scrolls horizontally). zoom=1 fits exactly.
   const totalWidth = Math.max(width, Math.floor(width * Math.max(1, zoom)));
+
+  // Controlled scroll: adopt the parent's offset when it diverges (>1px so
+  // the echo from our own onScroll doesn't loop).
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || scrollLeft == null) return;
+    if (Math.abs(el.scrollLeft - scrollLeft) > 1) {
+      el.scrollLeft = scrollLeft;
+    }
+  }, [scrollLeft, totalWidth]);
 
   // Re-draw whenever peaks, size, or excluded ranges change.
   useEffect(() => {
@@ -216,9 +236,13 @@ export function Waveform({
         (Math.max(selectionRange.startMs, selectionRange.endMs) /
           Math.max(durationMs, 1)) *
         totalWidth;
-      ctx.fillStyle = getBrandColorAlpha(0.28);
+      ctx.fillStyle =
+        selectionType === "range"
+          ? "hsl(258 88% 66% / 0.28)"
+          : getBrandColorAlpha(0.28);
       ctx.fillRect(xStart, 0, xEnd - xStart, height);
-      ctx.strokeStyle = getBrandColor();
+      ctx.strokeStyle =
+        selectionType === "range" ? "hsl(258 88% 66%)" : getBrandColor();
       ctx.lineWidth = 1;
       ctx.strokeRect(xStart + 0.5, 0.5, xEnd - xStart - 1, height - 1);
     }
@@ -228,6 +252,7 @@ export function Waveform({
     height,
     excludedRanges,
     selectionRange,
+    selectionType,
     durationMs,
     activityRanges,
   ]);

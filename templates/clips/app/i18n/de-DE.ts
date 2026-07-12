@@ -131,6 +131,7 @@ const messages = {
     pageTitle: "Treffen · Clips",
   },
   recordingPage: {
+    synthesizeEditPlan: "Erstelle einen Schnittplan aus meinen Markern",
     untitledClip: "Unbenannter Clip",
     recordingNotFound: "Aufnahme nicht gefunden",
     noAccess: "Möglicherweise haben Sie keinen Zugriff auf diesen Clip.",
@@ -171,8 +172,10 @@ const messages = {
     connectStorageFinishClip:
       "Schließen Sie den Speicher an, um das Speichern dieses Clips abzuschließen.",
     uploadPausedSaved: "Hochladen angehalten; Clip lokal gespeichert.",
+    savedLocallyHint:
+      "Die lokale Datei liegt in der Clips-Menüleisten-App: Klicken Sie auf das Tray-Symbol und öffnen Sie sie über den Ordner-Button am gespeicherten Clip — oder laden Sie sie mit „Erneut versuchen“ hoch.",
     savingWentWrong: "Beim Speichern dieses Clips ist ein Fehler aufgetreten.",
-    finishingClip: "Ich beende deinen Clip …",
+    finishingClip: "Dein Clip wird fertiggestellt …",
     loomSourcePreserved:
       "Der Loom-Quelllink bleibt erhalten. Schließen Sie den Speicher Builder.io oder S3 an und Clips versucht erneut, seine eigene Kopie zu speichern.",
     clipDataPreserved:
@@ -183,7 +186,7 @@ const messages = {
     storageConnectedSavingLoom:
       "Speicher ist angeschlossen. Clips speichert jetzt seine eigene Kopie.",
     storageConnectedFinishing:
-      "Speicher ist angeschlossen. Clips beendet den Upload jetzt.",
+      "Speicher ist angeschlossen. Clips schließt den Upload jetzt ab.",
     connectStorageImportLoomTitle:
       "Verbinden Sie den Speicher, um Loom zu importieren",
     connectStorageFinishSaving:
@@ -261,7 +264,7 @@ const messages = {
     loomPreservedManage:
       "Der Loom-Quelllink bleibt erhalten. Verbinden Sie den Builder.io- oder S3-Speicher und versuchen Sie dann den Import erneut.",
     videoPreservedManage:
-      "Das Video bleibt erhalten. Schließen Sie den Speicher Builder.io oder S3 an und Clips beendet den Upload.",
+      "Das Video bleibt erhalten. Schließen Sie den Speicher Builder.io oder S3 an und Clips schließt den Upload ab.",
     creatorNeedsStorage:
       "Der Ersteller muss den Builder.io- oder S3-Speicher verbinden, bevor dieser Clip fertiggestellt werden kann.",
     signInStorage:
@@ -920,6 +923,26 @@ Alle sichtbaren Änderungen für Clips-Nutzer werden hier dokumentiert. Du kanns
     elapsed: "Verstrichene Zeit",
     cancel: "Aufnahme abbrechen",
     cancelShortcut: "Abbrechen (⌥⇧C)",
+    addMarker: "Zeitmarke setzen",
+    markerShortcut: "Marke (⌥⇧M) · Notiz ⌥⇧E · B-Roll ⌥⇧B · Retake ⌥⇧N",
+  },
+  annotationsStrip: {
+    comment: "Kommentar",
+    resolvedChip: "Erledigt",
+    moreComments: "+{{count}} weitere Kommentare",
+    addKindAt: "{{kind}} bei {{time}} hinzufügen",
+    changeType: "Typ ändern",
+    addMarkerAt: "Marke bei {{time}} setzen",
+    jumpTo: "Zu {{time}} springen",
+    resolve: "Als erledigt markieren",
+    reopen: "Wieder öffnen",
+    title: "Marken ({{count}})",
+    editorNote: "Notiz für den Schnitt",
+    bRoll: "B-Roll",
+    retake: "Retake",
+    marker: "Marke",
+    wholeVideo: "Ganzes Video",
+    delete: "Marke löschen",
   },
   countdownOverlay: {
     startsIn: "Aufnahme startet in {{count}}",
@@ -1009,10 +1032,17 @@ Alle sichtbaren Änderungen für Clips-Nutzer werden hier dokumentiert. Du kanns
     noVideoYet: "Noch kein Video verfügbar.",
   },
   transcriptEditor: {
+    segmentStart: "Segmentanfang",
+    ignore: "Ignorieren",
+    restore: "Wiederherstellen",
+    addMarker: "Marke hinzufügen",
+    createSection: "Abschnitt erstellen",
+    copy: "Kopieren",
+    cut: "Ausschneiden",
+    delete: "Löschen",
     transcript: "Transkript",
     selectionRange: "· Auswahl {{start}} → {{end}}",
     selectTextToTrim: "· Text zum Trimmen auswählen",
-    cutSelection: "Auswahl schneiden",
     noTranscript: "Noch kein Transkript.",
   },
   createSpaceDialog: {
@@ -1090,13 +1120,50 @@ Alle sichtbaren Änderungen für Clips-Nutzer werden hier dokumentiert. Du kanns
     defaultTitle: "Kapitel {{count}}",
     seekTo: "Zu {{time}} springen",
   },
+  editVersions: {
+    history: "Bearbeitungsverlauf",
+    historyTitle: "Schnittversionen",
+    historyDescription:
+      "Alle vorgeschlagenen, angenommenen, abgelehnten und abgelösten Schnitte dieser Aufnahme.",
+    historyEmpty: "Noch keine Schnittversionen",
+    preview: "Schnitt ansehen",
+    previewing: "Vorschau: {{title}}",
+    previewFailed: "Vorschau konnte nicht geladen werden",
+    exitPreview: "Vorschau beenden",
+    restore: "Wiederherstellen",
+    restored: "Version wiederhergestellt — vorherige Bearbeitung archiviert",
+    restoreFailed: "Wiederherstellen fehlgeschlagen",
+    statusProposed: "Vorgeschlagen",
+    statusAccepted: "Angenommen",
+    statusRejected: "Abgelehnt",
+    statusSuperseded: "Abgelöst",
+    review: "Überprüfen",
+    accept: "Version übernehmen",
+    reject: "Ablehnen",
+    accepted: "Version übernommen — vorherige Bearbeitung archiviert",
+    rejected: "Version abgelehnt",
+    reviewFailed: "Überprüfung fehlgeschlagen",
+    pendingFrom:
+      "vorgeschlagener Schnitt von {{author}} wartet auf deine Überprüfung",
+    editor: "einem Editor",
+  },
   editorToolbar: {
+    selectionSegment: "Segment",
+    selectionRange: "Auswahl",
+    clearSelection: "Auswahl aufheben",
+    split: "Aufteilen",
+    cutSegment: "Segment schneiden",
+    removeSplit: "Teilung entfernen",
+    actions: "Aktionen",
+    splitAtTime: "Bei {{time}} teilen",
+    cutSelection: "Auswahl schneiden",
+    cutStartToTime: "Anfang → {{time}} schneiden",
+    cutTimeToEnd: "{{time}} → Ende schneiden",
     undoTooltip: "Rückgängig (Cmd/Ctrl+Z)",
     playPauseTooltip: "Wiedergabe / Pause (Leertaste)",
     sourceDuration: "({{duration}} Quelle)",
     previewSpeed: "Vorschaugeschwindigkeit",
     previewSpeedTooltip: "Vorschaugeschwindigkeit beim Zuschneiden",
-    cutSelection: "Auswahl schneiden",
     cutSelectedRange: "Ausgewählten Bereich schneiden",
     edit: "Bearbeiten",
     playheadEdits: "Bearbeitungen an der Abspielposition",
@@ -1315,7 +1382,7 @@ Alle sichtbaren Änderungen für Clips-Nutzer werden hier dokumentiert. Du kanns
     connectStorageToFinish:
       "Öffnen, um Speicher zu verbinden und das Speichern abzuschließen.",
     retryFromClipsMenu:
-      "Über das Clips-Menü erneut versuchen; keine neue Aufnahme nötig.",
+      "Über das Clips-Tray-Symbol erneut versuchen — die Karte des gespeicherten Clips hat dort auch einen Ordner-Button für die lokale Datei.",
     removeFailedClip: "Diesen fehlgeschlagenen Clip entfernen.",
     remove: "Entfernen",
     viewsCount: "{{count}} Aufrufe",

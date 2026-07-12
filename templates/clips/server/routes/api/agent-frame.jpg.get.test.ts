@@ -17,6 +17,8 @@ vi.mock("h3", () => ({
 vi.mock("../../lib/public-agent-context.js", () => ({
   loadPublicAgentAccess: (...args: unknown[]) =>
     mockLoadPublicAgentAccess(...args),
+  loadAgentExcludedRanges: async () => [],
+  isInsideExcludedRange: () => false,
   loadRecordingMediaBytes: (...args: unknown[]) =>
     mockLoadRecordingMediaBytes(...args),
   RecordingMediaFetchError: class RecordingMediaFetchError extends Error {

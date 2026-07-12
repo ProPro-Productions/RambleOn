@@ -755,7 +755,9 @@ pub async fn show_toolbar(app: AppHandle) -> Result<(), String> {
     // window in physical px. Keep the visible toolbar large enough for the
     // fixed 30px circular controls on high-DPI displays.
     let content_w: u32 = (72.0 * scale).round() as u32;
-    let collapsed_content_h: u32 = (150.0 * scale).round() as u32;
+    // 190 logical px: fits Stop + timer + Pause + the marker button (4×30px
+    // controls + 3×10px gaps) inside the fixed-height primary zone.
+    let collapsed_content_h: u32 = (190.0 * scale).round() as u32;
     let w: u32 = content_w + gutter * 2;
     let h: u32 = collapsed_content_h + gutter * 2;
     // Flush-left with a small margin; vertically center the collapsed pill.
@@ -1758,6 +1760,9 @@ pub async fn set_recording_state(app: AppHandle, active: bool) -> Result<(), Str
             *g = active;
         }
     }
+    // Marker hotkeys (⌥⇧M/E/B/N) exist only while a recording is live so
+    // they never swallow those combos during normal desktop use.
+    crate::shortcuts::set_marker_shortcuts_active(app.clone(), active);
     crate::tray::rebuild_tray_menu(&app);
     Ok(())
 }

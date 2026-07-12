@@ -23,7 +23,8 @@ import {
   IconArrowLeft,
   IconChevronDown,
   IconCalendar,
-  IconScissors,
+  IconCheck,
+  IconEdit,
   IconAlertTriangle,
   IconHelpCircle,
   IconClipboardCopy,
@@ -40,8 +41,13 @@ import { toast } from "sonner";
 
 import { EditableRecordingTitle } from "@/components/editable-recording-title";
 import { EditorLayout } from "@/components/editor/editor-layout";
+import { AnnotationsStrip } from "@/components/player/annotations-strip";
 import { CommentsPanel } from "@/components/player/comments-panel";
 import { RecordingOptionsMenu } from "@/components/player/delete-recording-menu";
+import {
+  EditVersionReview,
+  type EditVersionPreview,
+} from "@/components/player/edit-version-review";
 import { InsightsPanel } from "@/components/player/insights-panel";
 import { ReactionsTray } from "@/components/player/reactions-tray";
 import { SettingsPanel } from "@/components/player/settings-panel";
@@ -51,6 +57,7 @@ import {
   TimestampedCommentBar,
 } from "@/components/player/timestamped-comment-button";
 import { TranscriptPanel } from "@/components/player/transcript-panel";
+import { useRecordingAnnotations } from "@/components/player/use-recording-annotations";
 import {
   VideoPlayer,
   type VideoPlayerHandle,
@@ -222,6 +229,19 @@ export default function RecordingPage() {
   const [currentMs, setCurrentMs] = useState(0);
   const [commentOpen, setCommentOpen] = useState(false);
   const [commentAtMs, setCommentAtMs] = useState(0);
+  const [editHistoryOpen, setEditHistoryOpen] = useState(false);
+  const [editPreview, setEditPreview] = useState<EditVersionPreview | null>(
+    null,
+  );
+  // A version preview is scoped to the player view of one recording: leaving
+  // for another clip or entering the editor drops back to the live edits.
+  useEffect(() => {
+    setEditPreview(null);
+    setEditHistoryOpen(false);
+  }, [recordingId]);
+  useEffect(() => {
+    if (editing) setEditPreview(null);
+  }, [editing]);
   const isCompactLayout = useIsCompactRecordingLayout();
   // Resolve the playback position for reactions/comments. Native <video> exposes
   // a live `currentTime`; Loom embeds render in a cross-origin iframe with no
@@ -313,6 +333,37 @@ export default function RecordingPage() {
   const transcriptCleanup = playerDataQ.data?.transcript?.cleanup ?? null;
   const ctas = playerDataQ.data?.ctas ?? [];
   const canEdit = role === "owner" || role === "admin" || role === "editor";
+
+  // Timeline annotations (markers/sections) for the scrubber. Same query as
+  // the AnnotationsStrip so React Query serves both from one cache entry.
+  const recordingAnnotationsResult = useRecordingAnnotations(recordingId ?? "");
+  const addAnnotationMutation = useActionMutation("add-annotation" as any);
+  const updateAnnotationMutation = useActionMutation(
+    "update-annotation" as any,
+  );
+  const deleteAnnotationMutation = useActionMutation(
+    "delete-annotation" as any,
+  );
+  const scrubberAnnotations = useMemo(
+    () =>
+      recordingAnnotationsResult.annotations
+        .filter((a) => a.startMs !== null)
+        .map((a) => ({
+          id: a.id,
+          startMs: a.startMs ?? 0,
+          endMs: a.endMs,
+          kind: a.kind,
+          label: a.label,
+          body: a.body,
+          resolved: a.resolved,
+          mayEdit:
+            canEdit ||
+            (!!session?.email &&
+              !!a.authorEmail &&
+              session.email.toLowerCase() === a.authorEmail.toLowerCase()),
+        })),
+    [recordingAnnotationsResult.annotations, canEdit, session?.email],
+  );
   const builderCredits =
     (playerDataQ.data?.builderCredits as BuilderCreditsStatus | null) ?? null;
   const titleGenerationPaused = Boolean(
@@ -687,6 +738,11 @@ export default function RecordingPage() {
         <p className="text-sm text-muted-foreground mb-4 max-w-md text-center">
           {failureReason}
         </p>
+        {nativeSaveFailed ? (
+          <p className="text-sm text-muted-foreground mb-4 max-w-md text-center">
+            {t("recordingPage.savedLocallyHint")}
+          </p>
+        ) : null}
         {isFailure &&
         !storageSetupFailure &&
         detail &&
@@ -823,10 +879,10 @@ export default function RecordingPage() {
           suggestions={
             canEdit
               ? [
+                  t("recordingPage.synthesizeEditPlan"),
                   t("recordingPage.summarizeClip"),
                   t("recordingPage.generateChapters"),
                   t("recordingPage.findActionItems"),
-                  t("recordingPage.draftRecap"),
                 ]
               : [
                   t("recordingPage.summarizeClip"),
@@ -881,21 +937,29 @@ export default function RecordingPage() {
       </TabsContent>
       <TabsContent
         value="comments"
-        className="flex-1 min-h-0 mt-3 data-[state=inactive]:hidden"
+        className="flex-1 min-h-0 mt-3 flex flex-col data-[state=inactive]:hidden"
       >
-        <CommentsPanel
+        <AnnotationsStrip
           recordingId={recording.id}
-          comments={comments}
-          currentMs={currentMs}
+          canEdit={canEdit}
           currentUserEmail={session?.email}
-          enableComments={recording.enableComments}
           onSeek={(ms) => playerRef.current?.seek(ms)}
-          queryKey={[
-            "action",
-            "get-recording-player-data",
-            { recordingId: recordingId ?? "" },
-          ]}
         />
+        <div className="flex-1 min-h-0">
+          <CommentsPanel
+            recordingId={recording.id}
+            comments={comments}
+            currentMs={currentMs}
+            currentUserEmail={session?.email}
+            enableComments={recording.enableComments}
+            onSeek={(ms) => playerRef.current?.seek(ms)}
+            queryKey={[
+              "action",
+              "get-recording-player-data",
+              { recordingId: recordingId ?? "" },
+            ]}
+          />
+        </div>
       </TabsContent>
       <TabsContent
         value="insights"
@@ -970,7 +1034,11 @@ export default function RecordingPage() {
               className="gap-1.5"
               onClick={() => setEditing((v) => !v)}
             >
-              <IconScissors className="h-4 w-4" />
+              {editing ? (
+                <IconCheck className="h-4 w-4" />
+              ) : (
+                <IconEdit className="h-4 w-4" />
+              )}
               {editing ? t("recordingPage.done") : t("recordingPage.edit")}
             </Button>
           ) : null}
@@ -1126,7 +1194,7 @@ export default function RecordingPage() {
             </Button>
           </ShareRecordingPopover>
 
-          {canDelete || canDownloadRecording ? (
+          {canDelete || canDownloadRecording || canEdit ? (
             <RecordingOptionsMenu
               recordingId={recording.id}
               canDelete={canDelete}
@@ -1136,6 +1204,9 @@ export default function RecordingPage() {
                 void downloadRecording();
               }}
               onDeleted={() => navigate("/library", { replace: true })}
+              onOpenEditHistory={
+                canEdit ? () => setEditHistoryOpen(true) : undefined
+              }
             />
           ) : null}
         </header>
@@ -1150,6 +1221,17 @@ export default function RecordingPage() {
             <EditorLayout recordingId={recording.id} className="flex-1" />
           ) : (
             <>
+              {/* Pending edit versions (AI or human editors) wait here for
+                  the owner's accept/reject — the hand-back half of the
+                  one-take workflow. */}
+              <EditVersionReview
+                recordingId={recording.id}
+                canEdit={canEdit}
+                historyOpen={editHistoryOpen}
+                onHistoryOpenChange={setEditHistoryOpen}
+                preview={editPreview}
+                onPreviewChange={setEditPreview}
+              />
               <div className="flex-1 min-h-0 relative">
                 <VideoPlayer
                   ref={playerRef}
@@ -1157,7 +1239,7 @@ export default function RecordingPage() {
                   videoUrl={recording.videoUrl}
                   embedProvider={isLoomEmbedBacked ? "loom" : null}
                   durationMs={recording.durationMs}
-                  editsJson={recording.editsJson}
+                  editsJson={editPreview?.editsJson ?? recording.editsJson}
                   thumbnailUrl={recording.thumbnailUrl}
                   role={role}
                   defaultSpeed={
@@ -1167,6 +1249,47 @@ export default function RecordingPage() {
                   comments={comments}
                   chapters={chapters}
                   reactions={reactions}
+                  annotations={scrubberAnnotations}
+                  onAddAnnotationAt={
+                    session?.email
+                      ? (ms, kind) =>
+                          addAnnotationMutation.mutate(
+                            {
+                              recordingId: recording.id,
+                              startMs: Math.round(ms),
+                              kind,
+                            } as any,
+                            {
+                              onSettled: () =>
+                                recordingAnnotationsResult.refetch(),
+                            } as any,
+                          )
+                      : undefined
+                  }
+                  onToggleAnnotationResolved={(a) =>
+                    updateAnnotationMutation.mutate(
+                      { id: a.id, resolved: !a.resolved } as any,
+                      {
+                        onSettled: () => recordingAnnotationsResult.refetch(),
+                      } as any,
+                    )
+                  }
+                  onChangeAnnotationKind={(a, kind) =>
+                    updateAnnotationMutation.mutate(
+                      { id: a.id, kind } as any,
+                      {
+                        onSettled: () => recordingAnnotationsResult.refetch(),
+                      } as any,
+                    )
+                  }
+                  onDeleteAnnotation={(a) =>
+                    deleteAnnotationMutation.mutate(
+                      { id: a.id } as any,
+                      {
+                        onSettled: () => recordingAnnotationsResult.refetch(),
+                      } as any,
+                    )
+                  }
                   transcriptSegments={transcriptSegments}
                   theaterMode={theaterMode}
                   onTheaterToggle={() => setTheaterMode((v) => !v)}

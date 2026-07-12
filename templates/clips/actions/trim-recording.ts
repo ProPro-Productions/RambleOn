@@ -38,6 +38,13 @@ export default defineAction({
       .int()
       .min(0)
       .describe("End of the trim range in milliseconds (original time)"),
+    hidden: z.coerce
+      .boolean()
+      .optional()
+      .default(false)
+      .describe(
+        "Cut (true) removes the range from the transcript view entirely; Ignore/strikethrough (false, default) keeps it visible with strikethrough.",
+      ),
   }),
   run: async (args) => {
     if (args.endMs <= args.startMs) {
@@ -58,7 +65,7 @@ export default defineAction({
     assertNativeRecordingMedia(existing);
 
     const edits = parseEdits(existing.editsJson);
-    const next = mergeExcluded(edits, args.startMs, args.endMs);
+    const next = mergeExcluded(edits, args.startMs, args.endMs, args.hidden);
 
     await db
       .update(schema.recordings)

@@ -55,7 +55,11 @@ items) and chapters (viewer-facing navigation, own table). Annotations carry
   `startMs`. **Also merges the recording's comments** into the same shape with
   `entity: "comment"` (kind `comment`, point anchor from `videoTimestampMs`,
   thread fields preserved) so one call returns everything anchored to the
-  timeline. Filter with `kind`, `includeComments`, `includeResolved`.
+  timeline. Filter with `kind`, `includeComments`, `includeResolved`. Pass
+  `includeTranscriptContext=true` when synthesizing edits: each anchored
+  annotation gains `transcriptContext` — what the creator said around the
+  anchor (window biased ~12s after it, since people speak their intent right
+  after hitting a marker hotkey).
 - `update-annotation` — move anchors (`startMs`/`endMs`, `clearAnchor`,
   `clearEnd`), change kind/label/body/groups, set `resolved`. Authors edit
   their own; recording editors edit any.
@@ -65,6 +69,50 @@ items) and chapters (viewer-facing navigation, own table). Annotations carry
 Comments attach to annotations via `add-comment --annotationId=<id>`; the
 comment inherits the annotation's `startMs` unless `videoTimestampMs` is
 passed explicitly. This is how sections "receive comments".
+
+## Capture-time markers (recorder hotkeys)
+
+While recording, the creator drops markers without leaving the take:
+⌥⇧M generic, ⌥⇧E editor-note, ⌥⇧B b-roll, ⌥⇧N retake, or the bookmark button
+on the recording toolbar (generic). Markers buffer client-side with the
+elapsed *recording* time (pauses excluded) and are persisted in one batch by
+the UI-internal `save-recording-markers` action when the recording is saved
+(`source: "shortcut"`). Because the creator usually *says* what they mean as
+they hit the key, edit synthesis should read the transcript around each
+shortcut marker's timestamp to complete its meaning.
+
+Two capture paths, same keys and persistence:
+- **Browser recorder** (`/record`): hotkeys fire only while the Clips tab has
+  focus (browser limitation).
+- **Desktop app**: the Tauri tray recorder registers the hotkeys globally
+  while a recording is live (`shortcuts.rs` → `clips:marker` events →
+  `desktop/src/lib/recording-markers.ts`), so they work from inside whatever
+  app is being recorded. The floating recording pill shows a marker button
+  with a live count.
+
+The recording page's Activity tab shows a review strip of all markers (seek,
+delete), and both the player scrubber and the clips editor timeline render
+them as needles/bands. In the clips editor, the transcript side panel also
+renders point markers inline in the text at their spoken position, and
+selecting transcript text mirrors onto the timeline selection and raises a
+floating toolbar: Ignore (restorable strikethrough via trim-recording),
+Restore (restore-recording-range — appears when the selection touches an
+excluded range), Create section, Add marker. Paragraphs split on speech
+pauses so the transcript reads as a document.
+
+## Timeline presentation (player)
+
+On the recording page the scrubber renders annotations natively: point
+annotations are needle markers (stem + selectable head, kind-colored: generic
+amber, editor-note blue, b-roll purple, retake red; resolved dims), sections
+are translucent bands. Hover shows kind + label/body, click seeks, right-click
+opens a context menu — on a marker: jump / resolve-reopen / delete (author or
+recording editor); on the empty bar: "Add marker at &lt;time&gt;" (signed-in
+users). The shared query hook is
+`app/components/player/use-recording-annotations.ts`; every player-page
+consumer must use it (same args) so React Query serves one cache entry. The
+full-editor timeline layer and the unified action registry are still to come
+in M3 — build them on these same actions and kinds.
 
 ## Inline timecode references
 

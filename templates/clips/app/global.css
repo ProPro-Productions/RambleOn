@@ -10,15 +10,17 @@
 @source "./video-editor/**/*.{ts,tsx}";
 
 /* Theme tokens and utilities for the vendored full video editor
-   (app/video-editor). Inlined here (not @imported from the gitignored
-   directory) so they reliably join the Tailwind build. */
+   (app/video-editor). Values now resolve to the Plastic 3D design-system
+   palette (see below) so the full editor follows the app theme and accent —
+   one design system across both editors. Utility names stay
+   editor-starter-* so the vendored source needs no re-vendoring churn. */
 @theme {
-  --color-editor-starter-bg: #28282e;
-  --color-editor-starter-panel: #212126;
-  --color-editor-starter-border: #000;
-  --color-editor-starter-accent: #0b84f3;
-  --color-editor-starter-scrollbar-track: rgba(255, 255, 255, 0.04);
-  --color-editor-starter-scrollbar-thumb: rgba(255, 255, 255, 0.2);
+  --color-editor-starter-bg: hsl(var(--secondary));
+  --color-editor-starter-panel: hsl(var(--background));
+  --color-editor-starter-border: hsl(var(--border));
+  --color-editor-starter-accent: hsl(var(--ring));
+  --color-editor-starter-scrollbar-track: hsl(var(--muted) / 0.4);
+  --color-editor-starter-scrollbar-thumb: hsl(var(--muted-foreground) / 0.4);
 }
 
 @utility editor-starter-focus-ring {
@@ -26,7 +28,7 @@
 }
 
 @utility editor-starter-field {
-  @apply rounded-sm border-[1px] border-transparent bg-[var(--color-editor-starter-bg)] outline-hidden hover:border-neutral-700 focus:border-[var(--color-editor-starter-accent)] data-[focused=true]:border-[var(--color-editor-starter-accent)];
+  @apply rounded-sm border-[1px] border-transparent bg-[var(--color-editor-starter-bg)] outline-hidden hover:border-border focus:border-[var(--color-editor-starter-accent)] data-[focused=true]:border-[var(--color-editor-starter-accent)];
 }
 
 /* Prevent accidental back gesture when scrolling the editor timeline. */
@@ -34,66 +36,749 @@ body:has([data-clips-video-editor]) {
   overscroll-behavior-x: none;
 }
 
+/* ============================================================
+   Plastic 3D design system (ported from the Multisearch design:
+   DESIGN.md + styles.css). Tokens converted from oklch to HSL
+   triplets because @agent-native/core resolves colors via
+   hsl(var(--token)). Themes: light (default), .dark, .dark.grey.
+   Accents via data-accent on <html>: forest|sunset|cherry|violet|blue
+   (default is the neutral "ocean" palette below).
+   ============================================================ */
+
+
 :root {
+  --sky-500: #0ea5e9;
+  --blue-500: #3b82f6;
+  --blue-400: #60a5fa;
+  --indigo-500: #6366f1;
+
+  /* PLASTIC 3D SYSTEM - Same as dark themes but adapted for light backgrounds */
+  --shadow-color: 220 10% 15%;
+  --shadow-strength: 15%;
+
+  /* Highlight colors for light theme (darker tones for definition) */
+  --highlight-top: hsl(0 0% 100% / 80%);
+  --highlight-edge: hsl(0 0% 100% / 60%);
+  --highlight-subtle: hsl(0 0% 100% / 40%);
+
+  /* Plastic elevation shadows - same structure as dark theme */
+  --shadow-xs:
+    inset 0 1px 0 0 var(--highlight-subtle),
+    0 0 0 1px hsl(var(--shadow-color) / 8%),
+    0 1px 2px 0 hsl(var(--shadow-color) / 15%),
+    0 2px 4px 0 hsl(var(--shadow-color) / 10%);
+
+  --shadow-sm:
+    inset 0 1px 0 0 var(--highlight-edge),
+    0 0 0 1px hsl(var(--shadow-color) / 10%),
+    0 1px 2px 0 hsl(var(--shadow-color) / 15%),
+    0 3px 6px -1px hsl(var(--shadow-color) / 12%),
+    0 6px 12px -3px hsl(var(--shadow-color) / 8%);
+
+  --shadow-md:
+    inset 0 1px 0 0 var(--highlight-top),
+    0 0 0 1px hsl(var(--shadow-color) / 10%),
+    0 2px 4px 0 hsl(var(--shadow-color) / 15%),
+    0 6px 12px -2px hsl(var(--shadow-color) / 12%),
+    0 12px 24px -6px hsl(var(--shadow-color) / 8%);
+
+  --shadow-lg:
+    inset 0 1px 0 0 var(--highlight-top),
+    0 0 0 1px hsl(var(--shadow-color) / 10%),
+    0 4px 8px 0 hsl(var(--shadow-color) / 15%),
+    0 12px 24px -4px hsl(var(--shadow-color) / 12%),
+    0 24px 48px -12px hsl(var(--shadow-color) / 8%);
+
+  --shadow-xl:
+    inset 0 1px 0 0 var(--highlight-top),
+    0 0 0 1px hsl(var(--shadow-color) / 10%),
+    0 8px 16px 0 hsl(var(--shadow-color) / 15%),
+    0 24px 48px -8px hsl(var(--shadow-color) / 12%),
+    0 48px 96px -24px hsl(var(--shadow-color) / 8%);
+
+  --shadow-2xl:
+    inset 0 1px 0 0 var(--highlight-top),
+    0 0 0 1px hsl(var(--shadow-color) / 10%),
+    0 16px 32px 0 hsl(var(--shadow-color) / 18%),
+    0 32px 64px -16px hsl(var(--shadow-color) / 12%),
+    0 64px 128px -32px hsl(var(--shadow-color) / 8%);
+
+  /* Inner shadows for pressed/inset states */
+  --shadow-inner: inset 0 2px 4px 0 hsl(var(--shadow-color) / 12%);
+
+  /* Plastic buttons - raised, glossy, pressable (light theme version) */
+  --shadow-btn:
+    inset 0 1px 0 0 hsl(0 0% 100% / 50%),
+    inset 0 -1px 0 0 hsl(var(--shadow-color) / 10%),
+    0 0 0 1px hsl(var(--shadow-color) / 12%),
+    0 2px 4px 0 hsl(var(--shadow-color) / 18%),
+    0 4px 8px -2px hsl(var(--shadow-color) / 12%);
+
+  --shadow-btn-hover:
+    inset 0 1px 0 0 hsl(0 0% 100% / 60%),
+    inset 0 -1px 0 0 hsl(var(--shadow-color) / 8%),
+    0 0 0 1px hsl(var(--shadow-color) / 15%),
+    0 4px 8px 0 hsl(var(--shadow-color) / 20%),
+    0 8px 16px -4px hsl(var(--shadow-color) / 15%),
+    0 16px 32px -8px hsl(var(--shadow-color) / 10%);
+
+  --shadow-btn-active:
+    inset 0 2px 6px 0 hsl(var(--shadow-color) / 20%),
+    inset 0 0 0 1px hsl(var(--shadow-color) / 12%),
+    0 0 0 1px hsl(var(--shadow-color) / 5%);
+
+  /* Plastic cards - raised panels (light theme version) */
+  --shadow-card:
+    inset 0 1px 0 0 var(--highlight-edge),
+    0 0 0 1px hsl(var(--shadow-color) / 10%),
+    0 2px 4px 0 hsl(var(--shadow-color) / 15%),
+    0 6px 12px -3px hsl(var(--shadow-color) / 12%),
+    0 12px 24px -6px hsl(var(--shadow-color) / 8%);
+
+  --shadow-card-hover:
+    inset 0 1px 0 0 var(--highlight-top),
+    0 0 0 1px hsl(var(--shadow-color) / 12%),
+    0 4px 8px 0 hsl(var(--shadow-color) / 18%),
+    0 12px 24px -6px hsl(var(--shadow-color) / 12%),
+    0 24px 48px -12px hsl(var(--shadow-color) / 8%);
+
+  /* Dialog - floating panel with dramatic depth (light theme) */
+  --shadow-dialog:
+    inset 0 1px 0 0 var(--highlight-top),
+    0 0 0 1px hsl(var(--shadow-color) / 12%),
+    0 0 0 4px hsl(var(--shadow-color) / 5%),
+    0 16px 32px 0 hsl(var(--shadow-color) / 25%),
+    0 32px 64px -16px hsl(var(--shadow-color) / 18%);
+
+  /* Deep inset input - carved into the surface (light theme) */
+  --shadow-input:
+    inset 0 0 0 1px hsl(var(--shadow-color) / 15%),
+    inset 0 2px 6px 0 hsl(var(--shadow-color) / 12%),
+    inset 0 1px 2px 0 hsl(var(--shadow-color) / 10%),
+    0 1px 0 0 hsl(0 0% 100% / 80%);
+
+  --shadow-input-focus:
+    inset 0 0 0 1px hsl(var(--shadow-color) / 8%),
+    inset 0 1px 2px 0 hsl(var(--shadow-color) / 6%);
+
+  /* Inner shadows for pressed/inset elements */
+  --shadow-inner-sm:
+    inset 0 1px 4px 0 hsl(var(--shadow-color) / 15%),
+    inset 0 0 0 1px hsl(var(--shadow-color) / 8%);
+
+  /* Inset well - recessed tray/container, opposite of elevated card */
+  --shadow-inset-well:
+    inset 0 2px 8px 0 hsl(var(--shadow-color) / 12%),
+    inset 0 1px 3px 0 hsl(var(--shadow-color) / 10%),
+    inset 0 0 0 1px hsl(var(--shadow-color) / 8%),
+    0 1px 0 0 hsl(0 0% 100% / 70%);
+
+  /* Deep inset well - dramatic recessed pit, for browse slot and deep textareas */
+  --shadow-inset-well-deep:
+    inset 0 0 0 3px hsl(var(--shadow-color) / 6%),
+    inset 0 2px 6px 2px hsl(var(--shadow-color) / 8%),
+    inset 0 1px 2px 2px hsl(var(--shadow-color) / 5%),
+    0 1px 0 0 hsl(0 0% 100% / 90%);
+
   --background: 0 0% 100%;
-  --foreground: 0 0% 10%;
+  --foreground: 240.1 11.2% 4%;
   --card: 0 0% 100%;
-  --card-foreground: 0 0% 10%;
+  --card-foreground: 240.1 11.2% 4%;
   --popover: 0 0% 100%;
-  --popover-foreground: 0 0% 10%;
-  --primary: 0 0% 15%;
-  --primary-foreground: 0 0% 100%;
-  --secondary: 0 0% 95%;
-  --secondary-foreground: 0 0% 15%;
-  --muted: 0 0% 95%;
-  --muted-foreground: 0 0% 45%;
-  --accent: 0 0% 95%;
-  --accent-foreground: 0 0% 15%;
-  --destructive: 0 84% 60%;
-  --destructive-foreground: 0 0% 98%;
-  --border: 0 0% 90%;
-  --input: 0 0% 90%;
-  --ring: 0 0% 40%;
-  --radius: 0.5rem;
-  --sidebar-background: 0 0% 97%;
-  --sidebar-foreground: 0 0% 45%;
-  --sidebar-primary: 0 0% 15%;
-  --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 0 0% 95%;
-  --sidebar-accent-foreground: 0 0% 15%;
-  --sidebar-border: 0 0% 90%;
-  --sidebar-ring: 0 0% 40%;
+  --popover-foreground: 240.1 11.2% 4%;
+  --primary: 240 6% 10%;
+  --primary-foreground: 180 0% 98%;
+  --secondary: 240 3.5% 95.8%;
+  --secondary-foreground: 240 6% 10%;
+  --muted: 240 3.5% 95.8%;
+  --muted-foreground: 240.1 4.4% 46.3%;
+  --accent: 240 3.5% 95.8%;
+  --accent-foreground: 240 6% 10%;
+  --destructive: 357.2 100% 45.3%;
+  --destructive-foreground: 180 0% 98%;
+  --border: 240 5.9% 90%;
+  --input: 240 5.9% 90%;
+  --ring: 240 5.4% 84%;
+  --chart-1: 18 100% 48%;
+  --chart-2: 174.7 100% 29.5%;
+  --chart-3: 195.8 72.1% 22.9%;
+  --chart-4: 43.6 100% 50%;
+  --chart-5: 36.3 100% 49.7%;
+  --radius: 0.625rem;
+  --sidebar: 180 0% 98%;
+  --sidebar-background: 180 0% 98%;
+  --sidebar-foreground: 240.1 11.2% 4%;
+  --sidebar-primary: 240 6% 10%;
+  --sidebar-primary-foreground: 180 0% 98%;
+  --sidebar-accent: 240 3.5% 95.8%;
+  --sidebar-accent-foreground: 240 6% 10%;
+  --sidebar-border: 240 5.9% 90%;
+  --sidebar-ring: 240 5.4% 84%;
 }
 
 .dark {
-  --background: 0 0% 13%;
-  --foreground: 0 0% 90%;
-  --card: 0 0% 15%;
-  --card-foreground: 0 0% 90%;
-  --popover: 0 0% 15%;
-  --popover-foreground: 0 0% 90%;
-  --primary: 0 0% 75%;
-  --primary-foreground: 0 0% 10%;
-  --secondary: 0 0% 18%;
-  --secondary-foreground: 0 0% 90%;
-  --muted: 0 0% 16%;
-  --muted-foreground: 0 0% 60%;
-  --accent: 0 0% 18%;
-  --accent-foreground: 0 0% 90%;
-  --destructive: 0 63% 51%;
-  --destructive-foreground: 0 0% 98%;
-  --border: 0 0% 24%;
-  --input: 0 0% 24%;
-  --ring: 0 0% 60%;
-  --radius: 0.5rem;
-  --sidebar-background: 0 0% 10%;
-  --sidebar-foreground: 0 0% 60%;
-  --sidebar-primary: 0 0% 75%;
-  --sidebar-primary-foreground: 0 0% 10%;
-  --sidebar-accent: 0 0% 16%;
-  --sidebar-accent-foreground: 0 0% 90%;
-  --sidebar-border: 0 0% 20%;
-  --sidebar-ring: 0 0% 60%;
+  /* PLASTIC 3D SYSTEM - Glossy, raised, tactile feel */
+  --shadow-color: 0 0% 0%;
+  --shadow-strength: 25%;
+
+  /* Glossy highlight colors */
+  --highlight-top: hsl(0 0% 100% / 12%);
+  --highlight-edge: hsl(0 0% 100% / 8%);
+  --highlight-subtle: hsl(0 0% 100% / 5%);
+
+  /* Plastic elevation shadows - glossy top highlight + deep bottom shadow */
+  --shadow-xs:
+    inset 0 1px 0 0 var(--highlight-subtle),
+    0 0 0 1px hsl(0 0% 100% / 5%),
+    0 1px 2px 0 hsl(var(--shadow-color) / 60%),
+    0 2px 4px 0 hsl(var(--shadow-color) / 40%);
+
+  --shadow-sm:
+    inset 0 1px 0 0 var(--highlight-edge),
+    0 0 0 1px hsl(0 0% 100% / 6%),
+    0 1px 2px 0 hsl(var(--shadow-color) / 60%),
+    0 3px 6px -1px hsl(var(--shadow-color) / 50%),
+    0 6px 12px -3px hsl(var(--shadow-color) / 30%);
+
+  --shadow-md:
+    inset 0 1px 0 0 var(--highlight-top),
+    0 0 0 1px hsl(0 0% 100% / 7%),
+    0 2px 4px 0 hsl(var(--shadow-color) / 60%),
+    0 6px 12px -2px hsl(var(--shadow-color) / 50%),
+    0 12px 24px -6px hsl(var(--shadow-color) / 35%);
+
+  --shadow-lg:
+    inset 0 1px 0 0 var(--highlight-top),
+    0 0 0 1px hsl(0 0% 100% / 8%),
+    0 4px 8px 0 hsl(var(--shadow-color) / 60%),
+    0 12px 24px -4px hsl(var(--shadow-color) / 50%),
+    0 24px 48px -12px hsl(var(--shadow-color) / 35%);
+
+  --shadow-xl:
+    inset 0 1px 0 0 var(--highlight-top),
+    0 0 0 1px hsl(0 0% 100% / 8%),
+    0 8px 16px 0 hsl(var(--shadow-color) / 60%),
+    0 24px 48px -8px hsl(var(--shadow-color) / 50%),
+    0 48px 96px -24px hsl(var(--shadow-color) / 35%);
+
+  /* Plastic buttons - raised, glossy, pressable */
+  --shadow-btn:
+    inset 0 1px 0 0 hsl(0 0% 100% / 15%),
+    inset 0 -1px 0 0 hsl(0 0% 0% / 20%),
+    0 0 0 1px hsl(0 0% 100% / 10%),
+    0 2px 4px 0 hsl(var(--shadow-color) / 70%),
+    0 4px 8px -2px hsl(var(--shadow-color) / 50%);
+
+  --shadow-btn-hover:
+    inset 0 1px 0 0 hsl(0 0% 100% / 20%),
+    inset 0 -1px 0 0 hsl(0 0% 0% / 15%),
+    0 0 0 1px hsl(0 0% 100% / 12%),
+    0 4px 8px 0 hsl(var(--shadow-color) / 70%),
+    0 8px 16px -4px hsl(var(--shadow-color) / 50%),
+    0 16px 32px -8px hsl(var(--shadow-color) / 30%);
+
+  --shadow-btn-active:
+    inset 0 2px 6px 0 hsl(var(--shadow-color) / 60%),
+    inset 0 0 0 1px hsl(var(--shadow-color) / 30%),
+    0 0 0 1px hsl(0 0% 100% / 5%);
+
+  /* Plastic cards - raised panels */
+  --shadow-card:
+    inset 0 1px 0 0 var(--highlight-edge),
+    0 0 0 1px hsl(0 0% 100% / 6%),
+    0 2px 4px 0 hsl(var(--shadow-color) / 60%),
+    0 6px 12px -3px hsl(var(--shadow-color) / 50%),
+    0 12px 24px -6px hsl(var(--shadow-color) / 30%);
+
+  --shadow-card-hover:
+    inset 0 1px 0 0 var(--highlight-top),
+    0 0 0 1px hsl(0 0% 100% / 10%),
+    0 4px 8px 0 hsl(var(--shadow-color) / 60%),
+    0 12px 24px -6px hsl(var(--shadow-color) / 50%),
+    0 24px 48px -12px hsl(var(--shadow-color) / 35%);
+
+  /* Dialog - floating panel with dramatic depth */
+  --shadow-dialog:
+    inset 0 1px 0 0 var(--highlight-top),
+    0 0 0 1px hsl(0 0% 100% / 10%),
+    0 0 0 4px hsl(var(--shadow-color) / 30%),
+    0 16px 32px 0 hsl(var(--shadow-color) / 80%),
+    0 32px 64px -16px hsl(var(--shadow-color) / 60%);
+
+  /* Deep inset input - carved into the surface */
+  --shadow-input:
+    inset 0 0 0 1px hsl(0 0% 0% / 40%),
+    inset 0 2px 6px 0 hsl(var(--shadow-color) / 60%),
+    inset 0 1px 2px 0 hsl(var(--shadow-color) / 40%),
+    0 1px 0 0 hsl(0 0% 100% / 5%);
+
+  --shadow-inner-sm:
+    inset 0 1px 4px 0 hsl(var(--shadow-color) / 50%),
+    inset 0 0 0 1px hsl(0 0% 0% / 20%);
+
+  /* Inset well - recessed tray/container, opposite of elevated card */
+  --shadow-inset-well:
+    inset 0 2px 8px 0 hsl(var(--shadow-color) / 60%),
+    inset 0 1px 3px 0 hsl(var(--shadow-color) / 40%),
+    inset 0 0 0 1px hsl(0 0% 0% / 30%),
+    0 1px 0 0 hsl(0 0% 100% / 6%);
+
+  /* Deep inset well - dramatic recessed pit, for browse slot and deep textareas */
+  --shadow-inset-well-deep:
+    inset 0 0 0 3px hsl(0 0% 0% / 40%),
+    inset 0 2px 6px 2px hsl(0 0% 0% / 60%),
+    inset 0 1px 2px 2px hsl(0 0% 0% / 40%),
+    0 1px 0 0 hsl(0 0% 100% / 6%);
+
+  --background: 240.1 11.2% 4%;
+  --foreground: 180 0% 98%;
+  --card: 240.1 11.2% 4%;
+  --card-foreground: 180 0% 98%;
+  --popover: 240.1 11.2% 4%;
+  --popover-foreground: 180 0% 98%;
+  --primary: 180 0% 98%;
+  --primary-foreground: 240 6% 10%;
+  --secondary: 240 4% 15.9%;
+  --secondary-foreground: 180 0% 98%;
+  --muted: 240 4% 15.9%;
+  --muted-foreground: 240.1 5.7% 64.3%;
+  --accent: 240 4% 15.9%;
+  --accent-foreground: 180 0% 98%;
+  --destructive: 358.8 69.3% 30.1%;
+  --destructive-foreground: 180 0% 98%;
+  --border: 240 4% 15.9%;
+  --input: 240 4% 15.9%;
+  --ring: 240.1 6% 34.2%;
+  --chart-1: 225.3 84.1% 49%;
+  --chart-2: 159.7 100% 36.9%;
+  --chart-3: 36.3 100% 49.7%;
+  --chart-4: 273.3 100% 63.8%;
+  --chart-5: 345.3 100% 56.2%;
+  --sidebar: 240 6% 10%;
+  --sidebar-background: 240 6% 10%;
+  --sidebar-foreground: 180 0% 98%;
+  --sidebar-primary: 225.3 84.1% 49%;
+  --sidebar-primary-foreground: 180 0% 98%;
+  --sidebar-accent: 240 4% 15.9%;
+  --sidebar-accent-foreground: 180 0% 98%;
+  --sidebar-border: 240 4% 15.9%;
+  --sidebar-ring: 240.1 6% 34.2%;
+}
+
+
+/* Grey — softer dark variant, activate with class="dark grey" */
+.grey {
+  /* PLASTIC 3D SYSTEM - Glossy, raised, tactile feel */
+  --shadow-color: 0 0% 0%;
+  --shadow-strength: 25%;
+
+  /* Glossy highlight colors */
+  --highlight-top: hsl(0 0% 100% / 12%);
+  --highlight-edge: hsl(0 0% 100% / 8%);
+  --highlight-subtle: hsl(0 0% 100% / 5%);
+
+  /* Plastic elevation shadows */
+  --shadow-xs:
+    inset 0 1px 0 0 var(--highlight-subtle),
+    0 0 0 1px hsl(0 0% 100% / 5%),
+    0 1px 2px 0 hsl(var(--shadow-color) / 60%),
+    0 2px 4px 0 hsl(var(--shadow-color) / 40%);
+
+  --shadow-sm:
+    inset 0 1px 0 0 var(--highlight-edge),
+    0 0 0 1px hsl(0 0% 100% / 6%),
+    0 1px 2px 0 hsl(var(--shadow-color) / 60%),
+    0 3px 6px -1px hsl(var(--shadow-color) / 50%),
+    0 6px 12px -3px hsl(var(--shadow-color) / 30%);
+
+  --shadow-md:
+    inset 0 1px 0 0 var(--highlight-top),
+    0 0 0 1px hsl(0 0% 100% / 7%),
+    0 2px 4px 0 hsl(var(--shadow-color) / 60%),
+    0 6px 12px -2px hsl(var(--shadow-color) / 50%),
+    0 12px 24px -6px hsl(var(--shadow-color) / 35%);
+
+  --shadow-lg:
+    inset 0 1px 0 0 var(--highlight-top),
+    0 0 0 1px hsl(0 0% 100% / 8%),
+    0 4px 8px 0 hsl(var(--shadow-color) / 60%),
+    0 12px 24px -4px hsl(var(--shadow-color) / 50%),
+    0 24px 48px -12px hsl(var(--shadow-color) / 35%);
+
+  --shadow-xl:
+    inset 0 1px 0 0 var(--highlight-top),
+    0 0 0 1px hsl(0 0% 100% / 8%),
+    0 8px 16px 0 hsl(var(--shadow-color) / 60%),
+    0 24px 48px -8px hsl(var(--shadow-color) / 50%),
+    0 48px 96px -24px hsl(var(--shadow-color) / 35%);
+
+  /* Plastic buttons */
+  --shadow-btn:
+    inset 0 1px 0 0 hsl(0 0% 100% / 15%),
+    inset 0 -1px 0 0 hsl(0 0% 0% / 20%),
+    0 0 0 1px hsl(0 0% 100% / 10%),
+    0 2px 4px 0 hsl(var(--shadow-color) / 70%),
+    0 4px 8px -2px hsl(var(--shadow-color) / 50%);
+
+  --shadow-btn-hover:
+    inset 0 1px 0 0 hsl(0 0% 100% / 20%),
+    inset 0 -1px 0 0 hsl(0 0% 0% / 15%),
+    0 0 0 1px hsl(0 0% 100% / 12%),
+    0 4px 8px 0 hsl(var(--shadow-color) / 70%),
+    0 8px 16px -4px hsl(var(--shadow-color) / 50%),
+    0 16px 32px -8px hsl(var(--shadow-color) / 30%);
+
+  --shadow-btn-active:
+    inset 0 2px 6px 0 hsl(var(--shadow-color) / 60%),
+    inset 0 0 0 1px hsl(var(--shadow-color) / 30%),
+    0 0 0 1px hsl(0 0% 100% / 5%);
+
+  /* Plastic cards */
+  --shadow-card:
+    inset 0 1px 0 0 var(--highlight-edge),
+    0 0 0 1px hsl(0 0% 100% / 6%),
+    0 2px 4px 0 hsl(var(--shadow-color) / 60%),
+    0 6px 12px -3px hsl(var(--shadow-color) / 50%),
+    0 12px 24px -6px hsl(var(--shadow-color) / 30%);
+
+  --shadow-card-hover:
+    inset 0 1px 0 0 var(--highlight-top),
+    0 0 0 1px hsl(0 0% 100% / 10%),
+    0 4px 8px 0 hsl(var(--shadow-color) / 60%),
+    0 12px 24px -6px hsl(var(--shadow-color) / 50%),
+    0 24px 48px -12px hsl(var(--shadow-color) / 35%);
+
+  /* Dialog */
+  --shadow-dialog:
+    inset 0 1px 0 0 var(--highlight-top),
+    0 0 0 1px hsl(0 0% 100% / 10%),
+    0 0 0 4px hsl(var(--shadow-color) / 30%),
+    0 16px 32px 0 hsl(var(--shadow-color) / 80%),
+    0 32px 64px -16px hsl(var(--shadow-color) / 60%);
+
+  /* Deep inset input */
+  --shadow-input:
+    inset 0 0 0 1px hsl(0 0% 0% / 40%),
+    inset 0 2px 6px 0 hsl(var(--shadow-color) / 60%),
+    inset 0 1px 2px 0 hsl(var(--shadow-color) / 40%),
+    0 1px 0 0 hsl(0 0% 100% / 5%);
+
+  --shadow-inner-sm:
+    inset 0 1px 4px 0 hsl(var(--shadow-color) / 50%),
+    inset 0 0 0 1px hsl(0 0% 0% / 20%);
+
+  /* Inset well - recessed tray/container, opposite of elevated card */
+  --shadow-inset-well:
+    inset 0 2px 8px 0 hsl(var(--shadow-color) / 60%),
+    inset 0 1px 3px 0 hsl(var(--shadow-color) / 40%),
+    inset 0 0 0 1px hsl(0 0% 0% / 30%),
+    0 1px 0 0 hsl(0 0% 100% / 5%);
+
+  /* Deep inset well - dramatic recessed pit, for browse slot and deep textareas */
+  --shadow-inset-well-deep:
+    inset 0 0 0 3px hsl(0 0% 0% / 40%),
+    inset 0 2px 6px 2px hsl(0 0% 0% / 60%),
+    inset 0 1px 2px 2px hsl(0 0% 0% / 40%),
+    0 1px 0 0 hsl(0 0% 100% / 6%);
+
+  --background: 238.9 6.8% 7.3%;
+  --foreground: 150 0% 89.6%;
+  --card: 238.8 5.6% 9%;
+  --card-foreground: 150 0% 89.6%;
+  --popover: 238.8 5.6% 9%;
+  --popover-foreground: 150 0% 89.6%;
+  --primary: 150 0% 89.6%;
+  --primary-foreground: 238.9 6.8% 7.3%;
+  --secondary: 238.7 3.7% 14.5%;
+  --secondary-foreground: 150 0% 89.6%;
+  --muted: 238.7 3.7% 14.5%;
+  --muted-foreground: 238.6 3.5% 60.7%;
+  --accent: 238.7 3.7% 14.5%;
+  --accent-foreground: 150 0% 89.6%;
+  --destructive: 357.5 67.9% 41.9%;
+  --destructive-foreground: 180 0% 98%;
+  --border: 238.6 3.4% 16.4%;
+  --input: 238.6 3.4% 16.4%;
+  --ring: 238.7 3.2% 39.8%;
+  --chart-1: 225.3 84.1% 49%;
+  --chart-2: 159.7 100% 36.9%;
+  --chart-3: 36.3 100% 49.7%;
+  --chart-4: 273.3 100% 63.8%;
+  --chart-5: 345.3 100% 56.2%;
+  --sidebar: 238.7 4.8% 10.8%;
+  --sidebar-background: 238.7 4.8% 10.8%;
+  --sidebar-foreground: 150 0% 89.6%;
+  --sidebar-primary: 222.5 76.7% 54.5%;
+  --sidebar-primary-foreground: 180 0% 98%;
+  --sidebar-accent: 238.7 3.7% 14.5%;
+  --sidebar-accent-foreground: 150 0% 89.6%;
+  --sidebar-border: 238.6 3.4% 16.4%;
+  --sidebar-ring: 238.7 3.2% 39.8%;
+}
+
+:root[data-accent='forest'] {
+  --primary: 146 93.0% 27.8%;
+  --primary-foreground: 180 0% 98%;
+  --secondary: 119.6 46.4% 87.6%;
+  --secondary-foreground: 136.4 56.2% 9.5%;
+  --muted: 129.3 32.2% 88.2%;
+  --muted-foreground: 130.9 13.4% 32.7%;
+  --accent: 119.6 46.4% 87.6%;
+  --accent-foreground: 136.4 56.2% 9.5%;
+  --ring: 136.7 41.9% 42.1%;
+  --chart-1: 144.9 83.4% 35.1%;
+  --chart-2: 173.9 100% 24.4%;
+  --chart-3: 84.5 100% 33%;
+  --chart-4: 36 63.4% 56.9%;
+  --chart-5: 5.9 68.5% 57.6%;
+  --sidebar-primary: 146 93.0% 27.8%;
+  --sidebar-primary-foreground: 180 0% 98%;
+  --sidebar-accent: 119.6 46.4% 87.6%;
+  --sidebar-accent-foreground: 136.4 56.2% 9.5%;
+  --sidebar-border: 129.4 19.2% 80.5%;
+  --sidebar-ring: 136.7 41.9% 42.1%;
+}
+
+.dark[data-accent='forest'] {
+  --primary: 133.3 44.7% 64.6%;
+  --primary-foreground: 135.5 84.9% 5.9%;
+  --secondary: 132.1 22.7% 18.1%;
+  --secondary-foreground: 128.8 15.2% 91.7%;
+  --muted: 132.1 22.7% 18.1%;
+  --muted-foreground: 129.8 16.3% 70%;
+  --accent: 132.1 22.7% 18.1%;
+  --accent-foreground: 128.8 15.2% 91.7%;
+  --ring: 132.9 28.3% 55.1%;
+  --chart-1: 144.9 83.4% 35.1%;
+  --chart-2: 173.9 100% 24.4%;
+  --chart-3: 84.5 100% 33%;
+  --chart-4: 36 63.4% 56.9%;
+  --chart-5: 5.9 68.5% 57.6%;
+  --sidebar-primary: 135.6 37.4% 33.6%;
+  --sidebar-primary-foreground: 180 0% 98%;
+  --sidebar-accent: 132.1 22.7% 18.1%;
+  --sidebar-accent-foreground: 128.8 15.2% 91.7%;
+  --sidebar-border: 132.1 22.7% 18.1%;
+  --sidebar-ring: 132.9 28.3% 55.1%;
+}
+
+:root[data-accent='sunset'] {
+  --primary: 35.6 100% 40.1%;
+  --primary-foreground: 180 0% 98%;
+  --secondary: 38.2 100% 89.5%;
+  --secondary-foreground: 29 100% 12.7%;
+  --muted: 37.1 74.2% 91.3%;
+  --muted-foreground: 35.5 43.9% 31.8%;
+  --accent: 38.2 100% 89.5%;
+  --accent-foreground: 29 100% 12.7%;
+  --ring: 36 100% 43.2%;
+  --chart-1: 36.3 100% 47.2%;
+  --chart-2: 7.2 48.4% 48.7%;
+  --chart-3: 51.9 100% 33.9%;
+  --chart-4: 3.8 64.5% 66.3%;
+  --chart-5: 19.9 100% 42.8%;
+  --sidebar-primary: 35.6 100% 40.1%;
+  --sidebar-primary-foreground: 180 0% 98%;
+  --sidebar-accent: 38.2 100% 89.5%;
+  --sidebar-accent-foreground: 29 100% 12.7%;
+  --sidebar-border: 34.2 48.5% 82%;
+  --sidebar-ring: 36 100% 43.2%;
+}
+
+.dark[data-accent='sunset'] {
+  --primary: 34.7 89.2% 58.6%;
+  --primary-foreground: 22.8 100% 10.6%;
+  --secondary: 33.4 56.9% 20.3%;
+  --secondary-foreground: 240 0% 97.4%;
+  --muted: 33.4 56.9% 20.3%;
+  --muted-foreground: 32 58.8% 69.9%;
+  --accent: 33.4 56.9% 20.3%;
+  --accent-foreground: 240 0% 97.4%;
+  --ring: 34.7 89.2% 58.6%;
+  --chart-1: 36.3 100% 47.2%;
+  --chart-2: 7.2 48.4% 48.7%;
+  --chart-3: 51.9 100% 33.9%;
+  --chart-4: 3.8 64.5% 66.3%;
+  --chart-5: 19.9 100% 42.8%;
+  --sidebar-primary: 25.3 80.5% 38.9%;
+  --sidebar-primary-foreground: 180 0% 98%;
+  --sidebar-accent: 33.4 56.9% 20.3%;
+  --sidebar-accent-foreground: 240 0% 97.4%;
+  --sidebar-border: 33.4 56.9% 20.3%;
+  --sidebar-ring: 34.7 89.2% 58.6%;
+}
+
+:root[data-accent='cherry'] {
+  --primary: 351.9 92.2% 43.2%;
+  --primary-foreground: 180 0% 98%;
+  --secondary: 5.8 99.7% 94.1%;
+  --secondary-foreground: 359.2 67.2% 20%;
+  --muted: 5.9 60.6% 93.5%;
+  --muted-foreground: 4.3 29.5% 42.2%;
+  --accent: 5.8 99.7% 94.1%;
+  --accent-foreground: 359.2 67.2% 20%;
+  --ring: 359.2 71.5% 55.2%;
+  --chart-1: 355.7 74.8% 50%;
+  --chart-2: 345.1 53.9% 45%;
+  --chart-3: 18.5 83.5% 45.4%;
+  --chart-4: 353.7 65% 66.1%;
+  --chart-5: 337.3 69.7% 46.2%;
+  --sidebar-primary: 351.9 92.2% 43.2%;
+  --sidebar-primary-foreground: 180 0% 98%;
+  --sidebar-accent: 5.8 99.7% 94.1%;
+  --sidebar-accent-foreground: 359.2 67.2% 20%;
+  --sidebar-border: 5.8 42.1% 86.4%;
+  --sidebar-ring: 359.2 71.5% 55.2%;
+}
+
+.dark[data-accent='cherry'] {
+  --primary: 2 86.3% 65.9%;
+  --primary-foreground: 357.1 98.4% 9.8%;
+  --secondary: 3.2 44.4% 17.9%;
+  --secondary-foreground: 240 0% 97.4%;
+  --muted: 3.2 44.4% 17.9%;
+  --muted-foreground: 4.6 55.8% 69.2%;
+  --accent: 3.2 44.4% 17.9%;
+  --accent-foreground: 240 0% 97.4%;
+  --ring: 2 86.3% 65.9%;
+  --chart-1: 355.7 74.8% 50%;
+  --chart-2: 345.1 53.9% 45%;
+  --chart-3: 18.5 83.5% 45.4%;
+  --chart-4: 353.7 65% 66.1%;
+  --chart-5: 337.3 69.7% 46.2%;
+  --sidebar-primary: 359.9 56% 43.2%;
+  --sidebar-primary-foreground: 180 0% 98%;
+  --sidebar-accent: 3.2 44.4% 17.9%;
+  --sidebar-accent-foreground: 240 0% 97.4%;
+  --sidebar-border: 3.2 44.4% 17.9%;
+  --sidebar-ring: 2 86.3% 65.9%;
+}
+
+:root[data-accent='violet'] {
+  --primary: 253.5 63.2% 61.9%;
+  --primary-foreground: 180 0% 98%;
+  --secondary: 246.3 100% 94.7%;
+  --secondary-foreground: 252.7 41.5% 21.3%;
+  --muted: 245.5 74.5% 94.1%;
+  --muted-foreground: 249.1 22.7% 43.3%;
+  --accent: 246.3 100% 94.7%;
+  --accent-foreground: 252.7 41.5% 21.3%;
+  --ring: 251.6 68% 68.4%;
+  --chart-1: 252.6 80.5% 69.6%;
+  --chart-2: 288.9 32.2% 49.5%;
+  --chart-3: 217.5 75% 59.2%;
+  --chart-4: 274.6 48.7% 68.8%;
+  --chart-5: 235.8 80.6% 64.7%;
+  --sidebar-primary: 253.5 63.2% 61.9%;
+  --sidebar-primary-foreground: 180 0% 98%;
+  --sidebar-accent: 246.3 100% 94.7%;
+  --sidebar-accent-foreground: 252.7 41.5% 21.3%;
+  --sidebar-border: 245.8 45.4% 87.4%;
+  --sidebar-ring: 251.6 68% 68.4%;
+}
+
+.dark[data-accent='violet'] {
+  --primary: 249.8 95.1% 79.7%;
+  --primary-foreground: 252.9 44.8% 16.7%;
+  --secondary: 249.7 27.5% 24.4%;
+  --secondary-foreground: 240 0% 97.4%;
+  --muted: 249.7 27.5% 24.4%;
+  --muted-foreground: 247.4 48.3% 77.2%;
+  --accent: 249.7 27.5% 24.4%;
+  --accent-foreground: 240 0% 97.4%;
+  --ring: 249.8 95.1% 79.7%;
+  --chart-1: 252.6 80.5% 69.6%;
+  --chart-2: 288.9 32.2% 49.5%;
+  --chart-3: 217.5 75% 59.2%;
+  --chart-4: 274.6 48.7% 68.8%;
+  --chart-5: 235.8 80.6% 64.7%;
+  --sidebar-primary: 252.2 37.5% 52.1%;
+  --sidebar-primary-foreground: 180 0% 98%;
+  --sidebar-accent: 249.7 27.5% 24.4%;
+  --sidebar-accent-foreground: 240 0% 97.4%;
+  --sidebar-border: 249.7 27.5% 24.4%;
+  --sidebar-ring: 249.8 95.1% 79.7%;
+}
+
+:root[data-accent='blue'] {
+  --primary: 209.7 100% 43.8%;
+  --primary-foreground: 180 0% 98%;
+  --secondary: 210.9 100% 93.3%;
+  --secondary-foreground: 209.7 100% 14.2%;
+  --muted: 211.1 63.7% 92.9%;
+  --muted-foreground: 210.5 30.7% 38%;
+  --accent: 210.9 100% 93.3%;
+  --accent-foreground: 209.7 100% 14.2%;
+  --ring: 206 100% 45%;
+  --chart-1: 208.5 100% 45.8%;
+  --chart-2: 228.5 51.3% 52.2%;
+  --chart-3: 197.7 100% 41.3%;
+  --chart-4: 217.3 67.1% 65.4%;
+  --chart-5: 205.8 100% 38.4%;
+  --sidebar-primary: 209.7 100% 43.8%;
+  --sidebar-primary-foreground: 180 0% 98%;
+  --sidebar-accent: 210.9 100% 93.3%;
+  --sidebar-accent-foreground: 209.7 100% 14.2%;
+  --sidebar-border: 211 46% 85.5%;
+  --sidebar-ring: 206 100% 45%;
+}
+
+.dark[data-accent='blue'] {
+  --primary: 208.8 91.3% 59.9%;
+  --primary-foreground: 211.7 100% 9.4%;
+  --secondary: 208.9 75.4% 14.2%;
+  --secondary-foreground: 240 0% 97.4%;
+  --muted: 208.9 75.4% 14.2%;
+  --muted-foreground: 210.6 55.5% 69%;
+  --accent: 208.9 75.4% 14.2%;
+  --accent-foreground: 240 0% 97.4%;
+  --ring: 208.8 91.3% 59.9%;
+  --chart-1: 208.5 100% 45.8%;
+  --chart-2: 228.5 51.3% 52.2%;
+  --chart-3: 197.7 100% 41.3%;
+  --chart-4: 217.3 67.1% 65.4%;
+  --chart-5: 205.8 100% 38.4%;
+  --sidebar-primary: 207.5 100% 36.3%;
+  --sidebar-primary-foreground: 180 0% 98%;
+  --sidebar-accent: 208.9 75.4% 14.2%;
+  --sidebar-accent-foreground: 240 0% 97.4%;
+  --sidebar-border: 208.9 75.4% 14.2%;
+  --sidebar-ring: 208.8 91.3% 59.9%;
+}
+
+
+/* Plastic 3D shadow utilities. Tailwind's shadow-[var(...)] arbitrary value
+   drops the inset slots (see DESIGN.md gotcha), so every depth token gets a
+   first-class utility — usable with variants: hover:shadow-3d-md etc. */
+@utility shadow-3d-xs { box-shadow: var(--shadow-xs); }
+@utility shadow-3d-sm { box-shadow: var(--shadow-sm); }
+@utility shadow-3d-md { box-shadow: var(--shadow-md); }
+@utility shadow-3d-lg { box-shadow: var(--shadow-lg); }
+@utility shadow-3d-xl { box-shadow: var(--shadow-xl); }
+@utility shadow-3d-btn { box-shadow: var(--shadow-btn); }
+@utility shadow-3d-btn-hover { box-shadow: var(--shadow-btn-hover); }
+@utility shadow-3d-btn-active { box-shadow: var(--shadow-btn-active); }
+@utility shadow-3d-card { box-shadow: var(--shadow-card); }
+@utility shadow-3d-card-hover { box-shadow: var(--shadow-card-hover); }
+@utility shadow-3d-dialog { box-shadow: var(--shadow-dialog); }
+@utility shadow-3d-input { box-shadow: var(--shadow-input); }
+@utility shadow-3d-input-focus { box-shadow: var(--shadow-input-focus); }
+@utility shadow-3d-inner-sm { box-shadow: var(--shadow-inner-sm); }
+@utility shadow-3d-inset-well { box-shadow: var(--shadow-inset-well); }
+@utility shadow-3d-inset-well-deep { box-shadow: var(--shadow-inset-well-deep); }
+
+/* Grain texture overlay for large hero/empty surfaces (position: relative
+   required on the host). From the Multisearch design. */
+.bg-grainy::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.15'/%3E%3C/svg%3E");
+  opacity: 0.4;
+  pointer-events: none;
+  z-index: 1;
 }
 
 @layer base {
@@ -117,16 +802,19 @@ body:has([data-clips-video-editor]) {
 }
 
 ::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+  width: 7px;
+  height: 7px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
   background: hsl(var(--border));
-  border-radius: 3px;
+  border-radius: 10px;
 }
 ::-webkit-scrollbar-thumb:hover {
   background: hsl(var(--muted-foreground) / 0.4);
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
 }

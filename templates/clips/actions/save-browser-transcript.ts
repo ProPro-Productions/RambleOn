@@ -177,6 +177,8 @@ export default defineAction({
         .set({
           ownerEmail,
           fullText,
+          rawFullText: fullText,
+          rawSegmentsJson: segmentsJson,
           segmentsJson,
           status: "ready",
           failureReason: null,
@@ -190,6 +192,8 @@ export default defineAction({
         language: "en",
         segmentsJson,
         fullText,
+        rawFullText: fullText,
+        rawSegmentsJson: segmentsJson,
         status: "ready",
         failureReason: null,
         createdAt: now,

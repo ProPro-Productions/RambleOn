@@ -9,6 +9,10 @@ import { asc, eq } from "drizzle-orm";
 import { getRequestURL, setResponseHeader, type H3Event } from "h3";
 
 import {
+  getExcludedRanges,
+  parseEdits,
+} from "../../app/lib/timestamp-mapping.js";
+import {
   buildAgentApiUrls,
   buildRecommendedFrames,
   CLIP_AGENT_CONTEXT_VERSION,
@@ -280,6 +284,25 @@ export async function loadPublicAgentAccess(
   };
 }
 
+/** Ranges the owner excluded via edits (strikethrough/ignore/trims). */
+export async function loadAgentExcludedRanges(
+  recordingId: string,
+): Promise<Array<{ startMs: number; endMs: number }>> {
+  const [rec] = await getDb()
+    .select({ editsJson: schema.recordings.editsJson })
+    .from(schema.recordings)
+    .where(eq(schema.recordings.id, recordingId))
+    .limit(1);
+  return getExcludedRanges(parseEdits(rec?.editsJson));
+}
+
+export function isInsideExcludedRange(
+  ms: number,
+  ranges: Array<{ startMs: number; endMs: number }>,
+): boolean {
+  return ranges.some((r) => ms >= r.startMs && ms < r.endMs);
+}
+
 export async function loadAgentTranscript(
   recordingId: string,
   durationMs: number,
@@ -296,10 +319,36 @@ export async function loadAgentTranscript(
     durationMs,
   });
 
+  // Respect the owner's cut: segments that fall entirely inside an excluded
+  // range are what a share viewer never sees during playback, so external
+  // agents must not see them either. Partially-kept segments survive.
+  const excludedRanges = await loadAgentExcludedRanges(recordingId);
+  const kept =
+    excludedRanges.length === 0
+      ? normalized
+      : normalized.filter(
+          (segment) =>
+            !excludedRanges.some(
+              (r) => segment.startMs >= r.startMs && segment.endMs <= r.endMs,
+            ),
+        );
+
+  // Never leak excluded speech through fullText: when edits exist, rebuild
+  // it from the kept segments instead of echoing the stored transcript.
+  const fullText =
+    excludedRanges.length === 0
+      ? (transcript?.fullText ?? "")
+      : kept
+          .map((segment) => segment.text)
+          .join(" ")
+          .trim();
+
   return {
     transcript: transcript ?? null,
-    segments: normalized,
-    agentSegments: toAgentTranscriptSegments(normalized),
+    fullText,
+    excludedRanges,
+    segments: kept,
+    agentSegments: toAgentTranscriptSegments(kept),
   };
 }
 
@@ -488,6 +537,7 @@ export function buildPublicAgentContext({
   access,
   transcript,
   agentSegments,
+  excludedRanges = [],
   chapters,
   ctas,
   browserDiagnostics,
@@ -497,6 +547,7 @@ export function buildPublicAgentContext({
   access: PublicAgentAccess;
   transcript: PublicAgentTranscript;
   agentSegments: ReturnType<typeof toAgentTranscriptSegments>;
+  excludedRanges?: Array<{ startMs: number; endMs: number }>;
   chapters: ReturnType<typeof parseAgentChapters>;
   ctas: Awaited<ReturnType<typeof loadAgentCtas>>;
   browserDiagnostics?: BrowserDiagnosticsData | null;
@@ -518,10 +569,14 @@ export function buildPublicAgentContext({
         durationMs: recording.durationMs,
         chapters,
         segments: agentSegments,
-      }).map((frame) => ({
-        ...frame,
-        url: api.frameUrl(frame.atMs),
-      }));
+      })
+        // Duration-spread candidates can land inside owner-excluded ranges;
+        // drop those so agents are never pointed at cut footage.
+        .filter((frame) => !isInsideExcludedRange(frame.atMs, excludedRanges))
+        .map((frame) => ({
+          ...frame,
+          url: api.frameUrl(frame.atMs),
+        }));
   const instructions = [
     "Use transcript.segments for timestamped spoken context.",
     ...transcriptStatusInstructions(transcript),

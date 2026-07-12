@@ -15,10 +15,18 @@
 
 import { defineAction } from "@agent-native/core";
 import { assertAccess } from "@agent-native/core/sharing";
+import { parseTranscriptSegments } from "@shared/transcript-segments.js";
 import { asc, eq } from "drizzle-orm";
 import { z } from "zod";
 
 import { getDb, schema } from "../server/db/index.js";
+
+// How far around an annotation's anchor the spoken context reaches. Creators
+// usually say what they mean just after hitting a marker hotkey, so the
+// window is biased forward.
+const TRANSCRIPT_CONTEXT_BEFORE_MS = 4_000;
+const TRANSCRIPT_CONTEXT_AFTER_MS = 12_000;
+const TRANSCRIPT_CONTEXT_MAX_CHARS = 400;
 
 export type AnnotationAnchorType = "video" | "point" | "range";
 
@@ -67,6 +75,15 @@ export default defineAction({
       )
       .default(true)
       .describe("Include resolved annotations/comments"),
+    includeTranscriptContext: z
+      .preprocess(
+        (v) => (typeof v === "string" ? v === "true" : v),
+        z.boolean(),
+      )
+      .default(false)
+      .describe(
+        "Attach transcriptContext to each anchored annotation: what was said around its time (biased after the anchor — creators speak their intent right after hitting a marker hotkey). Use when synthesizing edits from markers.",
+      ),
   }),
   http: { method: "GET" },
   readOnly: true,
@@ -79,6 +96,39 @@ export default defineAction({
       .from(schema.recordingAnnotations)
       .where(eq(schema.recordingAnnotations.recordingId, args.recordingId))
       .orderBy(asc(schema.recordingAnnotations.startMs));
+
+    let transcriptSegments: Array<{
+      startMs: number;
+      endMs: number;
+      text: string;
+    }> | null = null;
+    if (args.includeTranscriptContext) {
+      const [transcript] = await db
+        .select({
+          segmentsJson: schema.recordingTranscripts.segmentsJson,
+        })
+        .from(schema.recordingTranscripts)
+        .where(eq(schema.recordingTranscripts.recordingId, args.recordingId));
+      transcriptSegments = parseTranscriptSegments(transcript?.segmentsJson);
+    }
+
+    const transcriptContextFor = (
+      startMs: number | null,
+      endMs: number | null,
+    ): string | null => {
+      if (!transcriptSegments?.length || startMs === null) return null;
+      const windowStart = startMs - TRANSCRIPT_CONTEXT_BEFORE_MS;
+      const windowEnd = (endMs ?? startMs) + TRANSCRIPT_CONTEXT_AFTER_MS;
+      const parts: string[] = [];
+      for (const segment of transcriptSegments) {
+        if (segment.endMs < windowStart) continue;
+        if (segment.startMs > windowEnd) break;
+        const text = segment.text.trim();
+        if (text) parts.push(text);
+      }
+      if (parts.length === 0) return null;
+      return parts.join(" ").slice(0, TRANSCRIPT_CONTEXT_MAX_CHARS);
+    };
 
     const annotations = annotationRows
       .filter((a) => (args.kind ? a.kind === args.kind : true))
@@ -99,6 +149,9 @@ export default defineAction({
         source: a.source,
         groups: parseGroups(a.groupsJson),
         resolved: Boolean(a.resolved),
+        ...(args.includeTranscriptContext
+          ? { transcriptContext: transcriptContextFor(a.startMs, a.endMs) }
+          : {}),
         createdAt: a.createdAt,
         updatedAt: a.updatedAt,
       }));

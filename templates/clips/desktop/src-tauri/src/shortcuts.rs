@@ -32,6 +32,22 @@ static FN_TAP_ENABLED: AtomicBool = AtomicBool::new(false);
 static FN_TAP_INSTALL_STARTED: AtomicBool = AtomicBool::new(false);
 static POPOVER_DISMISS_SHORTCUT_ACTIVE: AtomicBool = AtomicBool::new(false);
 static COUNTDOWN_SHORTCUTS_ACTIVE: AtomicBool = AtomicBool::new(false);
+static MARKER_SHORTCUTS_ACTIVE: AtomicBool = AtomicBool::new(false);
+
+/// The four capture-time marker hotkeys, active only while a recording is
+/// live: ⌥⇧M generic, ⌥⇧E editor-note, ⌥⇧B b-roll, ⌥⇧N retake. Same keys as
+/// the web recorder, but registered globally so they work while the user is
+/// in the app being recorded.
+const MARKER_SHORTCUT_KINDS: [(Code, &str); 4] = [
+    (Code::KeyM, "generic"),
+    (Code::KeyE, "editor-note"),
+    (Code::KeyB, "b-roll"),
+    (Code::KeyN, "retake"),
+];
+
+fn marker_shortcut(code: Code) -> Shortcut {
+    Shortcut::new(Some(Modifiers::ALT | Modifiers::SHIFT), code)
+}
 
 fn custom_voice_shortcut() -> &'static Mutex<Option<Shortcut>> {
     CUSTOM_VOICE_SHORTCUT.get_or_init(|| Mutex::new(None))
@@ -250,6 +266,29 @@ fn set_countdown_shortcuts_active(app: AppHandle, active: bool) {
     });
 }
 
+/// Register/unregister the marker hotkeys as recordings start/stop. Called
+/// from `set_recording_state` — the same signal that flips the tray into
+/// stop mode. Registration hops to a worker thread for the same Carbon
+/// reentrancy reason as the countdown handler above.
+pub fn set_marker_shortcuts_active(app: AppHandle, active: bool) {
+    MARKER_SHORTCUTS_ACTIVE.store(active, Ordering::SeqCst);
+    thread::spawn(move || {
+        let gs = app.global_shortcut();
+        for (code, _) in MARKER_SHORTCUT_KINDS {
+            let shortcut = marker_shortcut(code);
+            if active {
+                if !gs.is_registered(shortcut) {
+                    if let Err(err) = gs.register(shortcut) {
+                        eprintln!("[clips-tray] failed to register marker shortcut: {err}");
+                    }
+                }
+            } else if gs.is_registered(shortcut) {
+                let _ = gs.unregister(shortcut);
+            }
+        }
+    });
+}
+
 fn finish_countdown_from_shortcut(app: &AppHandle, event: &'static str) {
     let _ = app.emit(event, ());
     if let Some(window) = app.get_webview_window("countdown") {
@@ -346,6 +385,15 @@ pub fn build_shortcut_plugin() -> tauri_plugin_global_shortcut::Builder<tauri::W
 
         if event.state() != tauri_plugin_global_shortcut::ShortcutState::Pressed {
             return;
+        }
+        if MARKER_SHORTCUTS_ACTIVE.load(Ordering::SeqCst) && is_recording_active(app) {
+            for (code, kind) in MARKER_SHORTCUT_KINDS {
+                if shortcut.matches(Modifiers::ALT | Modifiers::SHIFT, code) {
+                    dlog!("[clips-tray] marker hotkey — kind={kind}");
+                    let _ = app.emit("clips:marker", serde_json::json!({ "kind": kind }));
+                    return;
+                }
+            }
         }
         if is_cmd || is_ctrl || is_custom_popover {
             // Loom-style: if a recording is already active, the

@@ -219,6 +219,11 @@ export const recordingTranscripts = table("recording_transcripts", {
   // JSON array of { startMs, endMs, text, source }
   segmentsJson: text("segments_json").notNull().default("[]"),
   fullText: text("full_text").notNull().default(""),
+  // Verbatim provider output (whisper/web-speech/cloud) — cleanup writes the
+  // polished text into fullText but must NEVER touch these; they are the
+  // source of truth for re-cleanups and precise text editing.
+  rawFullText: text("raw_full_text"),
+  rawSegmentsJson: text("raw_segments_json"),
   status: text("status", { enum: ["pending", "streaming", "ready", "failed"] })
     .notNull()
     .default("pending"),
@@ -643,6 +648,38 @@ export const recordingEvents = table("recording_events", {
   // Optional payload (reaction emoji, cta id, etc.) — JSON.
   payload: text("payload").notNull().default("{}"),
   createdAt: text("created_at").notNull().default(now()),
+});
+
+// -----------------------------------------------------------------------------
+// Edit versions — proposed alternative edit sets that live BESIDE a
+// recording's current edits instead of overwriting them. An AI edit-synthesis
+// pass or a human editor proposes a version (a full editsJson set); the owner
+// reviews it, accepts (which applies it and archives the previous edits as a
+// `superseded` version) or rejects it with feedback via comments/annotations.
+// `target_kind` is 'recording-edits' today; a later variant wraps full
+// video-project compositions additively without migrating this table.
+// Access is scoped through the parent recording, like annotations.
+// -----------------------------------------------------------------------------
+
+export const recordingEditVersions = table("clips_edit_versions", {
+  id: text("id").primaryKey(),
+  recordingId: text("recording_id").notNull(),
+  organizationId: text("organization_id"),
+  targetKind: text("target_kind").notNull().default("recording-edits"),
+  title: text("title").notNull().default("Untitled version"),
+  // What this version changes and why — shown to the owner during review.
+  note: text("note"),
+  // The proposed non-destructive edit set (same shape as recordings.edits_json).
+  editsJson: text("edits_json").notNull().default(""),
+  authorEmail: text("author_email"),
+  authorName: text("author_name"),
+  authorKind: text("author_kind").notNull().default("user"), // user | ai
+  // proposed | accepted | rejected | superseded
+  status: text("status").notNull().default("proposed"),
+  reviewedAt: text("reviewed_at"),
+  reviewedBy: text("reviewed_by"),
+  createdAt: text("created_at").notNull().default(now()),
+  updatedAt: text("updated_at").notNull().default(now()),
 });
 
 // -----------------------------------------------------------------------------

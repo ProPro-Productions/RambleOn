@@ -31,7 +31,7 @@ export function SpaceCard({ space, className }: SpaceCardProps) {
       className={cn(
         "group flex flex-col overflow-hidden rounded-lg border border-border bg-card text-start",
         "hover:border-primary/40",
-        "shadow-[0_1px_2px_rgba(15,23,42,0.04)] hover:shadow-md",
+        "shadow-3d-card hover:shadow-3d-card-hover hover:-translate-y-px transition-all duration-200",
         className,
       )}
     >

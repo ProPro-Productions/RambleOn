@@ -48,6 +48,7 @@ import { cn } from "@/lib/utils";
 import { CaptionsOverlay } from "./captions-overlay";
 import { CtaButton } from "./cta-button";
 import { PlayerControls, SPEED_OPTIONS } from "./player-controls";
+import type { ScrubberAnnotation } from "./scrubber";
 
 function resolveLocalUrl(url: string | null | undefined): string | undefined {
   if (!url) return undefined;
@@ -154,6 +155,14 @@ export interface VideoPlayerProps {
   comments?: { id: string; videoTimestampMs: number; content: string }[];
   chapters?: { startMs: number; title: string }[];
   reactions?: { id: string; emoji: string; videoTimestampMs: number }[];
+  annotations?: ScrubberAnnotation[];
+  onAddAnnotationAt?: (ms: number, kind: string) => void;
+  onToggleAnnotationResolved?: (annotation: ScrubberAnnotation) => void;
+  onChangeAnnotationKind?: (
+    annotation: ScrubberAnnotation,
+    kind: string,
+  ) => void;
+  onDeleteAnnotation?: (annotation: ScrubberAnnotation) => void;
   transcriptSegments?: { startMs: number; endMs: number; text: string }[];
   /** Theatre-mode wraps the whole viewport. */
   theaterMode?: boolean;
@@ -205,6 +214,11 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(
       comments,
       chapters,
       reactions,
+      annotations,
+      onAddAnnotationAt,
+      onToggleAnnotationResolved,
+      onChangeAnnotationKind,
+      onDeleteAnnotation,
       transcriptSegments,
       theaterMode,
       onTheaterToggle,
@@ -1162,6 +1176,11 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(
               chapters={chapters}
               reactions={reactions}
               excludedRanges={excludedRanges}
+              annotations={annotations}
+              onAddAnnotationAt={onAddAnnotationAt}
+              onToggleAnnotationResolved={onToggleAnnotationResolved}
+              onChangeAnnotationKind={onChangeAnnotationKind}
+              onDeleteAnnotation={onDeleteAnnotation}
               hasCaptions={!!transcriptSegments?.length}
               onPlayPause={() => {
                 togglePlayback();

@@ -836,6 +836,12 @@ export default function RecordRoute() {
     null,
   );
 
+  // Timestamp markers dropped with hotkeys while recording. Buffered
+  // client-side (elapsed recording time, pauses excluded) and persisted in one
+  // batch via save-recording-markers when the recording is saved.
+  const capturedMarkersRef = useRef<Array<{ atMs: number; kind: string }>>([]);
+  const [markerCount, setMarkerCount] = useState(0);
+
   const queryClient = useQueryClient();
   const { isDesktopApp } = useDesktopPromo();
   const storageQuery = useVideoStorageStatus();
@@ -1834,6 +1840,8 @@ export default function RecordRoute() {
           pageUrl: extensionCapture.sourceUrl ?? window.location.href,
         });
       }
+      capturedMarkersRef.current = [];
+      setMarkerCount(0);
       setUiState("recording");
       setIsPaused(false);
     } catch (err) {
@@ -1864,6 +1872,22 @@ export default function RecordRoute() {
       setPreviewStream(null);
       setCompressionProgress(null);
       setUiState("complete");
+
+      // Persist hotkey markers in one batch. Best-effort: a failed marker
+      // save must never block the saved recording's hand-off.
+      const markers = capturedMarkersRef.current;
+      capturedMarkersRef.current = [];
+      setMarkerCount(0);
+      if (markers.length > 0) {
+        try {
+          await callAction(
+            "save-recording-markers" as any,
+            { recordingId, markers } as any,
+          );
+        } catch (err) {
+          console.warn("[recorder] marker save failed:", err);
+        }
+      }
       if (result.waitingForStorage) {
         toast.info(t("recordRoute.recordingReadyToUpload"), {
           description: t("recordRoute.connectStorageToFinish"),
@@ -2120,6 +2144,23 @@ export default function RecordRoute() {
   }, []);
 
   // -------------------------------------------------------------------------
+  // Timestamp markers (capture-time annotations).
+  // -------------------------------------------------------------------------
+  const addRecordingMarker = useCallback(
+    (kind: string) => {
+      if (uiState !== "recording") return;
+      const engine = engineRef.current;
+      if (!engine) return;
+      capturedMarkersRef.current.push({
+        atMs: Math.round(engine.getElapsedMs()),
+        kind,
+      });
+      setMarkerCount(capturedMarkersRef.current.length);
+    },
+    [uiState],
+  );
+
+  // -------------------------------------------------------------------------
   // Keyboard shortcuts.
   // -------------------------------------------------------------------------
   useEffect(() => {
@@ -2182,10 +2223,41 @@ export default function RecordRoute() {
           return;
         }
       }
+
+      // Opt/Alt+Shift+M/E/B/N — drop a timestamp marker at the current
+      // recording time: generic, editor note, b-roll expected, or retake
+      // ("scrap the take before this point, starting fresh"). Matched on
+      // e.code (physical key): on macOS, Option combos compose special
+      // characters in e.key ("Â" instead of "m"), so key matching misses.
+      if (alt && shift && !meta && !ctrl && uiState === "recording") {
+        const markerKind =
+          e.code === "KeyM" || k === "m"
+            ? "generic"
+            : e.code === "KeyE" || k === "e"
+              ? "editor-note"
+              : e.code === "KeyB" || k === "b"
+                ? "b-roll"
+                : e.code === "KeyN" || k === "n"
+                  ? "retake"
+                  : null;
+        if (markerKind) {
+          e.preventDefault();
+          addRecordingMarker(markerKind);
+          return;
+        }
+      }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [uiState, togglePause, doCancel, doStop, restart, fireConfetti]);
+  }, [
+    uiState,
+    togglePause,
+    doCancel,
+    doStop,
+    restart,
+    fireConfetti,
+    addRecordingMarker,
+  ]);
 
   // Query params can preselect recorder controls, but browser capture must
   // still start from the user's Start click. Calling getDisplayMedia from an
@@ -2416,6 +2488,8 @@ export default function RecordRoute() {
         <RecordingToolbar
           elapsedMs={elapsedMs}
           isPaused={isPaused}
+          markerCount={markerCount}
+          onAddMarker={() => addRecordingMarker("generic")}
           onTogglePause={togglePause}
           onStop={() => void doStop()}
           onCancel={() => void doCancel()}

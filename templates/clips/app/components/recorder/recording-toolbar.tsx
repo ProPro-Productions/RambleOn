@@ -1,5 +1,6 @@
 import { useT } from "@agent-native/core/client";
 import {
+  IconBookmark,
   IconPlayerPause,
   IconPlayerPlay,
   IconPlayerStop,
@@ -18,12 +19,14 @@ import { clampRectToViewport, type BubblePosition } from "./camera-positioner";
 export interface RecordingToolbarProps {
   elapsedMs: number;
   isPaused: boolean;
+  markerCount: number;
+  onAddMarker: () => void;
   onTogglePause: () => void;
   onStop: () => void;
   onCancel: () => void;
 }
 
-const TOOLBAR_WIDTH = 232;
+const TOOLBAR_WIDTH = 276;
 const TOOLBAR_HEIGHT = 56;
 // Drop the toolbar just below the centered "Recording your screen…" status
 // text (which sits at the viewport's vertical center) so the controls don't
@@ -40,11 +43,27 @@ function formatElapsed(ms: number): string {
 export function RecordingToolbar({
   elapsedMs,
   isPaused,
+  markerCount,
+  onAddMarker,
   onTogglePause,
   onStop,
   onCancel,
 }: RecordingToolbarProps) {
   const t = useT();
+  // Subtle add-confirmation: highlight the marker button briefly whenever the
+  // count goes up (hotkey or click), without interrupting the take.
+  const [markerFlash, setMarkerFlash] = useState(false);
+  const prevMarkerCountRef = useRef(markerCount);
+  useEffect(() => {
+    if (markerCount > prevMarkerCountRef.current) {
+      setMarkerFlash(true);
+      const timer = window.setTimeout(() => setMarkerFlash(false), 700);
+      return () => window.clearTimeout(timer);
+    }
+  }, [markerCount]);
+  useEffect(() => {
+    prevMarkerCountRef.current = markerCount;
+  });
   const rootRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<BubblePosition>(() =>
     typeof window === "undefined"
@@ -179,6 +198,29 @@ export function RecordingToolbar({
           </button>
         </TooltipTrigger>
         <TooltipContent>{t("recordingToolbar.stop")}</TooltipContent>
+      </Tooltip>
+
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            data-toolbar-btn
+            type="button"
+            onClick={onAddMarker}
+            className={
+              "relative flex h-9 w-9 items-center justify-center rounded-full transition-colors " +
+              (markerFlash ? "bg-amber-400 text-black" : "hover:bg-white/15")
+            }
+            aria-label={t("recordingToolbar.addMarker")}
+          >
+            <IconBookmark className="h-4 w-4" />
+            {markerCount > 0 && (
+              <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-400 px-1 text-[10px] font-semibold leading-none text-black">
+                {markerCount}
+              </span>
+            )}
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>{t("recordingToolbar.markerShortcut")}</TooltipContent>
       </Tooltip>
 
       <div
