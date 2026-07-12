@@ -2598,8 +2598,8 @@ function PendingUploadBanner({
     !!retryingUploadId || !!exportingUploadId || !!discardingUploadId;
   const savedLabel =
     uploads.length === 1
-      ? "1 Clip saved locally"
-      : `${uploads.length} Clips saved locally`;
+      ? "Safety-net backup present"
+      : `${uploads.length} safety-net backups present`;
   const nativeCorrupt = latest.kind === "native" && !!latest.corrupt;
   const title = nativeCorrupt
     ? uploads.length === 1
@@ -2636,7 +2636,7 @@ function PendingUploadBanner({
             ? `${details.join(" · ")} · discard and record again`
             : storageSetupFailure
               ? `${details.join(" · ")} · your clip is safe locally`
-              : `${details.join(" · ")}${errorText ? ` · ${errorText}` : ""}`}
+              : `${details.join(" · ")}${errorText ? ` · ${errorText}` : " · upload didn't finish — kept as a backup"}`}
         </div>
         {storageSetupFailure ? (
           <Tooltip>
@@ -2662,8 +2662,8 @@ function PendingUploadBanner({
             className="pending-upload-folder"
             disabled={actionsDisabled}
             onClick={() => onOpenFolder(latest)}
-            aria-label="Open saved local clip folder"
-            title="Open saved local clip folder"
+            aria-label="Open the backup's folder"
+            title="Open the backup's folder"
           >
             <IconFolderOpen size={14} stroke={2} />
           </button>
@@ -2674,8 +2674,8 @@ function PendingUploadBanner({
             className="pending-upload-folder"
             disabled={actionsDisabled}
             onClick={() => onExport(latest)}
-            aria-label="Download saved local clip"
-            title="Download saved local clip"
+            aria-label="Save a copy of this backup to a file"
+            title="Save a copy of this backup to a file"
           >
             <IconDownload size={14} stroke={2} />
           </button>
@@ -2718,8 +2718,8 @@ function PendingUploadBanner({
               className="pending-upload-discard"
               disabled={actionsDisabled}
               onClick={() => onDiscard(latest)}
-              aria-label="Discard saved local clip"
-              title="Discard saved local clip"
+              aria-label="Discard this backup"
+              title="Discard this backup"
             >
               <IconTrash size={14} stroke={2} />
             </button>
